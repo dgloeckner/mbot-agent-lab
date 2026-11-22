@@ -102,6 +102,9 @@ export async function init() {
       if (cur.length && e.id <= cur[cur.length - 1].id) return // replayed after reconnect
       log.value = cur.length >= MAX_LOG ? [...cur.slice(-MAX_LOG + 1), e] : [...cur, e]
       if (e.kind === 'deploy') void onRemoteDeploy(Number(e.data?.version))
+      if (e.kind === 'team_renamed' && session.value && typeof e.data?.name === 'string') {
+        session.value = { ...session.value, team: { ...session.value.team, name: e.data.name } }
+      }
     },
   })
 }
@@ -269,5 +272,33 @@ export async function deleteNote(id: number) {
     notes.value = notes.value.filter((n) => n.id !== id)
   } catch (err) {
     fail(err)
+  }
+}
+
+/** Runs an action and reports failures as a toast. Returns whether it worked. */
+async function attempt(p: Promise<unknown>, ok?: string): Promise<boolean> {
+  try {
+    await p
+    if (ok) showToast(ok)
+    return true
+  } catch (err) {
+    fail(err)
+    return false
+  }
+}
+
+export const renameTeam = (name: string) => attempt(api.renameTeam(name.trim()), 'Teamname geändert')
+
+export const renameRobot = (robot: string, alias: string) => attempt(api.renameRobot(robot, alias.trim()))
+
+export const identifyRobot = (robot: string, alias: string) =>
+  attempt(api.identify(robot), `${alias} blinkt und piept jetzt`)
+
+export async function copyTeamLink() {
+  try {
+    await navigator.clipboard.writeText(location.origin + location.pathname)
+    showToast('Team-Link kopiert. Öffnet ihn auf den anderen Rechnern eures Teams.')
+  } catch {
+    showToast(`Team-Link: ${location.origin}${location.pathname}`)
   }
 }

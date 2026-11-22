@@ -56,12 +56,16 @@ npm run dev
 In a second terminal:
 
 ```bash
-npx nx run sim:run --robots=2 --world=sim/worlds/labyrinth.json
+npx nx run sim:run --robots=3 --world=sim/worlds/labyrinth.json
 ```
 
-- Team page for "Team Rot": http://localhost:5173/t/rot-dev (Vite, hot reload) or
-  http://127.0.0.1:8080/t/rot-dev (embedded build, as on the VM).
-- Robot overview: http://127.0.0.1:8080
+1. Control room: http://localhost:5173/admin, password `dev`. It shows the lab code `DEV1`.
+2. Found a team: http://localhost:5173/join with code `DEV1` and a team name. The page then leads
+   to the team page `/t/<token>`.
+3. In the control room, drag robots onto the team (or pick them from the list).
+
+Port 5173 is the Vite dev server with hot reload; http://127.0.0.1:8080 serves the embedded build
+as on the VM.
 
 ```bash
 npx nx run-many -t lint test
@@ -112,6 +116,22 @@ All vendor API calls live in `robot/src/hw.py` and are marked `VERIFY` until che
 | `configs/` | example lab configuration |
 | `deploy/` | Azure VM, systemd unit, local development config |
 
+## Control room and teams
+
+- **Joining:** teams open `/join`, enter the lab code and a team name, and get a secret team link
+  `/t/<token>` to open on their other PCs. The browser remembers teams it joined. Wrong codes are
+  rate limited.
+- **Control room** (`/admin`, admin password): shows the lab code large for the projector, all
+  robots live (online, battery, what they do) and every team with its robots and open browsers.
+  Robots are assigned by drag and drop or from a list; a team can have any number of robots, and
+  every robot has at most one team. Teams can be renamed or deleted, team links copied, the lab
+  code replaced, and all robots stopped at once.
+- **Robot names:** a newly assigned robot is called after its sticker color (`rot`, `blau`, …).
+  Teams rename their robots on the team page; these names are what the agent uses for the `robot`
+  parameter. The robot's display shows its name and team, and its LEDs show the team color.
+- **Reassigning** a robot stops it, ends a running command with `reassigned` and clears its trip
+  log. Renaming a team or robot does not interrupt anything.
+
 ## Team page
 
 Each team opens its secret link `/t/<token>`. The page has the team's color, the same color the
@@ -124,6 +144,8 @@ robot's LEDs show, and the color band pulses in the robot's rhythm while the age
 - **Live log** over Server-Sent Events: robot events, deploys, messages, system notices. A
   reconnecting browser catches up via `Last-Event-ID`.
 - **Notes** the agent sees every round, and the **tool catalog** with one-click insertion.
+- **Robots:** live state per robot, rename by clicking the name, and "Finden" to make a robot
+  blink and beep. The team name can be changed by clicking it; the link button copies the team link.
 - **Browser storage** (`localStorage`, per team): the unsaved draft, up to 80 draft snapshots and
   UI preferences (theme, split, font size). Deployed versions live on the server. If another PC of
   the team deploys while this draft has changes, the page offers to take over the new version.
@@ -132,9 +154,10 @@ robot's LEDs show, and the color band pulses in the robot's rhythm while the age
 
 Initial scaffold. Working: configuration with validation, protocol types, embedded broker with
 per-robot auth and ACL, robot registry with heartbeat and command/result matching, SQLite schema,
-status page, team page with prompt versions, notes, stop and live log, robot script with `drive`,
-`turn`, `drive_until`, `stop`, reflexes and events, bundler, simulator. Not yet: agent runtime, LLM
-client, tool registry, control room, chat wall, MCP.
+status page, team joining with lab code, control room with robot assignment (1..N robots per
+team), team page with prompt versions, notes, robot names, stop and live log, robot script with
+`drive`, `turn`, `drive_until`, `stop`, reflexes and events, bundler, simulator. Not yet: agent
+runtime, LLM client, tool registry, chat wall, MCP.
 
 ## License
 

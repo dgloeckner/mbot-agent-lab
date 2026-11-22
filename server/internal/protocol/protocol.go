@@ -134,8 +134,10 @@ const (
 // Heartbeat is sent once per second on lab/<id>/hb. It also carries the
 // current owner and agent state so lost messages heal themselves.
 type Heartbeat struct {
-	Owner string `json:"owner"`
-	Color string `json:"color"`
+	Team  string `json:"team"`  // owning team ID; a change resets the robot
+	Owner string `json:"owner"` // team name for the display
+	Name  string `json:"name"`  // the team's name for this robot
+	Color string `json:"color"` // LED color
 	Agent string `json:"agent"`
 }
 

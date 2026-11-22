@@ -21,7 +21,7 @@ class RobotTest(unittest.TestCase):
         self.hb()
 
     def hb(self):
-        self.client.deliver("lab/mbot-1/hb", {"owner": "Team Rot", "color": "red", "agent": "waiting"})
+        self.client.deliver("lab/mbot-1/hb", {"team": "t1", "owner": "Team Rot", "name": "Scout", "color": "red", "agent": "waiting"})
 
     def run_until(self, pred, timeout=5.0):
         deadline = time.monotonic() + timeout
@@ -109,6 +109,19 @@ class RobotTest(unittest.TestCase):
         self.client.deliver("lab/mbot-1/cmd", {"id": "c-9", "name": "self_destruct"})
         self.run_until(lambda: self.result("c-9"))
         self.assertEqual(self.result("c-9")["reason"], "error")
+
+
+    def test_rename_keeps_driving_but_reassign_stops(self):
+        """Renaming team or robot must not interrupt a running drive; a new owner must."""
+        self.client.deliver("lab/mbot-1/cmd", {"id": "r-1", "name": "drive", "args": {"cm": 100, "speed": 5}})
+        self.robot.iterate()
+        self.client.deliver("lab/mbot-1/hb", {"team": "t1", "owner": "Rote Raketen", "name": "Flitzer", "color": "red", "agent": "waiting"})
+        self.robot.iterate()
+        self.assertIsNone(self.result("r-1"), "rename must not end the drive")
+        self.assertEqual(self.robot.ui.name, "Flitzer")
+        self.client.deliver("lab/mbot-1/hb", {"team": "t2", "owner": "Blau", "name": "blau", "color": "blue", "agent": "waiting"})
+        self.robot.iterate()
+        self.assertEqual(self.result("r-1")["reason"], "reassigned")
 
 
 if __name__ == "__main__":

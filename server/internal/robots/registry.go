@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -36,17 +37,19 @@ var (
 
 // Robot is a snapshot of one robot for the UI and for tools like list_robots.
 type Robot struct {
-	ID       string
-	Color    string
-	Owner    string // team ID, empty if free
-	Alias    string
-	Online   bool
-	Accepted bool // hello with a supported protocol version received
-	Hello    protocol.Hello
-	State    protocol.State
-	StateAt  time.Time
-	SeenAt   time.Time
-	Agent    string // agent state shown on the robot
+	ID        string
+	Color     string
+	Owner     string // team ID, empty if free
+	OwnerName string // team name shown on the robot display
+	TeamColor string // LED color while owned
+	Alias     string
+	Online    bool
+	Accepted  bool // hello with a supported protocol version received
+	Hello     protocol.Hello
+	State     protocol.State
+	StateAt   time.Time
+	SeenAt    time.Time
+	Agent     string // agent state shown on the robot
 }
 
 // Event is a robot event together with its origin and arrival time.
@@ -64,7 +67,6 @@ type Registry struct {
 
 	mu        sync.Mutex
 	robots    map[string]*Robot
-	ownerName map[string]string // team ID -> display name
 	pending   map[string]chan protocol.Result
 	listeners []chan<- Event
 }
@@ -80,11 +82,10 @@ func New(bus Bus, specs []Spec, logger *slog.Logger) *Registry {
 		logger = slog.Default()
 	}
 	r := &Registry{
-		bus:       bus,
-		log:       logger.With("component", "robots"),
-		robots:    map[string]*Robot{},
-		ownerName: map[string]string{},
-		pending:   map[string]chan protocol.Result{},
+		bus:     bus,
+		log:     logger.With("component", "robots"),
+		robots:  map[string]*Robot{},
+		pending: map[string]chan protocol.Result{},
 	}
 	for _, s := range specs {
 		r.robots[s.ID] = &Robot{ID: s.ID, Color: s.Color, Agent: protocol.AgentWaiting}
@@ -92,19 +93,48 @@ func New(bus Bus, specs []Spec, logger *slog.Logger) *Registry {
 	return r
 }
 
-// Assign sets the owner of a robot. teamID "" frees it.
-// TODO: full reassignment semantics (stop, clear log, end pending command with "reassigned").
-func (r *Registry) Assign(robotID, teamID, teamName, alias string) error {
+// Owner describes who a robot belongs to. A zero Owner means free.
+type Owner struct {
+	TeamID   string
+	TeamName string
+	Color    string
+	Alias    string
+}
+
+// Assign sets the owner of a robot. When the owner changes, the robot is
+// stopped, a running command ends with reason "reassigned", and the robot
+// clears its trip log when the next heartbeat names the new owner.
+func (r *Registry) Assign(robotID string, o Owner) error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	rb, ok := r.robots[robotID]
 	if !ok {
+		r.mu.Unlock()
 		return ErrUnknownRobot
 	}
-	rb.Owner, rb.Alias = teamID, alias
-	if teamID != "" {
-		r.ownerName[teamID] = teamName
+	changed := rb.Owner != o.TeamID
+	rb.Owner, rb.OwnerName, rb.TeamColor, rb.Alias = o.TeamID, o.TeamName, o.Color, o.Alias
+	if changed {
+		rb.Agent = protocol.AgentWaiting
+		prefix := robotID + "/"
+		for key, ch := range r.pending {
+			if strings.HasPrefix(key, prefix) {
+				ch <- protocol.Result{ID: strings.TrimPrefix(key, prefix), OK: false, Reason: protocol.ReasonReassigned}
+				delete(r.pending, key)
+			}
+		}
 	}
+	online := rb.Online
+	r.mu.Unlock()
+
+	if changed && online {
+		// Fire and forget: the robot also stops on its own when the heartbeat
+		// shows the new owner, this just makes it immediate.
+		cmd, _ := protocol.Marshal(protocol.Cmd{ID: fmt.Sprintf("c-%x", r.cmdSeq.Add(1)), Name: "stop"})
+		if err := r.bus.Publish(protocol.Topic(robotID, protocol.TopicCmd), cmd, false, 0); err != nil {
+			r.log.Error("stop on reassign", "robot", robotID, "err", err)
+		}
+	}
+	r.log.Info("robot assigned", "robot", robotID, "team", o.TeamID, "alias", o.Alias)
 	return nil
 }
 
@@ -164,7 +194,11 @@ func (r *Registry) heartbeat() {
 	r.mu.Lock()
 	beats := make([]hb, 0, len(r.robots))
 	for _, rb := range r.robots {
-		beats = append(beats, hb{rb.ID, protocol.Heartbeat{Owner: r.ownerName[rb.Owner], Color: rb.Color, Agent: rb.Agent}})
+		msg := protocol.Heartbeat{Agent: rb.Agent}
+		if rb.Owner != "" {
+			msg.Team, msg.Owner, msg.Name, msg.Color = rb.Owner, rb.OwnerName, rb.Alias, rb.TeamColor
+		}
+		beats = append(beats, hb{rb.ID, msg})
 	}
 	r.mu.Unlock()
 	for _, b := range beats {

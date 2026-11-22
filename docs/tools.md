@@ -33,11 +33,13 @@ calls them directly; the optional MCP endpoint exposes the same registry to exte
 
 - **Structured results with a reason:** every motion tool returns `reason`. The agent's ability
   to decide depends on it.
-- **Robot parameter only when needed:** if the owner has exactly one robot, tools have no `robot`
-  parameter. With several robots, `robot` is an enum of the allowed aliases, and `stop`
-  additionally accepts `"all"`.
-- **Aliases instead of device IDs:** the agent knows `ich`, `links`, `rechts`, never `mbot-2`.
-  Devices can be swapped without changing prompts.
+- **Robot parameter only when needed:** if the team has exactly one robot, tools have no `robot`
+  parameter. With several robots (the control room can give a team any number), `robot` is an
+  enum of the team's robot names, and `stop` additionally accepts `"alle"`.
+- **Names instead of device IDs:** the agent knows the names the team gave its robots (`Scout`,
+  `Träger`; by default the sticker color, e.g. `rot`), never `mbot-2`. Devices can be swapped
+  without changing prompts as long as the new robot gets the same name. `all` and `alle` are
+  reserved and cannot be robot names.
 - **`say` is a bundle:** text on the speaker's display, light, sound, optional gesture, and the
   message lands in the recipient's inbox. `to` is an agent name or `"all"`.
 - **`finish` delivers the report** that the team later compares with the log.

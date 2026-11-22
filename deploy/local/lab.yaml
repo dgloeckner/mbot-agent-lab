@@ -6,6 +6,7 @@ server:
   mqtt_plain_addr: ":1883"
   tls: { mode: "off" }
   admin_password_env: LAB_ADMIN_PASSWORD
+  lab_code_env: LAB_CODE           # optional: fixed lab code instead of a generated one
   db_path: lab-dev.db
 
 llm:
@@ -23,15 +24,7 @@ llm:
 robots:
   - { id: mbot-1, password_env: MBOT1_PASSWORD, color: red }
   - { id: mbot-2, password_env: MBOT2_PASSWORD, color: blue }
+  - { id: mbot-3, password_env: MBOT3_PASSWORD, color: green }
 
-teams:
-  - { id: rot,  name: "Team Rot",  token_env: TEAM_ROT_TOKEN }
-  - { id: blau, name: "Team Blau", token_env: TEAM_BLAU_TOKEN }
-
-profile: einzel
-profiles:
-  einzel:
-    rot:  { ich: mbot-1 }
-    blau: { ich: mbot-2 }
-  duo:
-    rot: { links: mbot-1, rechts: mbot-2 }
+# Teams join on /join with the lab code shown in the control room (/admin).
+# The control room assigns robots to teams; both are stored in the database.

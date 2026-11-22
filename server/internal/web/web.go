@@ -7,20 +7,23 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/subtle"
 	"embed"
 	"encoding/json"
+	"errors"
 	"html/template"
 	"io/fs"
 	"log/slog"
 	"mime"
 	"net/http"
+	"net/url"
 	"path"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/config"
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/lab"
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/live"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/robots"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/store"
 )
@@ -48,11 +51,14 @@ type Server struct {
 	Config *config.Config
 	Robots *robots.Registry
 	Store  *store.Store
-	Hub    *Hub
+	Hub    *live.Hub
+	Lab    *lab.Service
 	Log    *slog.Logger
 
-	app     fs.FS    // built team page, nil if not built
+	app     fs.FS    // built pages, nil if not built
 	gzCache sync.Map // asset path -> gzipped bytes
+	admins  sessions
+	limiter limiter
 }
 
 // Handler returns the HTTP routes.
@@ -66,6 +72,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", s.healthz)
 	mux.HandleFunc("GET /{$}", s.index)
 	mux.HandleFunc("GET /assets/", s.assets)
+	mux.HandleFunc("GET /join", s.page)
+	mux.HandleFunc("POST /api/join", s.join)
+	s.adminRoutes(mux)
 
 	team := func(pattern string, h teamHandler) {
 		mux.Handle(pattern, s.withTeam(h))
@@ -83,6 +92,9 @@ func (s *Server) Handler() http.Handler {
 	team("POST /t/{token}/notes", s.addNote)
 	team("PUT /t/{token}/notes/{id}", s.updateNote)
 	team("DELETE /t/{token}/notes/{id}", s.deleteNote)
+	team("PUT /t/{token}/name", s.renameTeam)
+	team("PUT /t/{token}/robots/{robot}/alias", s.renameRobot)
+	team("POST /t/{token}/robots/{robot}/identify", s.identifyRobot)
 	return mux
 }
 
@@ -97,8 +109,8 @@ func (s *Server) Run(ctx context.Context) {
 		case ev := <-ch:
 			for _, rb := range s.Robots.Snapshot() {
 				if rb.ID == ev.RobotID && rb.Owner != "" {
-					s.Hub.Publish(rb.Owner, LogEntry{
-						At: ev.At, Source: SourceRobot, Kind: ev.Event.Kind, Robot: rb.Alias, Data: ev.Event.Data,
+					s.Hub.Publish(rb.Owner, live.LogEntry{
+						At: ev.At, Source: live.SourceRobot, Kind: ev.Event.Kind, Robot: rb.Alias, Data: ev.Event.Data,
 					})
 				}
 			}
@@ -159,33 +171,59 @@ func (s *Server) gzipped(name string) ([]byte, bool) {
 	return buf.Bytes(), true
 }
 
-type teamHandler func(w http.ResponseWriter, r *http.Request, team config.Team)
+type teamHandler func(w http.ResponseWriter, r *http.Request, team store.Team)
 
-// withTeam resolves the secret team token from the URL and sets headers that
-// keep the token out of referrers and caches.
+// securityHeaders keeps secret links out of referrers and caches.
+func securityHeaders(w http.ResponseWriter) {
+	hdr := w.Header()
+	hdr.Set("Referrer-Policy", "no-referrer")
+	hdr.Set("X-Content-Type-Options", "nosniff")
+	hdr.Set("Cache-Control", "no-store")
+	hdr.Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'")
+}
+
+// withTeam resolves the secret team token from the URL.
 func (s *Server) withTeam(h teamHandler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hdr := w.Header()
-		hdr.Set("Referrer-Policy", "no-referrer")
-		hdr.Set("X-Content-Type-Options", "nosniff")
-		hdr.Set("Cache-Control", "no-store")
-		hdr.Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'")
-		token := r.PathValue("token")
-		for _, t := range s.Config.Teams {
-			if subtle.ConstantTimeCompare([]byte(t.Token), []byte(token)) == 1 {
-				h(w, r, t)
-				return
-			}
+		securityHeaders(w)
+		t, err := s.Lab.TeamByToken(r.Context(), r.PathValue("token"))
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "Diesen Team-Link gibt es nicht (mehr). Gründet auf /join ein Team oder fragt die Lab-Leitung.")
+			return
 		}
-		writeError(w, http.StatusNotFound, "Diesen Team-Link gibt es nicht. Fragt eure Lab-Leitung nach dem richtigen Link.")
+		if err != nil {
+			s.serverError(w, err)
+			return
+		}
+		if r.Method != http.MethodGet && !sameOrigin(r) {
+			writeError(w, http.StatusForbidden, "Diese Anfrage kam nicht von der Lab-Seite.")
+			return
+		}
+		h(w, r, t)
 	})
 }
 
-func (s *Server) teamPage(w http.ResponseWriter, r *http.Request, _ config.Team) {
+// sameOrigin rejects cross-site form posts: browsers send Origin on POST/PUT/DELETE.
+func sameOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true // non-browser clients
+	}
+	u, err := url.Parse(origin)
+	return err == nil && u.Host == r.Host
+}
+
+func (s *Server) teamPage(w http.ResponseWriter, r *http.Request, _ store.Team) {
+	s.page(w, r)
+}
+
+// page serves the single-page app; it picks the view from the URL.
+func (s *Server) page(w http.ResponseWriter, r *http.Request) {
+	securityHeaders(w)
 	if s.app == nil {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = w.Write([]byte("The team page is not built. Run `npx nx run web:build` and restart the server.\n"))
+		_, _ = w.Write([]byte("The web pages are not built. Run `npx nx run web:build` and restart the server.\n"))
 		return
 	}
 	http.ServeFileFS(w, r, s.app, "index.html")

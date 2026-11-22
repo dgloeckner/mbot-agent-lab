@@ -1,0 +1,369 @@
+/* Control room. Neutral ink accent: the team colors carry the meaning here,
+   one header per team card in its color, so the projector shows who is who. */
+
+:root {
+  --accent: #2b3a55;
+  --on-accent: #ffffff;
+}
+
+:root[data-theme='dark'] {
+  --accent: #c9d3e3;
+  --on-accent: #111722;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --accent: #c9d3e3;
+    --on-accent: #111722;
+  }
+}
+
+.admin {
+  min-height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.admin-bar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 24px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.admin-title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.admin-title h1 {
+  font-size: 26px;
+  font-weight: 760;
+  letter-spacing: -0.01em;
+}
+
+.live {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.live.on::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+  vertical-align: 1px;
+}
+
+.labcode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 16px;
+}
+
+.labcode-label {
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.labcode-label strong {
+  color: var(--ink);
+}
+
+.labcode-value {
+  font-family: var(--font-mono);
+  font-size: 40px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  line-height: 1;
+  padding: 6px 4px 6px 14px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+
+.admin-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-stop-all {
+  background: var(--stop);
+  color: #fff;
+  font-weight: 720;
+  padding: 9px 18px;
+}
+
+.btn-stop-all:hover {
+  background: color-mix(in oklab, var(--stop) 88%, black);
+}
+
+.admin-main {
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  gap: 20px;
+  padding: 20px 24px 32px;
+  align-items: start;
+}
+
+.pool,
+.team-card {
+  border-radius: 12px;
+  transition: box-shadow 0.12s;
+}
+
+.pool {
+  position: sticky;
+  top: 16px;
+  padding: 16px;
+  border: 1px dashed var(--line);
+}
+
+.pool h2 {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.pool-sub {
+  color: var(--muted);
+  font-size: 13.5px;
+  margin: 2px 0 12px;
+}
+
+.drop-over {
+  box-shadow: 0 0 0 3px var(--accent);
+}
+
+.teams {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.team-card {
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.team-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  min-height: 56px;
+}
+
+.team-head h2 {
+  font-size: 20px;
+  font-weight: 740;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.presence {
+  flex: none;
+  font-size: 12.5px;
+  opacity: 0.85;
+}
+
+.rename {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+}
+
+.rename input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.robot-list {
+  list-style: none;
+  margin: 0;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-height: 72px;
+}
+
+.drop-hint {
+  display: grid;
+  place-items: center;
+  min-height: 52px;
+  border-radius: 8px;
+  color: var(--faint);
+  font-size: 13.5px;
+  text-align: center;
+  border: 1px dashed var(--line);
+  padding: 8px;
+}
+
+.chip-robot {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 10px;
+  border-radius: 9px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  cursor: grab;
+}
+
+.chip-robot[data-online='false'] {
+  opacity: 0.62;
+}
+
+.chip-robot:active {
+  cursor: grabbing;
+}
+
+.robot-color {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15);
+}
+
+.chip-main {
+  display: grid;
+  line-height: 1.25;
+  min-width: 0;
+}
+
+.chip-main strong {
+  font-weight: 680;
+}
+
+.chip-main span {
+  font-size: 12.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip-move,
+.team-foot select {
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  max-width: 130px;
+}
+
+.team-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+}
+
+.team-foot select {
+  max-width: 170px;
+}
+
+.team-foot .spacer {
+  flex: 1;
+}
+
+.team-age {
+  padding: 0 12px 10px;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.teams-empty {
+  grid-column: 1 / -1;
+  padding: 40px 24px;
+  border-radius: 12px;
+  border: 1px dashed var(--line);
+  max-width: 640px;
+}
+
+.teams-empty h2 {
+  font-size: 20px;
+  margin-bottom: 6px;
+}
+
+.teams-empty p {
+  color: var(--muted);
+}
+
+.admin-login {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.admin-login form {
+  display: grid;
+  gap: 14px;
+  width: min(100%, 340px);
+}
+
+.admin-login h1 {
+  font-size: 30px;
+  font-weight: 760;
+}
+
+.admin-login label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.admin-login input {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 16px;
+}
+
+@media (max-width: 900px) {
+  .admin-bar {
+    grid-template-columns: 1fr auto;
+  }
+
+  .labcode {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: flex-start;
+  }
+
+  .admin-main {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 16px;
+  }
+
+  .pool {
+    position: static;
+  }
+}

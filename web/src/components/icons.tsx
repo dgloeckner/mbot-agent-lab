@@ -47,3 +47,11 @@ export const ResetIcon = () => (
     <path d="M3 2.5v2.5h2.5" />
   </svg>
 )
+
+export const LinkIcon = () => (
+  <svg {...base}>
+    <path d="M6.5 9.5l3-3" />
+    <path d="M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1" />
+    <path d="M9 11.5l-1 1A2.5 2.5 0 0 1 4.5 9l1-1" />
+  </svg>
+)

@@ -3,7 +3,10 @@
 // Secrets (passwords, tokens, API keys) are never stored in the YAML file itself.
 // The file only names the environment variables that hold them; Load resolves them.
 // The whole configuration is validated at startup so the server refuses to run with
-// an inconsistent setup (for example a robot assigned to two teams).
+// an inconsistent setup.
+//
+// Teams and robot assignments are not configured here: teams join with the lab
+// code and the control room assigns robots; both live in the database.
 package config
 
 import (
@@ -12,7 +15,6 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -20,13 +22,10 @@ import (
 
 // Config is the root of the lab configuration.
 type Config struct {
-	Server   Server             `yaml:"server"`
-	LLM      LLM                `yaml:"llm"`
-	Budgets  Budgets            `yaml:"budgets"`
-	Robots   []Robot            `yaml:"robots"`
-	Teams    []Team             `yaml:"teams"`
-	Profile  string             `yaml:"profile"`
-	Profiles map[string]Profile `yaml:"profiles"`
+	Server  Server  `yaml:"server"`
+	LLM     LLM     `yaml:"llm"`
+	Budgets Budgets `yaml:"budgets"`
+	Robots  []Robot `yaml:"robots"`
 }
 
 // Server holds listener addresses, TLS and storage settings.
@@ -36,9 +35,11 @@ type Server struct {
 	MQTTPlainAddr    string `yaml:"mqtt_plain_addr"`
 	TLS              TLS    `yaml:"tls"`
 	AdminPasswordEnv string `yaml:"admin_password_env"`
+	LabCodeEnv       string `yaml:"lab_code_env"` // optional: fixes the lab code, e.g. for development
 	DBPath           string `yaml:"db_path"`
 
 	AdminPassword string `yaml:"-"`
+	LabCode       string `yaml:"-"`
 }
 
 // TLS modes.
@@ -87,36 +88,6 @@ type Robot struct {
 	Password string `yaml:"-"`
 }
 
-// Team is one group of students with its own agent.
-type Team struct {
-	ID       string `yaml:"id"`
-	Name     string `yaml:"name"`
-	TokenEnv string `yaml:"token_env"`
-	Color    string `yaml:"color"` // accent of the team page; defaults to the first robot's color
-
-	Token string `yaml:"-"`
-}
-
-// TeamColor returns the team's configured color, else the color of the
-// alphabetically first robot assigned to it in the active profile.
-func (c *Config) TeamColor(teamID string) string {
-	if t, ok := c.Team(teamID); ok && t.Color != "" {
-		return t.Color
-	}
-	aliases := c.Profiles[c.Profile][teamID]
-	for _, alias := range sortedKeys(aliases) {
-		for _, r := range c.Robots {
-			if r.ID == aliases[alias] && r.Color != "" {
-				return r.Color
-			}
-		}
-	}
-	return "blue"
-}
-
-// Profile is a complete assignment of robots: team ID -> alias -> robot ID.
-type Profile map[string]map[string]string
-
 // Defaults applied before validation.
 const (
 	DefaultHTTPAddr          = ":8080"
@@ -127,10 +98,7 @@ const (
 	DefaultMaxAgentMessages  = 6
 )
 
-var (
-	idPattern    = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
-	aliasPattern = regexp.MustCompile(`^[a-zäöüß][a-zäöüß0-9_-]{0,15}$`)
-)
+var idPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 
 // Load reads, resolves and validates the configuration at path.
 func Load(path string) (*Config, error) {
@@ -206,8 +174,8 @@ func (c *Config) resolveSecrets(lookup func(string) (string, bool)) error {
 	for i := range c.Robots {
 		c.Robots[i].Password = get(c.Robots[i].PasswordEnv, true)
 	}
-	for i := range c.Teams {
-		c.Teams[i].Token = get(c.Teams[i].TokenEnv, true)
+	if c.Server.LabCodeEnv != "" {
+		c.Server.LabCode = strings.ToUpper(strings.TrimSpace(get(c.Server.LabCodeEnv, false)))
 	}
 	for name, p := range c.LLM.Providers {
 		// API keys are optional: local providers such as Ollama need none.
@@ -255,6 +223,9 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	if len(c.Robots) == 0 {
+		add("robots: at least one robot is required")
+	}
 	robots := map[string]bool{}
 	for _, r := range c.Robots {
 		if !idPattern.MatchString(r.ID) {
@@ -265,89 +236,5 @@ func (c *Config) Validate() error {
 		}
 		robots[r.ID] = true
 	}
-	teams := map[string]bool{}
-	for _, t := range c.Teams {
-		if !idPattern.MatchString(t.ID) {
-			add("teams: invalid id %q", t.ID)
-		}
-		if teams[t.ID] {
-			add("teams: duplicate id %q", t.ID)
-		}
-		teams[t.ID] = true
-	}
-
-	if _, ok := c.Profiles[c.Profile]; !ok {
-		add("profile: active profile %q is not defined", c.Profile)
-	}
-	for _, name := range sortedKeys(c.Profiles) {
-		errs = append(errs, c.Profiles[name].validate(name, robots, teams)...)
-	}
-
 	return errors.Join(errs...)
-}
-
-// validate enforces the exclusivity rule: every robot has at most one owner.
-func (p Profile) validate(name string, robots, teams map[string]bool) []error {
-	var errs []error
-	owner := map[string]string{}
-	for _, team := range sortedKeys(p) {
-		if !teams[team] {
-			errs = append(errs, fmt.Errorf("profile %s: unknown team %q", name, team))
-		}
-		for _, alias := range sortedKeys(p[team]) {
-			robot := p[team][alias]
-			if !aliasPattern.MatchString(alias) {
-				errs = append(errs, fmt.Errorf("profile %s: invalid alias %q", name, alias))
-			}
-			if alias == "all" {
-				errs = append(errs, fmt.Errorf("profile %s: alias %q is reserved", name, alias))
-			}
-			if !robots[robot] {
-				errs = append(errs, fmt.Errorf("profile %s: unknown robot %q", name, robot))
-			}
-			if prev, taken := owner[robot]; taken {
-				errs = append(errs, fmt.Errorf("profile %s: robot %q assigned twice (%s and %s.%s)", name, robot, prev, team, alias))
-			}
-			owner[robot] = team + "." + alias
-		}
-	}
-	return errs
-}
-
-// Assignment is one robot's owner within the active profile.
-type Assignment struct {
-	RobotID string
-	TeamID  string
-	Alias   string
-}
-
-// Assignments returns the active profile as a robot ID -> assignment map.
-// Robots without an owner are absent.
-func (c *Config) Assignments() map[string]Assignment {
-	out := map[string]Assignment{}
-	for team, aliases := range c.Profiles[c.Profile] {
-		for alias, robot := range aliases {
-			out[robot] = Assignment{RobotID: robot, TeamID: team, Alias: alias}
-		}
-	}
-	return out
-}
-
-// Team returns the team with the given ID.
-func (c *Config) Team(id string) (Team, bool) {
-	for _, t := range c.Teams {
-		if t.ID == id {
-			return t, true
-		}
-	}
-	return Team{}, false
-}
-
-func sortedKeys[V any](m map[string]V) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }

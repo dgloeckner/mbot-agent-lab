@@ -277,9 +277,21 @@ kbd {
   line-height: 1.1;
 }
 
-.robot-alias {
+.robot-name .robot-alias {
   font-size: 22px;
   font-weight: 720;
+}
+
+/* Several robots: they get a row of their own below team name and actions. */
+.band[data-robots='many'] {
+  grid-template-columns: minmax(180px, 1fr) auto;
+}
+
+.band[data-robots='many'] .band-robots {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  flex-wrap: wrap;
+  overflow: visible;
 }
 
 .robot-id {
@@ -348,6 +360,71 @@ kbd {
   font-size: 13px;
   max-width: 200px;
   line-height: 1.25;
+}
+
+/* ---------- inline editing ---------- */
+
+.inline-edit {
+  border: 0;
+  padding: 0 2px;
+  margin: 0 -2px;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  border-radius: 4px;
+  cursor: text;
+}
+
+.inline-edit:hover {
+  background: color-mix(in oklab, currentColor 12%, transparent);
+}
+
+.inline-input {
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 0;
+  border-radius: 6px;
+  padding: 0 6px;
+  margin: 0 -6px;
+  max-width: 100%;
+}
+
+.robot-find {
+  margin-left: 8px;
+  padding: 0 6px;
+  border: 1px solid color-mix(in oklab, var(--on-accent) 50%, transparent);
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.robot-find:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.robot-find:not(:disabled):hover {
+  background: color-mix(in oklab, var(--on-accent) 16%, transparent);
+}
+
+.multi-robot code {
+  color: var(--code-ink);
+  font-size: 0.92em;
+}
+
+.tool-inline {
+  border: 0;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--code-bg);
+  color: var(--code-ink);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  cursor: pointer;
 }
 
 /* ---------- buttons ---------- */

@@ -6,7 +6,12 @@ Full background and all decisions: `docs/handoff.md` (original handoff, German).
 ## Ground rules
 
 - Decisions in `docs/handoff.md` ("Entscheidungen im Überblick") are binding. Propose deviations
-  first; do not implement them silently.
+  first; do not implement them silently. Deviations the user has approved:
+  - Tasks run through Nx instead of a Makefile.
+  - Teams are not configured in YAML: they join on `/join` with a lab code and get a secret link;
+    the control room (`/admin`) assigns 1..N robots per team. No profiles (einzel/duo/…) for now.
+  - Teams name their robots themselves (default: German color name); `all`/`alle` is reserved.
+  - The heartbeat carries `team`, `owner`, `name`, `color`, `agent` (see `docs/protocol.md`).
 - Language: repo docs, code and comments in English. Lab material (`docs/lab/`) and student-facing
   UI text (web templates, robot display) in German. Example prompts in German and English, same
   file name under `docs/lab/prompts/de/` and `docs/lab/prompts/en/`.
@@ -19,7 +24,9 @@ Full background and all decisions: `docs/handoff.md` (original handoff, German).
 
 - `server/`: Go module `github.com/dgloeckner/mbot-agent-lab/server`, one binary `labserver`.
   Packages in `internal/`: config, protocol, broker (mochi-mqtt, auth/ACL), robots (registry,
-  heartbeat, cmd/result), store (SQLite via modernc, migrations in `store/migrations`), web.
+  heartbeat, cmd/result, reassignment), store (SQLite via modernc, migrations in
+  `store/migrations`), lab (joining, teams, assignments, robot names, lab code: the rules live
+  here, web handlers stay thin), live (per-team log hub for SSE), web.
   Stubs with doc comments: tools, agent, llm, memory, auth, mcp.
 - `robot/src/`: MicroPython modules, bundled in dependency order by `robot/tools/bundle.py` into
   one `main.py`. All modules share one namespace after bundling: no duplicate top-level names,
@@ -45,7 +52,8 @@ Tasks run through Nx (`nx:run-commands` in `server/`, `robot/`, `sim/` `project.
 the user chose Nx over Make). Run `npm install` once.
 
 - `npx nx run-many -t lint test`: gofmt + go vet, Go tests, Python tests. Cached.
-- `npm run dev`: `server:dev` + `web:dev`; team page at http://localhost:5173/t/rot-dev.
+- `npm run dev`: `server:dev` + `web:dev`. Control room http://localhost:5173/admin (password
+  `dev`), join http://localhost:5173/join (lab code `DEV1`).
 - `npx nx run server:dev`: server with `deploy/local/lab.yaml` (HTTP 127.0.0.1:8080, MQTT :1883,
   dev secrets set in `server/project.json`).
 - `npx nx run sim:run --robots=2 --world=sim/worlds/labyrinth.json`: simulated robots.

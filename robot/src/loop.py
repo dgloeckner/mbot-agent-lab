@@ -66,13 +66,13 @@ class Robot:
         if self.watchdog_tripped:
             self.watchdog_tripped = False
             self.ui.set_conn("verbunden")
-        owner = p.get("owner", "")
-        if self.owner is not None and owner != self.owner:
+        team = p.get("team", "")
+        if self.owner is not None and team != self.owner:
             self.end_skill("reassigned")
             hw_motors_stop()
             self.trip_log = []
-        self.owner = owner
-        self.ui.set_owner(owner, p.get("color"))
+        self.owner = team
+        self.ui.set_owner(p.get("owner", "") if team else "", p.get("name", ""), p.get("color"))
         self.ui.set_agent(p.get("agent", "waiting"))
 
     def on_cmd(self, cmd):

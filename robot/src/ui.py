@@ -11,6 +11,7 @@ class Ui:
     def __init__(self, robot_id):
         self.robot_id = robot_id
         self.owner = ""
+        self.name = ""
         self.conn = "startet"
         self.text = ""
         self.color = "white"
@@ -25,9 +26,10 @@ class Ui:
             self.conn = conn
             self.dirty = True
 
-    def set_owner(self, owner, color):
-        if owner != self.owner:
+    def set_owner(self, owner, name, color):
+        if owner != self.owner or name != self.name:
             self.owner = owner
+            self.name = name
             self.dirty = True
         self.color = color or "white"
 
@@ -46,7 +48,7 @@ class Ui:
             self.dirty = False
             self.last_display = now
             hw_show_lines([
-                self.robot_id,
+                "%s (%s)" % (self.name, self.robot_id) if self.name else self.robot_id,
                 self.owner or "frei",
                 self.conn,
                 self.text,

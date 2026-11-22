@@ -1,7 +1,8 @@
-import { busy, conn, prefs, robots, session, startRun, stopAll, updatePrefs } from '../state'
+import { busy, conn, copyTeamLink, identifyRobot, prefs, renameRobot, renameTeam, robots, session, startRun, stopAll, updatePrefs } from '../state'
 import { COLOR_HEX, colorName, skillName } from '../format'
 import type { Robot } from '../types'
-import { AutoIcon, MoonIcon, PlayIcon, StopIcon, SunIcon } from './icons'
+import { AutoIcon, LinkIcon, MoonIcon, PlayIcon, StopIcon, SunIcon } from './icons'
+import { InlineEdit } from './InlineEdit'
 import type { Theme } from '../storage'
 
 const AGENT_LABEL = { waiting: 'wartet', thinking: 'denkt nach', acting: 'handelt' } as const
@@ -17,8 +18,13 @@ function RobotCard({ r }: { r: Robot }) {
   return (
     <div class="robot" data-status={r.online && r.accepted ? (s.tilted ? 'warn' : 'ok') : 'off'}>
       <div class="robot-name">
-        <span class="robot-alias">{r.alias}</span>
-        <span class="robot-id">{r.id}</span>
+        <InlineEdit class="robot-alias" value={r.alias} label="Name des Roboters" maxLength={16} onSave={(v) => renameRobot(r.id, v)} />
+        <span class="robot-id">
+          {r.id}
+          <button class="robot-find" onClick={() => identifyRobot(r.id, r.alias)} disabled={!r.online} title="Lässt den Roboter blinken und piepen">
+            Finden
+          </button>
+        </span>
       </div>
       <dl class="robot-facts">
         <div>
@@ -57,9 +63,11 @@ export function TeamBand() {
   const theme = prefs.value.theme
   const ThemeIcon = theme === 'light' ? SunIcon : theme === 'dark' ? MoonIcon : AutoIcon
   return (
-    <header class="band" data-agent={s.agent}>
+    <header class="band" data-agent={s.agent} data-robots={robots.value.length > 1 ? 'many' : 'one'}>
       <div class="band-team">
-        <h1>{s.team.name}</h1>
+        <h1>
+          <InlineEdit value={s.team.name} label="Teamname" maxLength={30} onSave={renameTeam} />
+        </h1>
         <p class="agent-state" aria-live="polite">
           <span class="agent-dot" aria-hidden="true" />
           Agent {AGENT_LABEL[s.agent]}
@@ -68,7 +76,7 @@ export function TeamBand() {
 
       <div class="band-robots">
         {robots.value.length === 0 ? (
-          <p class="robots-empty">Eurem Team ist gerade kein Roboter zugeteilt.</p>
+          <p class="robots-empty">Noch kein Roboter. Der Leitstand teilt euch gleich einen oder mehrere zu.</p>
         ) : (
           robots.value.map((r) => <RobotCard key={r.id} r={r} />)
         )}
@@ -80,6 +88,9 @@ export function TeamBand() {
             {conn.value === 'connecting' ? 'Verbinde …' : 'Verbindung unterbrochen, versuche es erneut …'}
           </span>
         )}
+        <button class="btn btn-ghost-on-band icon-only" onClick={copyTeamLink} title="Team-Link kopieren" aria-label="Team-Link kopieren">
+          <LinkIcon />
+        </button>
         <button
           class="btn btn-ghost-on-band icon-only"
           title={`Darstellung: ${THEME_LABEL[theme]}`}
