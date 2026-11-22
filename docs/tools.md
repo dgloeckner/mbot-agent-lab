@@ -7,19 +7,26 @@ Implementation: `server/internal/tools` (registry with name, German description 
 JSON schema and handler). The agent calls them directly; the optional MCP endpoint will expose the
 same registry to external clients.
 
-Not offered to agents yet, because the robot does not implement them: `follow_line_until`,
-`retrace_path`, `play_melody`, `gesture`. The team page lists them as "kommt bald". `set_leds`
+Goal-oriented tools keep real-time decisions on the robot: the agent states the goal ("turn until
+the way is clear", "follow the line to blue"), the robot closes the loop with filtered sensors in
+its 40 Hz main loop and reports a structured result. The ultrasonic sensor only looks forward, so
+the goals are about driving, turning and scanning, not about following walls on the side.
+
+Not offered to agents yet, because the robot does not implement them: `retrace_path`,
+`play_melody`, `gesture`. The team page lists them as "kommt bald". `set_leds`
 takes a color only, no pattern.
 
 | Group | Tool | Parameters | Result |
 | --- | --- | --- | --- |
-| Move | `drive` | `cm`, `speed?` | `driven_cm`, `reason` |
-| Move | `turn` | `degrees`, positive is right | `turned_deg`, `reason` |
-| Move | `drive_until` | `max_cm`, `stop_below_cm?`, `stop_on_color?` | `driven_cm`, `reason`, `distance_cm`, `color` |
-| Move | `follow_line_until` | `stop_on_color?`, `max_cm` | `driven_cm`, `reason`, `color` |
+| Move | `drive` | `cm`, `speed?` | `driven_cm`, `reason`, `colors_seen`, `min_distance_cm`, `lines_crossed` |
+| Move | `turn` | `degrees`, positive is right | `turned_deg`, `reason`, `distance_cm` |
+| Move | `drive_until` | `max_cm`, `stop_below_cm?`, `stop_on_color?` | `driven_cm`, `reason`, `distance_cm`, `color`, `colors_seen`, `min_distance_cm`, `lines_crossed` |
+| Move | `turn_until_clear` | `direction`, `min_cm?`, `min_deg?`, `max_deg?` | `turned_deg`, `reason` (`clear`, `max_deg`), `distance_cm` |
+| Move | `follow_line_until` | `max_cm`, `stop_on_color?`, `stop_at_crossing?` | `driven_cm`, `reason` (`color`, `crossing`, `line_lost`, `max_cm`), `color`, `colors_seen` |
 | Move | `retrace_path` | none | `segments`, `reason` |
 | Move | `stop` | none | `ok` |
 | Sense | `read_sensors` | none | `distance_cm`, `color`, `line`, `yaw`, `battery`, `tilted` |
+| Sense | `scan` | `from_deg?`, `to_deg?`, `step_deg?`, `face?` | `profile` `[[deg, cm], …]`, `best_deg`, `best_cm`, `turned_deg` |
 | Sense | `wait_for` | `event`, `timeout_s` | `event`, `data` or `reason:"timeout"` |
 | Sense | `list_robots` | none | name, online, battery, color per robot |
 | Express | `set_leds` | `color` or `pattern` | `ok` |

@@ -1,6 +1,11 @@
 # Skills are small state machines. A motion skill is started once and then
 # advanced by step() on every loop iteration; it never blocks.
 #
+# Goal-oriented skills keep the real-time decisions on the robot: the agent
+# says what it wants ("turn until the way is clear", "follow the line to the
+# blue field"), the robot closes the loop with filtered sensors at 40 Hz.
+#
+# start(s) and step(s, now) get the filtered sensor snapshot from sense.py.
 # step() returns None while running, or a tuple (ok, reason, data) when done.
 
 from compat import ticks_ms, ticks_diff
@@ -10,10 +15,20 @@ from hw import (hw_motors, hw_motors_stop, hw_wheels_reset, hw_wheels_deg,
 SK_DEFAULT_SPEED = 40      # RPM
 SK_MAX_SPEED = 80          # RPM, hard limit
 SK_TURN_SPEED = 30         # RPM
+SK_SCAN_SPEED = 20         # RPM, slower so every angle gets several readings
+SK_LINE_SPEED = 30         # RPM
+SK_LINE_MAX_SPEED = 60
+SK_LINE_KP = 0.35          # RPM per unit of line offset (-100 .. 100)
+SK_LINE_SMOOTH = 0.5       # share of the newest offset reading (1 = no smoothing)
 SK_MAX_CM = 300            # per command
 SK_MAX_DEG = 720           # per command
 SK_MAX_MS = 20000          # per command; the server waits this + 2 s
 SK_TURN_TOLERANCE_DEG = 2
+SK_CONFIRM = 2             # loop iterations a stop condition must hold
+SK_CLEAR_CONFIRM = 3       # same for "the way ahead is clear"
+SK_LOST_CONFIRM = 8        # same for "the line is gone": long enough to bridge tape gaps
+                           # and to let the color vote settle where a line ends in a field
+SK_TRIP_COLORS = 8         # colors_seen keeps the last this many
 
 
 def _clamp(v, lo, hi):
@@ -32,6 +47,74 @@ def _num(args, key, default=None):
 def _driven_cm():
     left, right = hw_wheels_deg()
     return (left + right) / 2 * CM_PER_WHEEL_DEG
+
+
+class Confirm:
+    """True once a condition has held for n checks in a row."""
+
+    def __init__(self, n):
+        self.n = n
+        self.count = 0
+
+    def check(self, cond):
+        self.count = self.count + 1 if cond else 0
+        return self.count >= self.n
+
+
+class Trip:
+    """What happened during a motion skill, reported with the result."""
+
+    def __init__(self):
+        self.colors = []
+        self.min_cm = None
+        self.lines = 0
+        self.on_line = False
+
+    def update(self, s):
+        c = s["color"]
+        if c and (not self.colors or self.colors[-1] != c):
+            self.colors.append(c)
+            if len(self.colors) > SK_TRIP_COLORS:
+                self.colors.pop(0)
+        d = s["distance_cm"]
+        if self.min_cm is None or d < self.min_cm:
+            self.min_cm = d
+        on = s["line"] != "none"
+        if on and not self.on_line:
+            self.lines += 1
+        self.on_line = on
+
+    def data(self, out):
+        out["colors_seen"] = self.colors
+        out["min_distance_cm"] = self.min_cm
+        out["lines_crossed"] = self.lines
+        return out
+
+
+class Heading:
+    """Accumulated rotation from gyro yaw deltas; works past +-180 degrees."""
+
+    def __init__(self):
+        hw_yaw_reset()
+        self.last = 0
+        self.value = 0
+
+    def update(self):
+        yaw = hw_yaw()
+        delta = yaw - self.last
+        if delta > 180:
+            delta -= 360
+        elif delta < -180:
+            delta += 360
+        self.value += delta
+        self.last = yaw
+        return self.value
+
+
+def _rotate(direction, speed):
+    """Turn on the spot; direction 1 is right (clockwise), -1 left."""
+    v = direction * speed
+    hw_motors(v, -v)
 
 
 class DriveSkill:
@@ -59,8 +142,10 @@ class DriveSkill:
         self.speed = _clamp(abs(_num(args, "speed", SK_DEFAULT_SPEED)), 5, SK_MAX_SPEED)
         self.started = 0
         self.driven = 0
+        self.trip = Trip()
+        self.wall = Confirm(SK_CONFIRM)
 
-    def start(self):
+    def start(self, s):
         hw_wheels_reset()
         self.started = ticks_ms()
         v = self.direction * self.speed
@@ -71,17 +156,15 @@ class DriveSkill:
 
     def _end(self, ok, reason, s):
         hw_motors_stop()
-        data = {"driven_cm": round(self.driven, 1)}
-        if self.until:
-            data["distance_cm"] = s["distance_cm"]
-            data["color"] = s["color"]
-        return ok, reason, data
+        data = {"driven_cm": round(self.driven, 1), "distance_cm": s["distance_cm"], "color": s["color"]}
+        return ok, reason, self.trip.data(data)
 
     def step(self, s, now):
         self.driven = abs(_driven_cm())
+        self.trip.update(s)
         if self.driven >= self.target:
             return self._end(True, "max_cm" if self.until else "done", s)
-        if self.stop_below is not None and self.forward and s["distance_cm"] < self.stop_below:
+        if self.stop_below is not None and self.forward and self.wall.check(s["distance_cm"] < self.stop_below):
             return self._end(True, "wall", s)
         if self.stop_color is not None and s["color"] == self.stop_color:
             return self._end(True, "color", s)
@@ -105,44 +188,235 @@ class TurnSkill:
             raise ValueError("deg missing")
         self.target = _clamp(deg, -SK_MAX_DEG, SK_MAX_DEG)
         self.started = 0
-        self.turned = 0
-        self.last_yaw = 0
+        self.heading = None
 
-    def start(self):
-        hw_yaw_reset()
+    def start(self, s):
+        self.heading = Heading()
         self.started = ticks_ms()
-        self.last_yaw = 0
-        v = SK_TURN_SPEED if self.target > 0 else -SK_TURN_SPEED
-        hw_motors(v, -v)
+        _rotate(1 if self.target > 0 else -1, SK_TURN_SPEED)
 
     def segment(self):
-        return ("turn", round(self.turned))
+        return ("turn", round(self.heading.value) if self.heading else 0)
 
-    def _end(self, ok, reason):
+    def _end(self, ok, reason, s):
         hw_motors_stop()
-        return ok, reason, {"turned_deg": round(self.turned)}
+        return ok, reason, {"turned_deg": round(self.heading.value), "distance_cm": s["distance_cm"]}
 
     def step(self, s, now):
-        # Accumulate yaw deltas so turns beyond +-180 degrees work across the wrap.
-        yaw = hw_yaw()
-        delta = yaw - self.last_yaw
-        if delta > 180:
-            delta -= 360
-        elif delta < -180:
-            delta += 360
-        self.turned += delta
-        self.last_yaw = yaw
-        if abs(self.turned) >= abs(self.target) - SK_TURN_TOLERANCE_DEG:
-            return self._end(True, "done")
+        turned = self.heading.update()
+        if abs(turned) >= abs(self.target) - SK_TURN_TOLERANCE_DEG:
+            return self._end(True, "done", s)
         if ticks_diff(now, self.started) > SK_MAX_MS:
-            return self._end(False, "timeout")
+            return self._end(False, "timeout", s)
         return None
 
     def abort(self, reason, s):
-        return self._end(False, reason)
+        return self._end(False, reason, s)
 
 
-MOTION_SKILLS = ("drive", "turn", "drive_until", "follow_line_until", "retrace_path", "gesture")
+class TurnUntilClearSkill:
+    """turn_until_clear(direction, min_cm, min_deg, max_deg).
+
+    Turns at least min_deg (so it looks for a new direction), then keeps
+    turning until the way ahead is clear for min_cm, at most max_deg.
+    """
+
+    name = "turn_until_clear"
+    forward = False
+
+    def __init__(self, args):
+        direction = args.get("direction", "right")
+        if direction not in ("left", "right"):
+            raise ValueError("direction must be left or right")
+        self.direction = 1 if direction == "right" else -1
+        self.min_cm = _clamp(_num(args, "min_cm", 40), 10, 200)
+        self.min_deg = _clamp(_num(args, "min_deg", 20), 0, 180)
+        self.max_deg = _clamp(_num(args, "max_deg", 360), 10, SK_MAX_DEG)
+        self.clear = Confirm(SK_CLEAR_CONFIRM)
+        self.heading = None
+        self.started = 0
+
+    def start(self, s):
+        self.heading = Heading()
+        self.started = ticks_ms()
+        _rotate(self.direction, SK_TURN_SPEED)
+
+    def segment(self):
+        return ("turn", round(self.heading.value) if self.heading else 0)
+
+    def _end(self, ok, reason, s):
+        hw_motors_stop()
+        return ok, reason, {"turned_deg": round(self.heading.value), "distance_cm": s["distance_cm"]}
+
+    def step(self, s, now):
+        turned = abs(self.heading.update())
+        if turned >= self.min_deg and self.clear.check(s["distance_cm"] >= self.min_cm):
+            return self._end(True, "clear", s)
+        if turned >= self.max_deg:
+            return self._end(True, "max_deg", s)
+        if ticks_diff(now, self.started) > SK_MAX_MS:
+            return self._end(False, "timeout", s)
+        return None
+
+    def abort(self, reason, s):
+        return self._end(False, reason, s)
+
+
+class ScanSkill:
+    """scan(from_deg, to_deg, step_deg, face).
+
+    Turns to from_deg, sweeps slowly to to_deg while measuring, then faces the
+    most open direction ("best") or the starting direction ("start").
+    Angles are relative to the heading at the start, positive is right.
+    """
+
+    name = "scan"
+    forward = False
+
+    def __init__(self, args):
+        self.from_deg = _clamp(_num(args, "from_deg", -90), -180, 180)
+        self.to_deg = _clamp(_num(args, "to_deg", 90), -180, 180)
+        if self.to_deg <= self.from_deg:
+            raise ValueError("to_deg must be greater than from_deg")
+        self.step_deg = _clamp(_num(args, "step_deg", 15), 10, 45)
+        self.face = args.get("face", "best")
+        if self.face not in ("best", "start"):
+            raise ValueError("face must be best or start")
+        self.bins = {}
+        self.phase = "to_start"
+        self.target = self.from_deg
+        self.heading = None
+        self.started = 0
+        self.best = None
+
+    def start(self, s):
+        self.heading = Heading()
+        self.started = ticks_ms()
+
+    def segment(self):
+        return ("turn", round(self.heading.value) if self.heading else 0)
+
+    def _toward(self, target, speed):
+        """Rotate toward target; True when there."""
+        diff = target - self.heading.value
+        if abs(diff) <= SK_TURN_TOLERANCE_DEG:
+            hw_motors_stop()
+            return True
+        _rotate(1 if diff > 0 else -1, speed)
+        return False
+
+    def _profile(self):
+        out = []
+        n = int((self.to_deg - self.from_deg) // self.step_deg) + 1
+        for i in range(n):
+            vals = self.bins.get(i)
+            cm = int(sorted(vals)[len(vals) // 2]) if vals else None
+            out.append([int(self.from_deg + i * self.step_deg), cm])
+        return out
+
+    def _end(self, ok, reason, s):
+        hw_motors_stop()
+        data = {"turned_deg": round(self.heading.value), "distance_cm": s["distance_cm"]}
+        if self.best is not None:
+            data["profile"] = self._profile()
+            data["best_deg"], data["best_cm"] = self.best
+        return ok, reason, data
+
+    def step(self, s, now):
+        heading = self.heading.update()
+        if ticks_diff(now, self.started) > SK_MAX_MS:
+            return self._end(False, "timeout", s)
+        if self.phase == "to_start":
+            if self._toward(self.from_deg, SK_TURN_SPEED):
+                self.phase = "sweep"
+            return None
+        if self.phase == "sweep":
+            raw = s["distance_raw"]
+            if raw >= 2:  # valid readings only; the median per angle removes ghosts
+                i = int(round((heading - self.from_deg) / self.step_deg))
+                if i >= 0:
+                    self.bins.setdefault(i, []).append(min(raw, 300))
+            if self._toward(self.to_deg, SK_SCAN_SPEED):
+                best_deg, best_cm = 0, -1
+                for deg, cm in self._profile():
+                    if cm is not None and cm > best_cm:
+                        best_deg, best_cm = deg, cm
+                self.best = (best_deg, best_cm)
+                self.target = best_deg if self.face == "best" else 0
+                self.phase = "face"
+            return None
+        if self._toward(self.target, SK_TURN_SPEED):
+            return self._end(True, "done", s)
+        return None
+
+    def abort(self, reason, s):
+        return self._end(False, reason, s)
+
+
+class FollowLineSkill:
+    """follow_line_until(max_cm, stop_on_color, stop_at_crossing, speed).
+
+    Steers along the line with the quad RGB sensor (P-controller on the line
+    offset) until the color, a crossing, the end of the line or max_cm.
+    """
+
+    name = "follow_line_until"
+    forward = True
+
+    def __init__(self, args):
+        cm = _num(args, "max_cm")
+        if cm is None:
+            raise ValueError("max_cm missing")
+        self.target = _clamp(abs(cm), 1, SK_MAX_CM)
+        self.stop_color = args.get("stop_on_color")
+        self.stop_crossing = bool(args.get("stop_at_crossing", True))
+        self.speed = _clamp(abs(_num(args, "speed", SK_LINE_SPEED)), 10, SK_LINE_MAX_SPEED)
+        self.lost = Confirm(SK_LOST_CONFIRM)
+        self.crossing = Confirm(SK_CONFIRM)
+        self.trip = Trip()
+        self.driven = 0
+        self.started = 0
+        self.offset = 0
+
+    def start(self, s):
+        hw_wheels_reset()
+        self.started = ticks_ms()
+        hw_motors(self.speed, self.speed)
+
+    def segment(self):
+        return ("drive", round(self.driven, 1))
+
+    def _end(self, ok, reason, s):
+        hw_motors_stop()
+        data = {"driven_cm": round(self.driven, 1), "color": s["color"], "distance_cm": s["distance_cm"]}
+        data = self.trip.data(data)
+        del data["lines_crossed"]  # meaningless while following a line
+        return ok, reason, data
+
+    def step(self, s, now):
+        self.driven = abs(_driven_cm())
+        self.trip.update(s)
+        if self.stop_color is not None and s["color"] == self.stop_color:
+            return self._end(True, "color", s)
+        if self.driven >= self.target:
+            return self._end(True, "max_cm", s)
+        if self.stop_crossing and self.driven > 3 and self.crossing.check(s["line"] == "all"):
+            return self._end(True, "crossing", s)
+        if self.lost.check(s["line"] == "none"):
+            return self._end(True, "line_lost", s)
+        if ticks_diff(now, self.started) > SK_MAX_MS:
+            return self._end(False, "timeout", s)
+        self.offset += SK_LINE_SMOOTH * (_clamp(s["line_offset"], -100, 100) - self.offset)
+        turn = SK_LINE_KP * self.offset
+        hw_motors(self.speed + turn, self.speed - turn)
+        return None
+
+    def abort(self, reason, s):
+        return self._end(False, reason, s)
+
+
+MOTION_SKILLS = ("drive", "turn", "drive_until", "turn_until_clear", "scan", "follow_line_until",
+                 "retrace_path", "gesture")
 
 
 def make_motion_skill(name, args):
@@ -153,5 +427,11 @@ def make_motion_skill(name, args):
         return DriveSkill(args, until=True)
     if name == "turn":
         return TurnSkill(args)
-    # TODO: follow_line_until, retrace_path, gesture
+    if name == "turn_until_clear":
+        return TurnUntilClearSkill(args)
+    if name == "scan":
+        return ScanSkill(args)
+    if name == "follow_line_until":
+        return FollowLineSkill(args)
+    # TODO: retrace_path, gesture
     raise NotImplementedError(name)

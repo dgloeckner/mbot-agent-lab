@@ -14,14 +14,16 @@ Usage:
 
 import argparse
 import ast
+import io
 import pathlib
 import sys
+import tokenize
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "src"
 
 # Dependency order: every module only uses names from modules above it.
-MODULES = ["compat", "hw", "ui", "events", "net", "skills", "reflexes", "loop", "main"]
+MODULES = ["compat", "hw", "sense", "ui", "events", "net", "skills", "reflexes", "loop", "main"]
 
 
 def top_level_names(tree):
@@ -53,7 +55,26 @@ def strip_local_imports(source, local):
     return "\n".join(kept).strip() + "\n", tree
 
 
-def bundle(config_path=None):
+def strip_comments(source):
+    """Remove comments and blank lines; the device does not need them.
+
+    Uses the tokenizer, so a "#" inside a string is left alone.
+    """
+    lines = source.splitlines()
+    cut = {}  # line number -> column where a comment starts
+    for tok in tokenize.generate_tokens(io.StringIO(source).readline):
+        if tok.type == tokenize.COMMENT:
+            cut[tok.start[0]] = tok.start[1]
+    out = []
+    for i, line in enumerate(lines, start=1):
+        if i in cut:
+            line = line[:cut[i]].rstrip()
+        if line.strip():
+            out.append(line)
+    return "\n".join(out) + "\n"
+
+
+def bundle(config_path=None, strip=True):
     local = set(MODULES)
     parts = []
     seen = {}
@@ -65,6 +86,8 @@ def bundle(config_path=None):
 
     for name, path in sources:
         text, tree = strip_local_imports(path.read_text(encoding="utf-8"), local)
+        if strip:
+            text = strip_comments(text)
         for n in top_level_names(tree):
             if n in seen:
                 raise SystemExit("bundle: name %r defined in both %s and %s" % (n, seen[n], name))
@@ -85,8 +108,9 @@ def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--config", help="config.py to inline (contains secrets: never commit the result)")
     p.add_argument("--out", default=str(ROOT / "dist" / "main.py"))
+    p.add_argument("--keep-comments", action="store_true", help="keep comments, e.g. to read the bundle")
     a = p.parse_args(argv)
-    out = bundle(a.config)
+    out = bundle(a.config, strip=not a.keep_comments)
     path = pathlib.Path(a.out)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(out, encoding="utf-8")

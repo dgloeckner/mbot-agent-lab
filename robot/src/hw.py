@@ -90,6 +90,14 @@ def hw_line_state():
     return "left" if bits & 0b1000 else "right"
 
 
+def hw_line_offset():
+    """Line position under the quad RGB sensor, -100 (far left) .. 100 (far right).
+
+    VERIFY: return range and sign of get_offset_track on the real sensor.
+    """
+    return mbuild.quad_rgb_sensor.get_offset_track(1)
+
+
 def hw_battery():
     return cyberpi.get_battery()  # VERIFY: percent
 

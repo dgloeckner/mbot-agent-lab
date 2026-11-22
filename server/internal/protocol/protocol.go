@@ -64,6 +64,10 @@ const (
 	ReasonTilted     Reason = "tilted"
 	ReasonReassigned Reason = "reassigned"
 	ReasonError      Reason = "error"
+	ReasonClear      Reason = "clear"     // turn_until_clear found open space
+	ReasonMaxDeg     Reason = "max_deg"   // turn_until_clear turned as far as allowed
+	ReasonLineLost   Reason = "line_lost" // follow_line_until: the line ended or was lost
+	ReasonCrossing   Reason = "crossing"  // follow_line_until reached a crossing
 )
 
 // Cmd is sent from the server to a robot on lab/<id>/cmd.

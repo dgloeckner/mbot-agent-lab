@@ -1,11 +1,11 @@
-# Event detection with debouncing and hysteresis. Detected events are queued
-# and published by the main loop.
+# Event detection on filtered sensors (sense.py debounces colors and tilt),
+# plus hysteresis for obstacles. Detected events are queued and published by
+# the main loop.
 
 from compat import ticks_diff
 
 EV_NEAR_CM = 15         # obstacle_near below this distance
 EV_CLEAR_CM = 20        # obstacle_clear above this distance (hysteresis)
-EV_COLOR_STABLE = 3     # readings before color_changed fires
 EV_BATTERY_LOW = 15     # percent
 EV_CLAP_LEVEL = 70      # loudness 0..100
 EV_CLAP_COOLDOWN_MS = 1000
@@ -16,8 +16,6 @@ class Events:
         self.queue = []
         self.near = False
         self.color = None
-        self.color_candidate = None
-        self.color_count = 0
         self.buttons = {"a": False, "b": False}
         self.battery_warned = False
         self.tilted = False
@@ -37,12 +35,7 @@ class Events:
             self.emit("obstacle_clear", {"distance_cm": d})
 
         c = s["color"]
-        if c == self.color_candidate:
-            self.color_count += 1
-        else:
-            self.color_candidate = c
-            self.color_count = 1
-        if self.color_count == EV_COLOR_STABLE and c != self.color:
+        if c != self.color:
             prev = self.color
             self.color = c
             if prev is not None:

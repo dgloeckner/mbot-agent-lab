@@ -119,10 +119,19 @@ func TestRobotParameterOnlyWithSeveralRobots(t *testing.T) {
 	if _, ok := drive["properties"].(map[string]any)["robot"]; ok {
 		t.Errorf("single robot must not need a robot parameter: %v", drive)
 	}
+	// The registry offers exactly the tools the catalog (team page) marks as ready.
+	offered := map[string]bool{}
 	for _, d := range r.Definitions(env) {
-		if d.Name == "follow_line_until" || d.Name == "gesture" {
-			t.Errorf("unfinished tool offered: %s", d.Name)
+		offered[d.Name] = true
+	}
+	for _, info := range Catalog {
+		if offered[info.Name] != info.Ready {
+			t.Errorf("%s: catalog ready=%v, offered=%v", info.Name, info.Ready, offered[info.Name])
 		}
+		delete(offered, info.Name)
+	}
+	for name := range offered {
+		t.Errorf("%s is offered but missing from the catalog", name)
 	}
 
 	r2, _, _ := setup(t, map[string]string{"mbot-1": "Scout", "mbot-2": "Träger"})
@@ -252,4 +261,32 @@ func TestServerTools(t *testing.T) {
 func jsonNum(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)
+}
+
+func TestGoalToolsPassArguments(t *testing.T) {
+	r, bus, _ := setup(t, map[string]string{"mbot-1": "Scout"})
+	env := &Env{TeamID: "rot"}
+	time.Sleep(20 * time.Millisecond)
+	bus.mu.Lock()
+	bus.cmds = nil
+	bus.mu.Unlock()
+	for _, call := range [][2]string{
+		{"turn_until_clear", `{"direction":"left","min_cm":50}`},
+		{"scan", `{"from_deg":-45,"to_deg":45}`},
+		{"follow_line_until", `{"max_cm":120,"stop_on_color":"blue"}`},
+	} {
+		got := schemaOf(t, r.Call(context.Background(), env, call[0], call[1]))
+		if got["ok"] != true {
+			t.Errorf("%s = %v", call[0], got)
+		}
+	}
+	bus.mu.Lock()
+	defer bus.mu.Unlock()
+	want := []string{"mbot-1:turn_until_clear", "mbot-1:scan", "mbot-1:follow_line_until"}
+	if strings.Join(bus.cmds, ",") != strings.Join(want, ",") {
+		t.Errorf("commands = %v", bus.cmds)
+	}
+	if got := schemaOf(t, r.Call(context.Background(), env, "turn_until_clear", `{}`)); got["ok"] != false {
+		t.Errorf("missing direction must fail: %v", got)
+	}
 }

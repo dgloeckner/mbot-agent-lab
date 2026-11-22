@@ -41,3 +41,12 @@ it('words tool calls and runs', () => {
   expect(formatCost(50)).toBe('unter 0,01 ct')
   expect(formatCost(12_500)).toBe('1,25 ct')
 })
+
+it('words goal tools', () => {
+  const scan = { id: 3, at: '', source: 'agent', kind: 'tool', data: { name: 'scan', args: {}, result: { ok: true, reason: 'done', turned_deg: 90, best_deg: 90, best_cm: 190, distance_cm: 188 } } }
+  expect(describe(scan)).toBe('scan() → fertig, 90° gedreht, Abstand 188 cm, am freiesten bei 90° (190 cm)')
+  const clear = { ...scan, data: { name: 'turn_until_clear', args: { direction: 'right' }, result: { ok: true, reason: 'clear', turned_deg: 75, distance_cm: 46 } } }
+  expect(describe(clear)).toBe('turn_until_clear(direction: right) → Weg frei, 75° gedreht, Abstand 46 cm')
+  const trip = { ...scan, data: { name: 'drive', args: { cm: 90 }, result: { ok: true, reason: 'done', driven_cm: 90, colors_seen: ['white', 'red', 'white'] } } }
+  expect(describe(trip)).toBe('drive(cm: 90) → fertig, 90 cm gefahren, unterwegs: weiß → rot → weiß')
+})
