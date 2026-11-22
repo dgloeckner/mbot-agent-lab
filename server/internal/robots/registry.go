@@ -1,0 +1,291 @@
+// Package robots tracks every configured robot: connection status, last state,
+// owner and pending commands. It sends the heartbeat and matches results to
+// commands by ID.
+package robots
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"sort"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/protocol"
+)
+
+// Bus is the part of the MQTT broker the registry needs.
+type Bus interface {
+	Publish(topic string, payload []byte, retain bool, qos byte) error
+	Handle(filter string, subID int, fn func(topic string, payload []byte)) error
+}
+
+// HeartbeatInterval is how often the server sends lab/<id>/hb.
+const HeartbeatInterval = time.Second
+
+// Errors returned by Send.
+var (
+	ErrUnknownRobot = errors.New("unknown robot")
+	ErrOffline      = errors.New("robot offline")
+	ErrNotAccepted  = errors.New("robot speaks an unsupported protocol version")
+	ErrTimeout      = errors.New("no result from robot")
+)
+
+// Robot is a snapshot of one robot for the UI and for tools like list_robots.
+type Robot struct {
+	ID       string
+	Color    string
+	Owner    string // team ID, empty if free
+	Alias    string
+	Online   bool
+	Accepted bool // hello with a supported protocol version received
+	Hello    protocol.Hello
+	State    protocol.State
+	StateAt  time.Time
+	SeenAt   time.Time
+	Agent    string // agent state shown on the robot
+}
+
+// Event is a robot event together with its origin and arrival time.
+type Event struct {
+	RobotID string
+	Event   protocol.Event
+	At      time.Time
+}
+
+// Registry is safe for concurrent use.
+type Registry struct {
+	bus    Bus
+	log    *slog.Logger
+	cmdSeq atomic.Uint64
+
+	mu        sync.Mutex
+	robots    map[string]*Robot
+	ownerName map[string]string // team ID -> display name
+	pending   map[string]chan protocol.Result
+	listeners []chan<- Event
+}
+
+// Spec describes a configured robot.
+type Spec struct {
+	ID, Color string
+}
+
+// New creates a registry for the given robots.
+func New(bus Bus, specs []Spec, logger *slog.Logger) *Registry {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	r := &Registry{
+		bus:       bus,
+		log:       logger.With("component", "robots"),
+		robots:    map[string]*Robot{},
+		ownerName: map[string]string{},
+		pending:   map[string]chan protocol.Result{},
+	}
+	for _, s := range specs {
+		r.robots[s.ID] = &Robot{ID: s.ID, Color: s.Color, Agent: protocol.AgentWaiting}
+	}
+	return r
+}
+
+// Assign sets the owner of a robot. teamID "" frees it.
+// TODO: full reassignment semantics (stop, clear log, end pending command with "reassigned").
+func (r *Registry) Assign(robotID, teamID, teamName, alias string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	rb, ok := r.robots[robotID]
+	if !ok {
+		return ErrUnknownRobot
+	}
+	rb.Owner, rb.Alias = teamID, alias
+	if teamID != "" {
+		r.ownerName[teamID] = teamName
+	}
+	return nil
+}
+
+// SetAgentState updates the agent state shown on all robots of a team.
+func (r *Registry) SetAgentState(teamID, state string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, rb := range r.robots {
+		if rb.Owner == teamID {
+			rb.Agent = state
+		}
+	}
+}
+
+// Subscribe registers a channel that receives every robot event. Slow
+// receivers drop events instead of blocking the registry.
+func (r *Registry) Subscribe(ch chan<- Event) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.listeners = append(r.listeners, ch)
+}
+
+// Snapshot returns all robots sorted by ID.
+func (r *Registry) Snapshot() []Robot {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]Robot, 0, len(r.robots))
+	for _, rb := range r.robots {
+		out = append(out, *rb)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+// Run subscribes to robot topics and sends heartbeats until ctx ends.
+func (r *Registry) Run(ctx context.Context) error {
+	if err := r.bus.Handle(protocol.TopicPrefix+"/+/+", 1, r.handle); err != nil {
+		return err
+	}
+	t := time.NewTicker(HeartbeatInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-t.C:
+			r.heartbeat()
+		}
+	}
+}
+
+func (r *Registry) heartbeat() {
+	type hb struct {
+		id  string
+		msg protocol.Heartbeat
+	}
+	r.mu.Lock()
+	beats := make([]hb, 0, len(r.robots))
+	for _, rb := range r.robots {
+		beats = append(beats, hb{rb.ID, protocol.Heartbeat{Owner: r.ownerName[rb.Owner], Color: rb.Color, Agent: rb.Agent}})
+	}
+	r.mu.Unlock()
+	for _, b := range beats {
+		payload, err := protocol.Marshal(b.msg)
+		if err == nil {
+			err = r.bus.Publish(protocol.Topic(b.id, protocol.TopicHeartbeat), payload, false, 0)
+		}
+		if err != nil {
+			r.log.Error("heartbeat", "robot", b.id, "err", err)
+		}
+	}
+}
+
+func (r *Registry) handle(topic string, payload []byte) {
+	id, suffix, ok := protocol.ParseTopic(topic)
+	if !ok {
+		return
+	}
+	now := time.Now()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	rb, known := r.robots[id]
+	if !known {
+		return
+	}
+	switch suffix {
+	case protocol.TopicStatus:
+		rb.Online = string(payload) == protocol.StatusOnline
+		rb.SeenAt = now
+		r.log.Info("robot status", "robot", id, "status", string(payload))
+	case protocol.TopicHello:
+		var h protocol.Hello
+		if err := json.Unmarshal(payload, &h); err != nil {
+			r.log.Warn("bad hello", "robot", id, "err", err)
+			return
+		}
+		rb.Hello, rb.SeenAt = h, now
+		rb.Accepted = h.V == protocol.Version
+		if !rb.Accepted {
+			r.log.Warn("unsupported protocol version", "robot", id, "v", h.V)
+		} else {
+			r.log.Info("robot hello", "robot", id, "script", h.Script, "mac", h.MAC)
+		}
+	case protocol.TopicState:
+		var s protocol.State
+		if err := json.Unmarshal(payload, &s); err != nil {
+			r.log.Warn("bad state", "robot", id, "err", err)
+			return
+		}
+		rb.State, rb.StateAt, rb.SeenAt = s, now, now
+	case protocol.TopicEvent:
+		var e protocol.Event
+		if err := json.Unmarshal(payload, &e); err != nil {
+			r.log.Warn("bad event", "robot", id, "err", err)
+			return
+		}
+		rb.SeenAt = now
+		for _, l := range r.listeners {
+			select {
+			case l <- Event{RobotID: id, Event: e, At: now}:
+			default:
+			}
+		}
+	case protocol.TopicResult:
+		var res protocol.Result
+		if err := json.Unmarshal(payload, &res); err != nil {
+			r.log.Warn("bad result", "robot", id, "err", err)
+			return
+		}
+		rb.SeenAt = now
+		if ch, ok := r.pending[id+"/"+res.ID]; ok {
+			ch <- res // buffered, exactly one result is delivered
+			delete(r.pending, id+"/"+res.ID)
+		}
+	}
+}
+
+// Send publishes a command and waits for its result or the timeout.
+// The timeout should be the skill's maximum duration plus two seconds.
+func (r *Registry) Send(ctx context.Context, robotID, name string, args map[string]any, timeout time.Duration) (protocol.Result, error) {
+	cmd := protocol.Cmd{ID: fmt.Sprintf("c-%x", r.cmdSeq.Add(1)), Name: name, Args: args}
+	payload, err := protocol.Marshal(cmd)
+	if err != nil {
+		return protocol.Result{}, err
+	}
+	key := robotID + "/" + cmd.ID
+	ch := make(chan protocol.Result, 1)
+
+	r.mu.Lock()
+	rb, ok := r.robots[robotID]
+	switch {
+	case !ok:
+		err = ErrUnknownRobot
+	case !rb.Online:
+		err = ErrOffline
+	case !rb.Accepted:
+		err = ErrNotAccepted
+	default:
+		r.pending[key] = ch
+	}
+	r.mu.Unlock()
+	if err != nil {
+		return protocol.Result{}, err
+	}
+	defer func() {
+		r.mu.Lock()
+		delete(r.pending, key)
+		r.mu.Unlock()
+	}()
+
+	if err := r.bus.Publish(protocol.Topic(robotID, protocol.TopicCmd), payload, false, 0); err != nil {
+		return protocol.Result{}, err
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case res := <-ch:
+		return res, nil
+	case <-timer.C:
+		return protocol.Result{ID: cmd.ID, OK: false, Reason: protocol.ReasonTimeout}, ErrTimeout
+	case <-ctx.Done():
+		return protocol.Result{}, ctx.Err()
+	}
+}

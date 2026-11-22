@@ -1,0 +1,27 @@
+[Unit]
+Description=mBot2 Agent Lab server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=labserver
+Group=labserver
+# Secrets (LAB_ADMIN_PASSWORD, MISTRAL_API_KEY, MBOTn_PASSWORD, TEAM_*_TOKEN), mode 0600.
+EnvironmentFile=/etc/labserver/secrets.env
+ExecStart=/usr/local/bin/labserver -config /etc/labserver/lab.yaml
+WorkingDirectory=/var/lib/labserver
+StateDirectory=labserver
+Restart=on-failure
+RestartSec=2
+
+# Bind :443 and :8883 without running as root.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/labserver
+
+[Install]
+WantedBy=multi-user.target

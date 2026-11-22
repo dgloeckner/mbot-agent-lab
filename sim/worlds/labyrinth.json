@@ -1,0 +1,14 @@
+{
+  "name": "labyrinth",
+  "description": "Small labyrinth, 200 x 200 cm, corridors 50 cm wide, blue goal field.",
+  "floor": "white",
+  "walls": [
+    [0, 0, 200, 0], [200, 0, 200, 200], [200, 200, 0, 200], [0, 200, 0, 0],
+    [50, 0, 50, 150],
+    [100, 50, 100, 200],
+    [150, 0, 150, 150]
+  ],
+  "fields": [{"rect": [150, 160, 50, 40], "color": "blue"}],
+  "lines": [],
+  "starts": [{"x": 25, "y": 20, "heading": 0}]
+}
