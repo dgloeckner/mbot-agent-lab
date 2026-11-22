@@ -83,7 +83,10 @@ function compactResult(result: unknown): string {
   if (typeof r.distance_cm === 'number') parts.push(`Abstand ${r.distance_cm} cm`)
   if (typeof r.color === 'string' && r.color) parts.push(`Boden ${colorName(r.color)}`)
   if (typeof r.best_deg === 'number') parts.push(`am freiesten bei ${r.best_deg}° (${r.best_cm} cm)`)
-  if (Array.isArray(r.colors_seen) && r.colors_seen.length > 1) parts.push(`unterwegs: ${r.colors_seen.map((c: string) => colorName(c)).join(' → ')}`)
+  if (Array.isArray(r.floor) && r.floor.length > 1) {
+    const patterns = r.floor.map((e: unknown) => (Array.isArray(e) ? String(e[1]) : '?'))
+    parts.push(`Bodenspur ${patterns.join(' ')}${r.floor_truncated ? ' (abgeschnitten)' : ''}`)
+  }
   if (Array.isArray(r.delivered)) parts.push(r.delivered.length ? `an ${r.delivered.join(', ')}` : 'niemand erreicht')
   if (r.event) parts.push(`${r.event} von ${r.robot}`)
   if (r.note_id) parts.push(`Notiz ${r.note_id}`)

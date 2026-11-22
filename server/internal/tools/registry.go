@@ -257,7 +257,7 @@ func (c *call) command(ctx context.Context, rb robots.Robot, name string, args m
 func robotState(rb robots.Robot) map[string]any {
 	s := rb.State
 	return map[string]any{
-		"robot": rb.Alias, "online": rb.Online && rb.Accepted, "distance_cm": s.DistanceCM, "color": s.Color,
+		"robot": rb.Alias, "online": rb.Online && rb.Accepted, "distance_cm": s.DistanceCM, "floor": s.Floor, "color": s.Color,
 		"line": s.Line, "yaw": s.Yaw, "battery": s.Battery, "tilted": s.Tilted, "skill": s.Skill,
 	}
 }
@@ -295,7 +295,11 @@ func (c *call) pick(keys ...string) map[string]any {
 // motionTimeout is the robot's limit per motion command plus two seconds.
 const motionTimeout = 22 * time.Second
 
-var floorColors = []string{"white", "black", "red", "yellow", "green", "cyan", "blue", "purple"}
+var floorColors = []string{"white", "black", "red", "yellow", "green", "blue", "any"}
+
+// floorHelp explains the floor trace once, in the drive tool; the others refer to it.
+const floorHelp = "floor ist die Bodenspur: eine Liste aus [Position, Muster]. Die Position zählt ab Beginn der Bewegung, in cm beim Fahren, in Grad beim Drehen. Das Muster sind vier Buchstaben für die vier Bodensonden von links nach rechts: w weiß, k schwarz, r rot, y gelb, g grün, b blau, ? unklar. Ein Eintrag gilt bis zum nächsten. Höchstens 20 Einträge; steht floor_truncated true dabei, fahre kürzere Strecken."
+
 var ledColors = []string{"red", "green", "blue", "yellow", "purple", "cyan", "white", "orange", "off"}
 var robotEvents = []string{"obstacle_near", "obstacle_clear", "color_changed", "tilted", "button_a", "button_b", "clap", "battery_low"}
 
@@ -315,7 +319,7 @@ func builtins() []*tool {
 	return []*tool{
 		{
 			name:     "drive",
-			desc:     "Fährt geradeaus um cm Zentimeter, negative Werte fahren rückwärts. Hält von selbst bei einem Hindernis an. Ergebnis: driven_cm und reason (done, obstacle, stopped, tilted, timeout).",
+			desc:     "Fährt geradeaus um cm Zentimeter, negative Werte fahren rückwärts. Hält von selbst bei einem Hindernis an. Ergebnis: driven_cm, reason (done, obstacle, stopped, tilted, timeout), floor und min_distance_cm. " + floorHelp,
 			props:    static(map[string]any{"cm": map[string]any{"type": "number", "minimum": -300, "maximum": 300}, "speed": map[string]any{"type": "number", "minimum": 5, "maximum": 80, "description": "Umdrehungen pro Minute, Standard 40."}}),
 			required: []string{"cm"}, robot: robotOne,
 			run: func(ctx context.Context, c *call) any {
@@ -328,7 +332,7 @@ func builtins() []*tool {
 		},
 		{
 			name:     "turn",
-			desc:     "Dreht auf der Stelle um degrees Grad. Positiv dreht nach rechts, negativ nach links. Ergebnis: turned_deg und reason.",
+			desc:     "Dreht auf der Stelle um degrees Grad. Positiv dreht nach rechts, negativ nach links. Ergebnis: turned_deg, reason und floor (wie bei drive, Position in Grad).",
 			props:    static(map[string]any{"degrees": map[string]any{"type": "number", "minimum": -720, "maximum": 720}}),
 			required: []string{"degrees"}, robot: robotOne,
 			run: func(ctx context.Context, c *call) any {
@@ -337,7 +341,7 @@ func builtins() []*tool {
 		},
 		{
 			name: "drive_until",
-			desc: "Fährt geradeaus, bis eine Wand näher als stop_below_cm ist (reason wall), die Bodenfarbe stop_on_color erscheint (reason color) oder max_cm gefahren sind (reason max_cm). Der Roboter prüft das selbst mit geglätteten Messwerten. Ergebnis: driven_cm, reason, distance_cm, color, dazu colors_seen, min_distance_cm, lines_crossed.",
+			desc: "Fährt geradeaus, bis eine Wand näher als stop_below_cm ist (reason wall), die Bodenfarbe stop_on_color erscheint (reason color) oder max_cm gefahren sind (reason max_cm). Die Farbe zählt, sobald eine der vier Bodensonden sie sieht; any ist jede Farbe außer Weiß. Der Roboter prüft das selbst mit geglätteten Messwerten. Ergebnis: driven_cm, reason, distance_cm, color, floor (wie bei drive) und min_distance_cm.",
 			props: static(map[string]any{
 				"max_cm":        map[string]any{"type": "number", "minimum": 1, "maximum": 300},
 				"stop_below_cm": map[string]any{"type": "number", "minimum": 3, "maximum": 100},
@@ -357,7 +361,7 @@ func builtins() []*tool {
 		},
 		{
 			name: "turn_until_clear",
-			desc: "Dreht auf der Stelle in direction (left oder right), mindestens min_deg, und weiter, bis vorne mindestens min_cm frei sind (reason clear), höchstens max_deg (reason max_deg). Der Roboter entscheidet das selbst mit geglätteten Messwerten. Ergebnis: turned_deg (positiv ist rechts) und distance_cm.",
+			desc: "Dreht auf der Stelle in direction (left oder right), mindestens min_deg, und weiter, bis vorne mindestens min_cm frei sind (reason clear), höchstens max_deg (reason max_deg). Der Roboter entscheidet das selbst mit geglätteten Messwerten. Ergebnis: turned_deg (positiv ist rechts), distance_cm und floor (wie bei drive, Position in Grad).",
 			props: static(map[string]any{
 				"direction": map[string]any{"type": "string", "enum": []string{"left", "right"}},
 				"min_cm":    map[string]any{"type": "number", "minimum": 10, "maximum": 200, "description": "Freier Weg nach vorn, Standard 40."},
@@ -385,7 +389,7 @@ func builtins() []*tool {
 		},
 		{
 			name: "follow_line_until",
-			desc: "Folgt einer Linie auf dem Boden und lenkt dabei selbst. Endet an der Farbe stop_on_color (reason color), an einer Kreuzung (reason crossing, abschaltbar mit stop_at_crossing false), wenn die Linie aufhört (reason line_lost) oder nach max_cm (reason max_cm). Ergebnis: driven_cm, reason, color, colors_seen.",
+			desc: "Folgt einer Linie auf dem Boden und lenkt dabei selbst. Endet an der Farbe stop_on_color (reason color), an einer Kreuzung (reason crossing, abschaltbar mit stop_at_crossing false), wenn die Linie aufhört (reason line_lost) oder nach max_cm (reason max_cm). Ergebnis: driven_cm, reason, color und floor (wie bei drive).",
 			props: static(map[string]any{
 				"max_cm":           map[string]any{"type": "number", "minimum": 1, "maximum": 300},
 				"stop_on_color":    map[string]any{"type": "string", "enum": floorColors},
@@ -415,7 +419,7 @@ func builtins() []*tool {
 			},
 		},
 		{
-			name: "read_sensors", desc: "Liest den aktuellen Zustand: distance_cm (Abstand nach vorn), color (Boden), line, yaw (Richtung in Grad), battery, tilted, skill.",
+			name: "read_sensors", desc: "Liest den aktuellen Zustand: distance_cm (Abstand nach vorn), floor (Muster unter den vier Bodensonden von links nach rechts, Buchstaben wie bei drive), color (Boden), line, yaw (Richtung in Grad), battery, tilted, skill.",
 			robot: robotOne,
 			run: func(_ context.Context, c *call) any {
 				st := robotState(c.robots[0])

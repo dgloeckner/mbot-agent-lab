@@ -2,7 +2,9 @@
   "$schema": "../node_modules/nx/schemas/project-schema.json",
   "name": "sim",
   "projectType": "application",
-  "implicitDependencies": ["robot"],
+  "implicitDependencies": [
+    "robot"
+  ],
   "targets": {
     "test": {
       "executor": "nx:run-commands",
@@ -10,7 +12,8 @@
         "default",
         "protocol",
         "{workspaceRoot}/robot/src/**/*",
-        "{workspaceRoot}/robot/tools/**/*"
+        "{workspaceRoot}/robot/tools/**/*",
+        "{workspaceRoot}/docs/lab/feld/**/*"
       ],
       "options": {
         "command": "python3 -m unittest discover -s sim/tests -t sim/tests"
@@ -21,6 +24,13 @@
       "continuous": true,
       "options": {
         "command": "python3 sim/run.py --trace 2"
+      }
+    },
+    "grid": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "python3 sim/grid.py"
       }
     }
   }
