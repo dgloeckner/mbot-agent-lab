@@ -140,3 +140,11 @@ func TestReassignEndsRunningCommand(t *testing.T) {
 		t.Errorf("snapshot = %+v", snap)
 	}
 }
+
+func TestCommandIDsDifferAcrossRestarts(t *testing.T) {
+	a := New(&fakeBus{}, nil, nil).nextCmdID()
+	b := New(&fakeBus{}, nil, nil).nextCmdID()
+	if a == b {
+		t.Errorf("two server starts produced the same first command ID %q", a)
+	}
+}

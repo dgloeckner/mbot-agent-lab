@@ -1,5 +1,5 @@
-import { busy, conn, copyTeamLink, identifyRobot, prefs, renameRobot, renameTeam, robots, session, startRun, stopAll, updatePrefs } from '../state'
-import { COLOR_HEX, colorName, skillName } from '../format'
+import { agent, busy, conn, copyTeamLink, deployed, identifyRobot, prefs, renameRobot, renameTeam, robots, session, startRun, stopAll, updatePrefs } from '../state'
+import { COLOR_HEX, colorName, formatCost, formatNumber, skillName } from '../format'
 import type { Robot } from '../types'
 import { AutoIcon, LinkIcon, MoonIcon, PlayIcon, StopIcon, SunIcon } from './icons'
 import { InlineEdit } from './InlineEdit'
@@ -62,15 +62,26 @@ export function TeamBand() {
   const s = session.value!
   const theme = prefs.value.theme
   const ThemeIcon = theme === 'light' ? SunIcon : theme === 'dark' ? MoonIcon : AutoIcon
+  const a = agent.value
+  const startHint = !s.agent_available
+    ? 'Es ist kein Sprachmodell eingerichtet.'
+    : !deployed.value
+      ? 'Deployt zuerst einen Prompt.'
+      : 'Startet einen neuen Lauf mit eurem aktuellen Prompt.'
   return (
-    <header class="band" data-agent={s.agent} data-robots={robots.value.length > 1 ? 'many' : 'one'}>
+    <header class="band" data-agent={a.running ? a.state : 'off'} data-robots={robots.value.length > 1 ? 'many' : 'one'}>
       <div class="band-team">
         <h1>
           <InlineEdit value={s.team.name} label="Teamname" maxLength={30} onSave={renameTeam} />
         </h1>
         <p class="agent-state" aria-live="polite">
           <span class="agent-dot" aria-hidden="true" />
-          Agent {AGENT_LABEL[s.agent]}
+          {a.running ? `Agent ${AGENT_LABEL[a.state]}` : 'Kein Lauf'}
+          {a.calls > 0 && (
+            <span class="run-usage" title={`Modell ${a.model ?? ''}, ${a.calls} Aufrufe`}>
+              {formatNumber(a.tokens_in + a.tokens_out)} Token, {formatCost(a.cost_micro_eur)}
+            </span>
+          )}
         </p>
       </div>
 
@@ -99,10 +110,17 @@ export function TeamBand() {
         >
           <ThemeIcon />
         </button>
-        <button class="btn btn-on-band" onClick={startRun} disabled={!s.agent_available} title={s.agent_available ? undefined : 'Der Agent ist noch nicht verfügbar.'}>
-          <PlayIcon /> Lauf starten
-        </button>
-        <button class="btn btn-stop" onClick={stopAll} disabled={busy.value === 'stop'}>
+        {!a.running && (
+          <button class="btn btn-on-band" onClick={startRun} disabled={!s.agent_available || !deployed.value} title={startHint}>
+            <PlayIcon /> Lauf starten
+          </button>
+        )}
+        <button
+          class="btn btn-stop"
+          onClick={stopAll}
+          disabled={busy.value === 'stop'}
+          title={a.running ? 'Hält eure Roboter an und beendet den Lauf.' : 'Hält eure Roboter an.'}
+        >
           <StopIcon /> Stopp
         </button>
       </div>

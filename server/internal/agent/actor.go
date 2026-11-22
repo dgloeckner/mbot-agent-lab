@@ -1,0 +1,372 @@
+package agent
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/live"
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/llm"
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/tools"
+)
+
+type ctrlKind int
+
+const (
+	ctrlStart ctrlKind = iota
+	ctrlStop
+	ctrlRestart
+	ctrlRemove
+)
+
+type control struct {
+	kind   ctrlKind
+	reason string // for stop: why the run ends
+	by     string // who stopped it, for the log
+	reply  chan error
+}
+
+// run is the state of one run, owned by the actor goroutine.
+type run struct {
+	id            int64
+	promptVersion int
+	started       time.Time
+	deadline      time.Time
+	history       []llm.Message
+	seq           int
+	lastMsgID     int64
+	tokensIn      int
+	tokensOut     int
+	finished      bool
+	report        string
+	limitReached  string // time_limit or token_limit when a budget ended the run
+}
+
+type actor struct {
+	m     *Manager
+	team  string
+	inbox chan Message
+	ctrl  chan control
+
+	mu     sync.Mutex
+	status Status
+	cancel context.CancelFunc // cancels the current model call or tool
+}
+
+func newActor(m *Manager, team string) *actor {
+	return &actor{m: m, team: team, inbox: make(chan Message, 256), ctrl: make(chan control, 16), status: Status{State: StateWaiting}}
+}
+
+func (a *actor) getStatus() Status {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.status
+}
+
+func (a *actor) updateStatus(f func(*Status)) {
+	a.mu.Lock()
+	f(&a.status)
+	state := a.status.State
+	a.mu.Unlock()
+	a.m.Robots.SetAgentState(a.team, state)
+}
+
+func (a *actor) setState(state string) { a.updateStatus(func(s *Status) { s.State = state }) }
+
+// interrupt cancels whatever the actor is doing right now.
+func (a *actor) interrupt() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.cancel != nil {
+		a.cancel()
+	}
+}
+
+func (a *actor) log(source, kind, text string, data any) {
+	var raw json.RawMessage
+	if data != nil {
+		raw, _ = json.Marshal(data)
+	}
+	a.m.Hub.Publish(a.team, live.LogEntry{Source: source, Kind: kind, Text: text, Data: raw})
+}
+
+func (a *actor) system(text string) { a.log(live.SourceSystem, "info", text, nil) }
+
+func (a *actor) loop(ctx context.Context) {
+	var cur *run
+	var pending []Message
+	timer := time.NewTimer(time.Hour)
+	timer.Stop()
+	defer timer.Stop()
+
+	end := func(reason, by string) {
+		if cur != nil {
+			a.endRun(cur, reason, by)
+			cur, pending = nil, nil
+			timer.Stop()
+		}
+	}
+	start := func() error {
+		r, err := a.startRun(ctx)
+		if err != nil {
+			return err
+		}
+		cur = r
+		timer.Reset(time.Until(r.deadline))
+		pending = []Message{{From: SourceSystem, Kind: "start", Text: "Der Lauf beginnt. Lies den Prompt deines Teams und leg los.", At: time.Now(), Wake: true}}
+		return nil
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			end("server_stop", "")
+			return
+		case c := <-a.ctrl:
+			var err error
+			switch c.kind {
+			case ctrlStart:
+				if cur == nil {
+					err = start()
+				}
+			case ctrlStop:
+				end(c.reason, c.by)
+			case ctrlRestart:
+				end("restart", c.by)
+				err = start()
+			case ctrlRemove:
+				end("team_deleted", "")
+				return
+			}
+			if c.reply != nil {
+				c.reply <- err
+			}
+		case msg := <-a.inbox:
+			if cur != nil {
+				pending = append(pending, msg)
+			}
+		case <-timer.C:
+			end("time_limit", "")
+		}
+		if cur != nil && wakes(pending) {
+			pending = a.process(ctx, cur, pending)
+			if cur.finished || cur.limitReached != "" {
+				reason := "finish"
+				if cur.limitReached != "" {
+					reason = cur.limitReached
+				}
+				end(reason, "")
+			}
+		}
+	}
+}
+
+func wakes(ms []Message) bool {
+	for _, m := range ms {
+		if m.Wake {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *actor) startRun(ctx context.Context) (*run, error) {
+	p, err := a.m.Store.GetPrompt(ctx, a.team, 0)
+	if err != nil {
+		return nil, &StartError{"Deployt zuerst einen Prompt, dann kann euer Agent loslegen."}
+	}
+	model := a.m.LLM.DefaultModel()
+	id, err := a.m.Store.CreateRun(ctx, a.team, p.ID, model)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	r := &run{id: id, promptVersion: p.Version, started: now, deadline: now.Add(time.Duration(a.m.Budgets.MaxRunMinutes) * time.Minute)}
+	a.updateStatus(func(s *Status) {
+		*s = Status{State: StateWaiting, Running: true, RunID: id, Model: model, StartedAt: now}
+	})
+	a.log(live.SourceSystem, "run_start", "", map[string]any{"run": id, "version": p.Version, "model": model})
+	a.m.Log.Info("run started", "team", a.team, "run", id, "prompt", p.Version, "model", model)
+	return r, nil
+}
+
+func (a *actor) endRun(r *run, reason, by string) {
+	ctx := context.Background()
+	if err := a.m.Store.EndRun(ctx, r.id, reason, r.report); err != nil {
+		a.m.Log.Error("end run", "run", r.id, "err", err)
+	}
+	if reason == "stop" || reason == "restart" || reason == "team_deleted" || reason == "server_stop" {
+		// Leave no robot driving on a stopped run. Tools were cancelled already.
+		for _, rb := range a.m.Robots.TeamRobots(a.team) {
+			go func() { _, _ = a.m.Robots.Send(ctx, rb.ID, "stop", nil, 2*time.Second) }()
+		}
+	}
+	a.updateStatus(func(s *Status) { s.State, s.Running = StateWaiting, false })
+	a.log(live.SourceSystem, "run_end", "", map[string]any{"run": r.id, "reason": reason, "by": by, "report": r.report})
+	a.m.Log.Info("run ended", "team", a.team, "run", r.id, "reason", reason)
+}
+
+// process handles one wake-up: model calls and tool calls until the model is
+// done, a limit is reached or the run is stopped. It returns the messages
+// that arrived but were not used (none, normally).
+func (a *actor) process(parent context.Context, r *run, pending []Message) []Message {
+	ctx, cancel := context.WithCancel(parent)
+	a.mu.Lock()
+	a.cancel = cancel
+	a.mu.Unlock()
+	defer func() {
+		cancel()
+		a.mu.Lock()
+		a.cancel = nil
+		a.mu.Unlock()
+		a.setState(StateWaiting)
+	}()
+
+	a.addInbox(ctx, r, pending)
+	env := a.env(ctx, r)
+	env.MsgID = r.lastMsgID
+	for step := 0; ; step++ {
+		if step >= a.m.Budgets.MaxStepsPerWakeup {
+			a.system(fmt.Sprintf("Euer Agent hat %d Schritte am Stück gemacht und pausiert. Eine neue Nachricht weckt ihn wieder.", step))
+			return nil
+		}
+		if time.Now().After(r.deadline) {
+			r.limitReached = "time_limit"
+			return nil
+		}
+		a.setState(StateThinking)
+		messages, err := a.buildContext(ctx, r)
+		if err != nil {
+			a.m.Log.Error("build context", "team", a.team, "err", err)
+			a.system("Der Agent konnte seinen Kontext nicht laden.")
+			return nil
+		}
+		env.Agents = names(a.m.runningAgents(ctx, a.team))
+		resp, call, err := a.m.LLM.Chat(ctx, llm.Request{Messages: messages, Tools: a.m.Tools.Definitions(env)})
+		if err != nil {
+			if !errors.Is(err, context.Canceled) {
+				a.m.Log.Error("model call failed", "team", a.team, "err", err)
+				a.system("Das Sprachmodell antwortet gerade nicht. Schickt eurem Agenten gleich noch einmal eine Nachricht.")
+			}
+			return nil
+		}
+		a.account(r, call)
+
+		msg := resp.Message
+		msg.Role = llm.RoleAssistant
+		r.history = append(r.history, msg)
+		if msg.Content != "" {
+			a.store(ctx, r, "agent", "text", msg.Content, nil)
+			a.log(live.SourceAgent, "text", msg.Content, nil)
+		}
+		if limit := a.m.Budgets.MaxTokensPerRun; limit > 0 && r.tokensIn+r.tokensOut >= limit {
+			a.closeToolCalls(r, msg.ToolCalls, "Der Lauf ist wegen des Token-Limits beendet.")
+			r.limitReached = "token_limit"
+			return nil
+		}
+		if len(msg.ToolCalls) == 0 {
+			return nil
+		}
+
+		a.setState(StateActing)
+		for i, tc := range msg.ToolCalls {
+			if ctx.Err() != nil || r.finished {
+				a.closeToolCalls(r, msg.ToolCalls[i:], "Nicht ausgeführt: der Lauf ist beendet.")
+				break
+			}
+			start := time.Now()
+			result := a.m.Tools.Call(ctx, env, tc.Function.Name, tc.Function.Arguments)
+			d := time.Since(start)
+			r.history = append(r.history, llm.Message{Role: llm.RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: string(result)})
+			r.seq++
+			if err := a.m.Store.AddToolCall(context.Background(), r.id, r.seq, tc.Function.Name, json.RawMessage(validJSON(tc.Function.Arguments)), result, d); err != nil {
+				a.m.Log.Error("store tool call", "err", err)
+			}
+			a.log(live.SourceAgent, "tool", "", map[string]any{
+				"name": tc.Function.Name, "args": json.RawMessage(validJSON(tc.Function.Arguments)), "result": result, "ms": d.Milliseconds(),
+			})
+		}
+		if r.finished || ctx.Err() != nil {
+			return nil
+		}
+		// Messages that arrived during the tools go into the next model call.
+		if fresh := a.drainInbox(); len(fresh) > 0 {
+			a.addInbox(ctx, r, fresh)
+			env.MsgID = r.lastMsgID
+		}
+	}
+}
+
+func (a *actor) drainInbox() []Message {
+	var out []Message
+	for {
+		select {
+		case m := <-a.inbox:
+			out = append(out, m)
+		default:
+			return out
+		}
+	}
+}
+
+// closeToolCalls answers tool calls that will not run, so the history stays valid.
+func (a *actor) closeToolCalls(r *run, calls []llm.ToolCall, why string) {
+	for _, tc := range calls {
+		res, _ := json.Marshal(map[string]any{"ok": false, "error": why})
+		r.history = append(r.history, llm.Message{Role: llm.RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: string(res)})
+	}
+}
+
+func (a *actor) account(r *run, call llm.Call) {
+	r.tokensIn += call.Usage.PromptTokens
+	r.tokensOut += call.Usage.CompletionTokens
+	a.updateStatus(func(s *Status) {
+		s.TokensIn += call.Usage.PromptTokens
+		s.TokensOut += call.Usage.CompletionTokens
+		s.CostMicroEUR += call.CostMicroEUR
+		s.Calls++
+	})
+	if err := a.m.Store.AddLLMCall(context.Background(), r.id, call.Provider, call.Model, call.Usage.PromptTokens, call.Usage.CompletionTokens, call.Duration, call.CostMicroEUR); err != nil {
+		a.m.Log.Error("store llm call", "err", err)
+	}
+}
+
+func (a *actor) store(ctx context.Context, r *run, source, kind, text string, data json.RawMessage) int64 {
+	r.seq++
+	id, err := a.m.Store.AddMessage(context.WithoutCancel(ctx), r.id, r.seq, source, kind, text, data)
+	if err != nil {
+		a.m.Log.Error("store message", "err", err)
+	}
+	return id
+}
+
+func (a *actor) env(ctx context.Context, r *run) *tools.Env {
+	team, _ := a.m.Store.Team(ctx, a.team)
+	env := &tools.Env{TeamID: a.team, TeamName: team.Name, RunID: r.id}
+	env.Finish = func(report string) {
+		r.finished, r.report = true, report
+	}
+	env.Say = func(to, text string) []string {
+		return a.m.say(a.team, team.Name, to, text)
+	}
+	return env
+}
+
+func names(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for n := range m {
+		out = append(out, n)
+	}
+	return out
+}
+
+func validJSON(s string) string {
+	if json.Valid([]byte(s)) {
+		return s
+	}
+	b, _ := json.Marshal(s)
+	return string(b)
+}

@@ -12,6 +12,7 @@ var ErrNotFound = errors.New("not found")
 
 // Prompt is one deployed version of a team prompt.
 type Prompt struct {
+	ID        int64     `json:"-"`
 	Version   int       `json:"version"`
 	Text      string    `json:"text,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
@@ -45,13 +46,15 @@ func (s *Store) SavePrompt(ctx context.Context, team, text string) (Prompt, erro
 		return Prompt{}, err
 	}
 	at := now()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO prompts (team_id, version, text, created_at) VALUES (?, ?, ?, ?)`, team, v, text, at); err != nil {
+	res, err := tx.ExecContext(ctx, `INSERT INTO prompts (team_id, version, text, created_at) VALUES (?, ?, ?, ?)`, team, v, text, at)
+	if err != nil {
 		return Prompt{}, err
 	}
+	id, _ := res.LastInsertId()
 	if err := tx.Commit(); err != nil {
 		return Prompt{}, err
 	}
-	return Prompt{Version: v, Text: text, CreatedAt: parseTime(at), Chars: len([]rune(text))}, nil
+	return Prompt{ID: id, Version: v, Text: text, CreatedAt: parseTime(at), Chars: len([]rune(text))}, nil
 }
 
 // ListPrompts returns all versions of team, newest first, without text.
@@ -76,15 +79,15 @@ func (s *Store) ListPrompts(ctx context.Context, team string) ([]Prompt, error) 
 
 // GetPrompt returns one version; version 0 means the latest.
 func (s *Store) GetPrompt(ctx context.Context, team string, version int) (Prompt, error) {
-	q := `SELECT version, text, created_at FROM prompts WHERE team_id = ? AND version = ?`
+	q := `SELECT id, version, text, created_at FROM prompts WHERE team_id = ? AND version = ?`
 	args := []any{team, version}
 	if version == 0 {
-		q = `SELECT version, text, created_at FROM prompts WHERE team_id = ? ORDER BY version DESC LIMIT 1`
+		q = `SELECT id, version, text, created_at FROM prompts WHERE team_id = ? ORDER BY version DESC LIMIT 1`
 		args = args[:1]
 	}
 	var p Prompt
 	var at string
-	err := s.DB.QueryRowContext(ctx, q, args...).Scan(&p.Version, &p.Text, &at)
+	err := s.DB.QueryRowContext(ctx, q, args...).Scan(&p.ID, &p.Version, &p.Text, &at)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Prompt{}, ErrNotFound
 	}
@@ -116,10 +119,17 @@ func (s *Store) ListNotes(ctx context.Context, team string) ([]Note, error) {
 	return out, rows.Err()
 }
 
-// AddNote creates a note for team.
+// AddNote creates a note written by the team.
 func (s *Store) AddNote(ctx context.Context, team, text, author string) (Note, error) {
+	return s.AddNoteFrom(ctx, team, text, author, 0, 0)
+}
+
+// AddNoteFrom creates a note and records which run and message it came from,
+// so a note planted by another agent can be traced. Zero IDs mean unknown.
+func (s *Store) AddNoteFrom(ctx context.Context, team, text, author string, runID, msgID int64) (Note, error) {
 	at := now()
-	res, err := s.DB.ExecContext(ctx, `INSERT INTO notes (team_id, text, author, created_at) VALUES (?, ?, ?, ?)`, team, text, author, at)
+	res, err := s.DB.ExecContext(ctx, `INSERT INTO notes (team_id, text, author, created_at, origin_run_id, origin_msg_id) VALUES (?, ?, ?, ?, ?, ?)`,
+		team, text, author, at, nullID(runID), nullID(msgID))
 	if err != nil {
 		return Note{}, err
 	}
@@ -146,4 +156,11 @@ func (s *Store) affectOne(ctx context.Context, q string, args ...any) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+func nullID(id int64) any {
+	if id == 0 {
+		return nil
+	}
+	return id
 }

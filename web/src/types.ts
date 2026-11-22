@@ -46,6 +46,7 @@ export interface ToolInfo {
   group: string
   params: string
   summary: string
+  ready: boolean
 }
 
 export interface LogEntry {
@@ -60,10 +61,22 @@ export interface LogEntry {
 
 export type AgentState = 'waiting' | 'thinking' | 'acting'
 
+export interface AgentStatus {
+  state: AgentState
+  running: boolean
+  run_id?: number
+  model?: string
+  started_at?: string
+  tokens_in: number
+  tokens_out: number
+  cost_micro_eur: number
+  calls: number
+}
+
 export interface Session {
   team: Team
   robots: Robot[]
-  agent: AgentState
+  agent: AgentStatus
   agent_available: boolean
   prompt: PromptVersion | null
   versions: PromptVersion[]

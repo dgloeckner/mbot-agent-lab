@@ -29,7 +29,8 @@ Every robot has its own prefix `lab/<robot_id>/`, e.g. `lab/mbot-1/`.
 {"id":"c-8f3a","name":"drive_until","args":{"max_cm":200,"stop_below_cm":12,"stop_on_color":"blue"}}
 ```
 
-- `id`: assigned by the server, unique per robot.
+- `id`: assigned by the server, unique per robot, also across server restarts (the server adds a
+  random prefix per start).
 - `name`: skill name, see the table below.
 - `args`: object, may be omitted.
 
@@ -107,7 +108,8 @@ Sent immediately on change, otherwise two to five times per second.
 - **QoS 0 everywhere.** Reliability comes from ID, result and a server-side timeout. The timeout
   is the skill's maximum duration plus 2 seconds. For now every motion skill is capped at
   20 seconds on the robot (`SK_MAX_MS` in `robot/src/skills.py`), so the server waits 22 seconds.
-- **Duplicate commands:** the robot remembers the last 16 IDs and ignores repeats.
+- **Duplicate commands:** the robot remembers the last 16 IDs and ignores repeats. It forgets them
+  on every new connection.
 - **One motion skill at a time:** a new motion command during a drive ends with `ok:false` and
   `reason:"busy"`. `stop` is always accepted and idempotent.
 - **Values for `reason`:** `done`, `wall`, `color`, `max_cm`, `timeout`, `stopped`, `obstacle`,

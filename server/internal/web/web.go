@@ -21,9 +21,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/agent"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/config"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/lab"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/live"
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/protocol"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/robots"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/store"
 )
@@ -53,6 +55,7 @@ type Server struct {
 	Store  *store.Store
 	Hub    *live.Hub
 	Lab    *lab.Service
+	Agents *agent.Manager
 	Log    *slog.Logger
 
 	app     fs.FS    // built pages, nil if not built
@@ -107,6 +110,10 @@ func (s *Server) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case ev := <-ch:
+			// Finished skills are already shown as the result of the tool call.
+			if k := ev.Event.Kind; k == protocol.EventSkillDone || k == protocol.EventSkillAborted {
+				continue
+			}
 			for _, rb := range s.Robots.Snapshot() {
 				if rb.ID == ev.RobotID && rb.Owner != "" {
 					s.Hub.Publish(rb.Owner, live.LogEntry{

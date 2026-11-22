@@ -1,0 +1,131 @@
+package llm
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/config"
+)
+
+var quiet = slog.New(slog.NewTextHandler(io.Discard, nil))
+
+func TestOpenAIWireFormat(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" || r.Header.Get("Authorization") != "Bearer key" {
+			t.Errorf("path %s auth %q", r.URL.Path, r.Header.Get("Authorization"))
+		}
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		_, _ = io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":null,
+			"tool_calls":[{"id":"abc123def","function":{"name":"drive","arguments":"{\"cm\":20}"}}]}}],
+			"usage":{"prompt_tokens":120,"completion_tokens":15}}`)
+	}))
+	defer srv.Close()
+
+	c := New(config.LLM{Default: "m", Providers: map[string]config.Provider{
+		"m": {Kind: config.ProviderOpenAI, BaseURL: srv.URL + "/v1/", APIKey: "key", Model: "small", PriceIn: 0.1, PriceOut: 0.3},
+	}}, quiet)
+	resp, call, err := c.Chat(context.Background(), Request{
+		Messages: []Message{{Role: RoleSystem, Content: "sys"}, {Role: RoleUser, Content: "los"}},
+		Tools:    []Tool{{Name: "drive", Description: "fahren", Parameters: json.RawMessage(`{"type":"object"}`)}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["model"] != "small" || got["tool_choice"] != "auto" {
+		t.Errorf("request = %v", got)
+	}
+	tools := got["tools"].([]any)
+	if tools[0].(map[string]any)["type"] != "function" {
+		t.Errorf("tools = %v", tools)
+	}
+	tc := resp.Message.ToolCalls
+	if len(tc) != 1 || tc[0].Function.Name != "drive" || tc[0].Type != "function" || resp.Message.Content != "" {
+		t.Errorf("message = %+v", resp.Message)
+	}
+	// 120 * 0.1 + 15 * 0.3 = 16.5 micro-EUR
+	if call.CostMicroEUR != 17 || call.Usage.PromptTokens != 120 || call.Model != "small" {
+		t.Errorf("call = %+v", call)
+	}
+}
+
+type flaky struct {
+	fails  int32
+	calls  atomic.Int32
+	status int
+}
+
+func (f *flaky) Chat(context.Context, Request) (Response, error) {
+	if f.calls.Add(1) <= f.fails {
+		return Response{}, &StatusError{Status: f.status}
+	}
+	return Response{Message: Message{Role: RoleAssistant, Content: "ok"}}, nil
+}
+
+func newClient(def, fallback string) *Client {
+	c := New(config.LLM{Default: def, Fallback: fallback, MaxParallelCalls: 2}, quiet)
+	c.Backoff = []time.Duration{time.Millisecond, time.Millisecond}
+	return c
+}
+
+func TestRetriesTransientErrors(t *testing.T) {
+	c := newClient("a", "")
+	p := &flaky{fails: 2, status: 503}
+	c.Use("a", "m", p)
+	if _, _, err := c.Chat(context.Background(), Request{}); err != nil || p.calls.Load() != 3 {
+		t.Fatalf("err %v after %d calls", err, p.calls.Load())
+	}
+}
+
+func TestFallbackAfterPermanentError(t *testing.T) {
+	c := newClient("a", "b")
+	bad := &flaky{fails: 99, status: 401}
+	good := &flaky{}
+	c.Use("a", "m", bad)
+	c.Use("b", "m2", good)
+	_, call, err := c.Chat(context.Background(), Request{})
+	if err != nil || call.Provider != "b" || bad.calls.Load() != 1 {
+		t.Fatalf("call %+v err %v, bad called %d times", call, err, bad.calls.Load())
+	}
+}
+
+func TestFakeExploresAndFinishes(t *testing.T) {
+	tools := []Tool{
+		{Name: "read_sensors", Parameters: json.RawMessage(`{"type":"object","properties":{"robot":{"type":"string","enum":["Scout","Träger"]}}}`)},
+		{Name: "drive_until", Parameters: json.RawMessage(`{"type":"object"}`)},
+		{Name: "turn", Parameters: json.RawMessage(`{"type":"object"}`)},
+		{Name: "finish", Parameters: json.RawMessage(`{"type":"object"}`)},
+	}
+	f := Fake{Delay: time.Millisecond}
+	msgs := []Message{{Role: RoleSystem}, {Role: RoleUser, Content: "Los geht's"}}
+	var names []string
+	for i := 0; i < 20; i++ {
+		resp, err := f.Chat(context.Background(), Request{Messages: msgs, Tools: tools})
+		if err != nil {
+			t.Fatal(err)
+		}
+		msgs = append(msgs, resp.Message)
+		if len(resp.Message.ToolCalls) == 0 {
+			break
+		}
+		tc := resp.Message.ToolCalls[0]
+		names = append(names, tc.Function.Name)
+		if tc.Function.Name == "read_sensors" && tc.Function.Arguments != `{"robot":"Scout"}` {
+			t.Errorf("robot param not filled: %s", tc.Function.Arguments)
+		}
+		if tc.Function.Name == "finish" {
+			break
+		}
+		msgs = append(msgs, Message{Role: RoleTool, Name: tc.Function.Name, ToolCallID: tc.ID, Content: `{"ok":true,"reason":"wall"}`})
+	}
+	if names[0] != "read_sensors" || names[len(names)-1] != "finish" {
+		t.Errorf("sequence = %v", names)
+	}
+}

@@ -1,5 +1,5 @@
 import { describe as group, expect, it } from 'vitest'
-import { describe, estimateTokens, logGroup, onColor, relativeTime } from './format'
+import { describe, estimateTokens, formatCost, logGroup, onColor, relativeTime } from './format'
 
 group('describe', () => {
   it('words robot events in German', () => {
@@ -29,4 +29,15 @@ it('estimates tokens and relative times', () => {
   expect(estimateTokens('x'.repeat(36))).toBe(10)
   expect(relativeTime(10_000, 12_000)).toBe('gerade eben')
   expect(relativeTime(0, 125_000)).toBe('vor 2 min')
+})
+
+it('words tool calls and runs', () => {
+  const tool = { id: 1, at: '', source: 'agent', kind: 'tool', data: { name: 'drive_until', args: { max_cm: 120, robot: 'Scout' }, result: { ok: true, reason: 'wall', driven_cm: 41.6, distance_cm: 14 } } }
+  expect(describe(tool)).toBe('drive_until(max_cm: 120, robot: Scout) → Wand erreicht, 42 cm gefahren, Abstand 14 cm')
+  const failed = { ...tool, data: { name: 'turn', args: {}, result: { ok: false, error: 'Es fehlt das Argument "degrees".' } } }
+  expect(describe(failed)).toBe('turn() → Es fehlt das Argument "degrees".')
+  expect(describe({ id: 2, at: '', source: 'system', kind: 'run_end', data: { reason: 'stop', by: 'Team' } })).toBe('Lauf gestoppt von euch')
+  expect(formatCost(0)).toBe('0 ct')
+  expect(formatCost(50)).toBe('unter 0,01 ct')
+  expect(formatCost(12_500)).toBe('1,25 ct')
 })

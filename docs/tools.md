@@ -3,8 +3,13 @@
 Agents get a few powerful tools with built-in stop conditions instead of a one-to-one mapping of
 the vendor API. The model decides at the corners; the robot drives on its own in between.
 
-Implementation: `server/internal/tools` (registry with name, JSON schema and handler). The agent
-calls them directly; the optional MCP endpoint exposes the same registry to external clients.
+Implementation: `server/internal/tools` (registry with name, German description for the model,
+JSON schema and handler). The agent calls them directly; the optional MCP endpoint will expose the
+same registry to external clients.
+
+Not offered to agents yet, because the robot does not implement them: `follow_line_until`,
+`retrace_path`, `play_melody`, `gesture`. The team page lists them as "kommt bald". `set_leds`
+takes a color only, no pattern.
 
 | Group | Tool | Parameters | Result |
 | --- | --- | --- | --- |

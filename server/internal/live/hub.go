@@ -13,6 +13,7 @@ const (
 	SourceRobot  = "robot"
 	SourceTeam   = "team"
 	SourceSystem = "system"
+	SourceAgent  = "agent" // the team's own agent; other agents are "agent:<team name>"
 )
 
 // LogEntry is one line in a team's live log. Text is only set for free text

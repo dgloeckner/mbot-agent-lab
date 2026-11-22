@@ -1,6 +1,6 @@
 // Team API client. The secret team token is the second path segment.
 
-import type { LogEntry, Note, PromptVersion, Robot, Session } from './types'
+import type { AgentStatus, LogEntry, Note, PromptVersion, Robot, Session } from './types'
 
 export const token = decodeURIComponent(location.pathname.split('/')[2] ?? '')
 const base = `/t/${encodeURIComponent(token)}`
@@ -32,7 +32,7 @@ export const api = {
   prompt: (version: number) => req<PromptVersion>('GET', `/prompts/${version}`),
   deploy: (text: string, restart: boolean) => req<PromptVersion>('POST', '/prompt', { text, restart }),
   message: (text: string) => req<LogEntry>('POST', '/message', { text }),
-  start: () => req<{ started: boolean }>('POST', '/start'),
+  start: () => req<AgentStatus>('POST', '/start'),
   stop: () => req<unknown>('POST', '/stop'),
   notes: () => req<Note[]>('GET', '/notes'),
   addNote: (text: string) => req<Note>('POST', '/notes', { text }),
@@ -48,6 +48,7 @@ export type ConnState = 'connecting' | 'live' | 'reconnecting'
 /** Opens the live stream. EventSource reconnects by itself and resumes the log via Last-Event-ID. */
 export function connectEvents(on: {
   robots: (r: Robot[]) => void
+  agent: (a: AgentStatus) => void
   log: (e: LogEntry) => void
   status: (s: ConnState) => void
 }): () => void {
@@ -64,6 +65,7 @@ export function connectEvents(on: {
       }
     })
     es.addEventListener('robots', (ev) => on.robots(JSON.parse((ev as MessageEvent).data)))
+    es.addEventListener('agent', (ev) => on.agent(JSON.parse((ev as MessageEvent).data)))
     es.addEventListener('log', (ev) => on.log(JSON.parse((ev as MessageEvent).data)))
   }
   open()

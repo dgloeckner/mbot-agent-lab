@@ -14,11 +14,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/agent"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/config"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/lab"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/live"
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/llm"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/robots"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/store"
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/tools"
 )
 
 type nopBus struct{}
@@ -64,7 +67,13 @@ func newTestServer(t *testing.T) *testLab {
 	if err := svc.AssignRobot(ctx, "mbot-2", "blau"); err != nil {
 		t.Fatal(err)
 	}
-	s := &Server{Config: cfg, Robots: reg, Store: st, Hub: hub, Lab: svc, Log: log}
+	models := llm.New(config.LLM{Default: "fake", MaxParallelCalls: 2, Providers: map[string]config.Provider{"fake": {Kind: config.ProviderFake}}}, log)
+	budgets := config.Budgets{MaxStepsPerWakeup: 3, MaxRunMinutes: 5, MaxHistoryMessages: 40, MaxAgentMessagesPerMinute: 5}
+	agents := agent.NewManager(agent.Deps{Store: st, Robots: reg, Hub: hub, LLM: models, Tools: tools.NewRegistry(reg, st, hub, budgets), Budgets: budgets, Log: log})
+	runCtx, cancel := context.WithCancel(ctx)
+	t.Cleanup(cancel)
+	go agents.Run(runCtx)
+	s := &Server{Config: cfg, Robots: reg, Store: st, Hub: hub, Lab: svc, Agents: agents, Log: log}
 	srv := httptest.NewServer(s.Handler())
 	t.Cleanup(srv.Close)
 	return &testLab{Server: srv, lab: svc, reg: reg}
@@ -175,5 +184,36 @@ func TestEventsStream(t *testing.T) {
 		if data := next("data: "); strings.Contains(data, `"text":"Hallo"`) {
 			break
 		}
+	}
+}
+
+func TestRunStartMessageStop(t *testing.T) {
+	srv := newTestServer(t)
+	code, body := do(t, srv, "POST", "/t/tok-rot/start", "")
+	if code != http.StatusConflict || !strings.Contains(body["error"].(string), "Prompt") {
+		t.Fatalf("start without prompt: %d %v", code, body)
+	}
+	do(t, srv, "POST", "/t/tok-rot/prompt", `{"text":"Erkunde die Arena."}`)
+	if code, body = do(t, srv, "POST", "/t/tok-rot/start", ""); code != http.StatusAccepted || body["running"] != true {
+		t.Fatalf("start: %d %v", code, body)
+	}
+	if code, _ = do(t, srv, "POST", "/t/tok-rot/start", ""); code != http.StatusConflict {
+		t.Errorf("second start: %d", code)
+	}
+	_, sess := do(t, srv, "GET", "/t/tok-rot/api/session", "")
+	if sess["agent_available"] != true || sess["agent"].(map[string]any)["running"] != true {
+		t.Errorf("session agent = %v", sess["agent"])
+	}
+	do(t, srv, "POST", "/t/tok-rot/stop", "")
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		_, sess = do(t, srv, "GET", "/t/tok-rot/api/session", "")
+		if sess["agent"].(map[string]any)["running"] == false {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("run did not stop")
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }

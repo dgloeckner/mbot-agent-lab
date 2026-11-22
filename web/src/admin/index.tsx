@@ -1,8 +1,8 @@
 import { render } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
 import { signal } from '@preact/signals'
-import { COLOR_HEX, colorName, onColor, relativeTime, skillName } from '../format'
-import type { RobotState } from '../types'
+import { COLOR_HEX, colorName, formatCost, formatNumber, onColor, relativeTime, skillName } from '../format'
+import type { AgentStatus, RobotState } from '../types'
 import './admin.css'
 
 interface AdminRobot {
@@ -23,6 +23,7 @@ interface AdminTeam {
   link: string
   connected: number
   created_at: string
+  agent: AgentStatus
 }
 
 interface AdminState {
@@ -30,6 +31,8 @@ interface AdminState {
   teams: AdminTeam[]
   robots: AdminRobot[]
 }
+
+const AGENT_LABEL = { waiting: 'wartet', thinking: 'denkt nach', acting: 'handelt' } as const
 
 const state = signal<AdminState | null>(null)
 const auth = signal<'checking' | 'login' | 'ok'>('checking')
@@ -287,6 +290,10 @@ function TeamCard({ t, robots, teams }: { t: AdminTeam; robots: AdminRobot[]; te
           Löschen
         </button>
       </footer>
+      <p class="team-agent" data-running={t.agent.running}>
+        {t.agent.running ? `Agent ${AGENT_LABEL[t.agent.state]}` : 'Kein Lauf'}
+        {t.agent.calls > 0 && `, ${formatNumber(t.agent.tokens_in + t.agent.tokens_out)} Token, ${formatCost(t.agent.cost_micro_eur)}`}
+      </p>
       <p class="team-age">Beigetreten {relativeTime(t.created_at)}</p>
     </DropZone>
   )

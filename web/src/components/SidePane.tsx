@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
 import { useSignal } from '@preact/signals'
-import { clock, describe, logGroup, relativeTime } from '../format'
+import { clock, describe, describeTool, logGroup, relativeTime } from '../format'
 import { addNote, deleteNote, editorBridge, log, notes, prefs, robots, saveNote, sendMessage, session, updatePrefs } from '../state'
 import type { SideTab } from '../storage'
 import type { LogEntry, Note } from '../types'
@@ -16,6 +16,15 @@ const FILTERS: [Filter, string][] = [
 ]
 const SOURCE_LABEL = { robot: 'Roboter', team: 'Ihr', agent: 'Agent', system: 'System' } as const
 
+function ToolText({ d }: { d: Record<string, any> }) {
+  const t = describeTool(d)
+  return (
+    <>
+      <code class="tool-call">{t.call}</code> <span class={t.failed ? 'tool-failed' : 'tool-ok'}>{t.outcome}</span>
+    </>
+  )
+}
+
 function LogLine({ e }: { e: LogEntry }) {
   const g = logGroup(e)
   const who = g === 'robot' && e.robot ? e.robot : g === 'agent' ? e.source.slice(6) || 'Agent' : SOURCE_LABEL[g]
@@ -23,7 +32,10 @@ function LogLine({ e }: { e: LogEntry }) {
     <li class="log-line" data-group={g} data-kind={e.kind}>
       <time dateTime={e.at}>{clock(e.at)}</time>
       <span class="log-who">{who}</span>
-      <span class="log-text">{describe(e)}</span>
+      <span class="log-text">
+        {e.kind === 'tool' ? <ToolText d={e.data ?? {}} /> : describe(e)}
+        {e.kind === 'run_end' && typeof e.data?.report === 'string' && e.data.report && <q class="run-report">{e.data.report}</q>}
+      </span>
     </li>
   )
 }
@@ -215,10 +227,13 @@ function ToolsPanel() {
               .filter((t) => t.group === g)
               .map((t) => (
                 <li key={t.name}>
-                  <button class="tool" onClick={() => editorBridge.insert?.('`' + t.name + '`')} title="In den Prompt einfügen">
+                  <button class="tool" data-ready={t.ready} onClick={() => editorBridge.insert?.('`' + t.name + '`')} title="In den Prompt einfügen">
                     <code>{t.name}</code>
                     {t.params && <span class="tool-params">{t.params}</span>}
-                    <span class="tool-summary">{t.summary}</span>
+                    <span class="tool-summary">
+                      {t.summary}
+                      {!t.ready && ' Kommt bald, euer Agent hat es noch nicht.'}
+                    </span>
                   </button>
                 </li>
               ))}

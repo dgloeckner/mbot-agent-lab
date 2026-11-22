@@ -65,18 +65,29 @@ type LLM struct {
 
 // Provider is one OpenAI-compatible chat completions endpoint.
 type Provider struct {
-	BaseURL   string `yaml:"base_url"`
-	APIKeyEnv string `yaml:"api_key_env"`
-	Model     string `yaml:"model"`
+	Kind      string  `yaml:"kind"` // openai (default) or fake (scripted test model, no network)
+	BaseURL   string  `yaml:"base_url"`
+	APIKeyEnv string  `yaml:"api_key_env"`
+	Model     string  `yaml:"model"`
+	PriceIn   float64 `yaml:"price_in"`  // EUR per million input tokens, for the cost display
+	PriceOut  float64 `yaml:"price_out"` // EUR per million output tokens
 
 	APIKey string `yaml:"-"`
 }
+
+// Provider kinds.
+const (
+	ProviderOpenAI = "openai"
+	ProviderFake   = "fake"
+)
 
 // Budgets limit what a single agent may consume.
 type Budgets struct {
 	MaxStepsPerWakeup         int `yaml:"max_steps_per_wakeup"`
 	MaxTokensPerRun           int `yaml:"max_tokens_per_run"`
 	MaxAgentMessagesPerMinute int `yaml:"max_agent_messages_per_minute"`
+	MaxRunMinutes             int `yaml:"max_run_minutes"`
+	MaxHistoryMessages        int `yaml:"max_history_messages"` // older ones are left out of the context
 }
 
 // Robot is one physical (or simulated) mBot2.
@@ -96,6 +107,8 @@ const (
 	DefaultMaxStepsPerWakeup = 12
 	DefaultMaxTokensPerRun   = 200000
 	DefaultMaxAgentMessages  = 6
+	DefaultMaxRunMinutes     = 20
+	DefaultMaxHistory        = 40
 )
 
 var idPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
@@ -149,6 +162,18 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Budgets.MaxAgentMessagesPerMinute == 0 {
 		c.Budgets.MaxAgentMessagesPerMinute = DefaultMaxAgentMessages
+	}
+	if c.Budgets.MaxRunMinutes == 0 {
+		c.Budgets.MaxRunMinutes = DefaultMaxRunMinutes
+	}
+	if c.Budgets.MaxHistoryMessages == 0 {
+		c.Budgets.MaxHistoryMessages = DefaultMaxHistory
+	}
+	for name, p := range c.LLM.Providers {
+		if p.Kind == "" {
+			p.Kind = ProviderOpenAI
+			c.LLM.Providers[name] = p
+		}
 	}
 }
 
@@ -212,6 +237,17 @@ func (c *Config) Validate() error {
 		add("server: unknown tls.mode %q", c.Server.TLS.Mode)
 	}
 
+	for name, p := range c.LLM.Providers {
+		switch p.Kind {
+		case ProviderOpenAI:
+			if p.BaseURL == "" || p.Model == "" {
+				add("llm: provider %q needs base_url and model", name)
+			}
+		case ProviderFake:
+		default:
+			add("llm: provider %q has unknown kind %q", name, p.Kind)
+		}
+	}
 	if len(c.LLM.Providers) > 0 {
 		if _, ok := c.LLM.Providers[c.LLM.Default]; !ok {
 			add("llm: default provider %q is not defined", c.LLM.Default)
