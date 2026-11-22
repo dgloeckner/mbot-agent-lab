@@ -41,7 +41,7 @@ func (f Fake) Chat(ctx context.Context, req Request) (Response, error) {
 		case RoleAssistant:
 			assistantSeen = true
 			for _, tc := range m.ToolCalls {
-				if tc.Function.Name == "drive_until" || tc.Function.Name == "turn" {
+				if tc.Function.Name == "drive_until" || tc.Function.Name == "turn" || tc.Function.Name == "turn_until_clear" {
 					moves++
 				}
 			}
@@ -101,8 +101,11 @@ func (f Fake) Chat(ctx context.Context, req Request) (Response, error) {
 		if res.Reason == "color" && res.Color != "" && res.Color != "white" {
 			return reply("Da ist eine Farbe: "+res.Color+".", "finish", map[string]any{"report": "Ich habe das Feld " + res.Color + " gefunden."})
 		}
+		if _, ok := has["turn_until_clear"]; ok {
+			return reply("Wand oder Ende der Strecke. Ich drehe mich, bis der Weg frei ist.", "turn_until_clear", map[string]any{"direction": "right", "min_cm": 40})
+		}
 		return reply("Wand oder Ende der Strecke. Ich drehe mich.", "turn", map[string]any{"degrees": 90})
-	case "turn", "read_sensors":
+	case "turn", "turn_until_clear", "read_sensors":
 		return reply("Ich fahre, bis eine Wand kommt.", "drive_until", map[string]any{"max_cm": 120, "stop_below_cm": 15, "stop_on_color": "blue"})
 	case "stop":
 		return reply("Ich stehe und warte auf eure Nachricht.", "", nil)

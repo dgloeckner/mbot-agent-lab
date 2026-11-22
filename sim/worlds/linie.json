@@ -1,0 +1,9 @@
+{
+  "name": "linie",
+  "description": "Line course with bends, ending in a blue field. Start on the line, facing along it.",
+  "floor": "white",
+  "walls": [[0, 0, 200, 0], [200, 0, 200, 200], [200, 200, 0, 200], [0, 200, 0, 0]],
+  "fields": [{"rect": [135, 50, 30, 25], "color": "blue"}],
+  "lines": [{"points": [[40, 25], [40, 110], [55, 140], [100, 152], [135, 135], [150, 100], [150, 68]], "width": 2}],
+  "starts": [{"x": 40, "y": 22, "heading": 0}]
+}

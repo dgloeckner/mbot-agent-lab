@@ -15,6 +15,9 @@ class _QuadRGB:
     def get_line_sta(self, ch="all", index=1):
         return simstate.world.line_bits()
 
+    def get_offset_track(self, index=1):
+        return simstate.world.line_offset()
+
 
 ultrasonic2 = _Ultrasonic2()
 quad_rgb_sensor = _QuadRGB()

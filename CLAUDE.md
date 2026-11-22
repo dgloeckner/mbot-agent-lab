@@ -34,6 +34,8 @@ Full background and all decisions: `docs/handoff.md` (original handoff, German).
 - `robot/src/`: MicroPython modules, bundled in dependency order by `robot/tools/bundle.py` into
   one `main.py`. All modules share one namespace after bundling: no duplicate top-level names,
   import local names with `from module import name`. Only `hw.py` touches vendor modules.
+  Only `sense.py` turns raw readings into the filtered snapshot every decision uses; never decide
+  on a single raw reading (sensors flicker). New modules go into `MODULES` in `bundle.py`.
 - `web/`: team page (Preact + signals, CodeMirror 6, Vite). `vite build` writes to
   `server/internal/web/dist/app`, which the server embeds; `dist/README.md` keeps the embed
   compiling without a build. No CDN assets: lab PCs sit behind a corporate proxy. Keep the
@@ -41,7 +43,8 @@ Full background and all decisions: `docs/handoff.md` (original handoff, German).
   and use `markdownLanguage` instead of `markdown()` (which drags in HTML/CSS/JS parsers).
   Browser storage is only for drafts, draft snapshots and UI prefs (`web/src/storage.ts`).
 - `sim/`: fakes for `cyberpi`, `mbot2`, `mbuild`, `umqtt.simple` in `sim/fakes/`; 2D world in
-  `sim/world.py`; tests in `sim/tests/` run the real bundle in-process.
+  `sim/world.py` with optional sensor noise (seeded `random.Random`); tests in `sim/tests/` run the
+  real bundle in-process. Robot behaviour that depends on sensors is tested with noise on.
 
 ## Robot script constraints
 

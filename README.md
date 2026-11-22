@@ -31,11 +31,15 @@ tools, understanding attacks such as prompt injection, and treating tokens as a 
 
 - **Robot** (`robot/`): one MicroPython script per robot, uploaded via mBlock. Non-blocking main
   loop with skills as state machines, local reflexes (emergency stop, watchdog, tilt) and events.
+  All decisions use filtered sensors (median, majority vote, hysteresis). Goal-oriented skills such
+  as `turn_until_clear`, `scan` and `follow_line_until` keep real-time control on the robot.
 - **Server** (`server/`): broker, robot registry, agent runtime, model access, storage and web UI.
 - **Team page** (`web/`): Preact and CodeMirror 6, built with Vite and embedded into the server
   binary. No CDN, so it works behind corporate proxies.
 - **Simulator** (`sim/`): runs the real bundled robot script under CPython with fakes for the
-  vendor modules and a 2D world. Talks real MQTT to the server.
+  vendor modules and a 2D world with realistic sensor noise (ultrasonic dropouts and ghost echoes,
+  color flicker at edges, gyro spikes; `--no-noise` for ideal sensors). Talks real MQTT to the
+  server. Worlds: `arena`, `labyrinth`, `linie` (line course).
 - **Protocol** (`docs/protocol.md`): the single source of truth, with shared example messages
   that server, robot and simulator are all tested against.
 
@@ -182,8 +186,9 @@ wake-up, so they do not burn tokens.
 Working: configuration with validation, protocol, embedded broker with per-robot auth and ACL,
 robot registry, SQLite store, team joining with lab code, control room with robot assignment
 (1..N robots per team), team page with prompt editor, versions, notes, robot names and live log,
-agent runtime with tool registry, LLM client and test model, robot script with `drive`, `turn`,
-`drive_until`, `stop`, reflexes and events, bundler, simulator. Not yet: `follow_line_until`,
+agent runtime with tool registry, LLM client and test model, robot script with filtered sensors,
+`drive`, `turn`, `drive_until`, the goal-oriented `turn_until_clear`, `scan` and
+`follow_line_until`, reflexes and events, bundler, simulator with realistic sensor noise. Not yet:
 `retrace_path`, `gesture`, `play_melody` on the robot, summaries of long runs, a run history view,
 chat wall, MCP. Vendor API calls on the robot are not verified on hardware yet.
 

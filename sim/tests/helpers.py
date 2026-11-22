@@ -65,9 +65,12 @@ class MemoryClient:
         return [json.loads(m) for t, m, _ in self.published if t.endswith("/" + suffix) and m.startswith("{")]
 
 
-def load_robot(world_spec, robot_id="mbot-1"):
-    """Return the bundle namespace with world, config and MemoryClient installed."""
-    simstate.world = World(world_spec, robot_id)
+def load_robot(world_spec, robot_id="mbot-1", noise=None):
+    """Return the bundle namespace with world, config and MemoryClient installed.
+
+    noise is a random.Random for realistic sensor noise, None for ideal sensors.
+    """
+    simstate.world = World(world_spec, robot_id, noise=noise)
     cfg = types.ModuleType("config")
     cfg.ROBOT_ID = robot_id
     cfg.WIFI_SSID = cfg.WIFI_PASSWORD = "sim"

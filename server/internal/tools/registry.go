@@ -281,6 +281,17 @@ func (r *Registry) allowSay(team string) bool {
 	return true
 }
 
+// pick copies the given arguments, if present, into a command's args.
+func (c *call) pick(keys ...string) map[string]any {
+	out := map[string]any{}
+	for _, k := range keys {
+		if v, ok := c.args[k]; ok {
+			out[k] = v
+		}
+	}
+	return out
+}
+
 // motionTimeout is the robot's limit per motion command plus two seconds.
 const motionTimeout = 22 * time.Second
 
@@ -326,7 +337,7 @@ func builtins() []*tool {
 		},
 		{
 			name: "drive_until",
-			desc: "Fährt geradeaus, bis eine Wand näher als stop_below_cm ist (reason wall), die Bodenfarbe stop_on_color erscheint (reason color) oder max_cm gefahren sind (reason max_cm). Ergebnis: driven_cm, reason, distance_cm, color.",
+			desc: "Fährt geradeaus, bis eine Wand näher als stop_below_cm ist (reason wall), die Bodenfarbe stop_on_color erscheint (reason color) oder max_cm gefahren sind (reason max_cm). Der Roboter prüft das selbst mit geglätteten Messwerten. Ergebnis: driven_cm, reason, distance_cm, color, dazu colors_seen, min_distance_cm, lines_crossed.",
 			props: static(map[string]any{
 				"max_cm":        map[string]any{"type": "number", "minimum": 1, "maximum": 300},
 				"stop_below_cm": map[string]any{"type": "number", "minimum": 3, "maximum": 100},
@@ -342,6 +353,48 @@ func builtins() []*tool {
 					}
 				}
 				return c.command(ctx, c.robots[0], "drive_until", args, motionTimeout)
+			},
+		},
+		{
+			name: "turn_until_clear",
+			desc: "Dreht auf der Stelle in direction (left oder right), mindestens min_deg, und weiter, bis vorne mindestens min_cm frei sind (reason clear), höchstens max_deg (reason max_deg). Der Roboter entscheidet das selbst mit geglätteten Messwerten. Ergebnis: turned_deg (positiv ist rechts) und distance_cm.",
+			props: static(map[string]any{
+				"direction": map[string]any{"type": "string", "enum": []string{"left", "right"}},
+				"min_cm":    map[string]any{"type": "number", "minimum": 10, "maximum": 200, "description": "Freier Weg nach vorn, Standard 40."},
+				"min_deg":   map[string]any{"type": "number", "minimum": 0, "maximum": 180, "description": "Mindestens so weit drehen, Standard 20."},
+				"max_deg":   map[string]any{"type": "number", "minimum": 10, "maximum": 720, "description": "Höchstens so weit drehen, Standard 360."},
+			}),
+			required: []string{"direction"}, robot: robotOne,
+			run: func(ctx context.Context, c *call) any {
+				return c.command(ctx, c.robots[0], "turn_until_clear", c.pick("direction", "min_cm", "min_deg", "max_deg"), motionTimeout)
+			},
+		},
+		{
+			name: "scan",
+			desc: "Schaut sich um: dreht von from_deg bis to_deg (relativ zur aktuellen Richtung, positiv ist rechts), misst dabei in Schritten von step_deg und dreht sich danach in die freieste Richtung (face best) oder zurück (face start). Ergebnis: profile als Liste [Winkel, cm], best_deg, best_cm, turned_deg.",
+			props: static(map[string]any{
+				"from_deg": map[string]any{"type": "number", "minimum": -180, "maximum": 180, "description": "Standard -90."},
+				"to_deg":   map[string]any{"type": "number", "minimum": -180, "maximum": 180, "description": "Standard 90."},
+				"step_deg": map[string]any{"type": "number", "minimum": 10, "maximum": 45, "description": "Standard 15."},
+				"face":     map[string]any{"type": "string", "enum": []string{"best", "start"}},
+			}),
+			robot: robotOne,
+			run: func(ctx context.Context, c *call) any {
+				return c.command(ctx, c.robots[0], "scan", c.pick("from_deg", "to_deg", "step_deg", "face"), motionTimeout)
+			},
+		},
+		{
+			name: "follow_line_until",
+			desc: "Folgt einer Linie auf dem Boden und lenkt dabei selbst. Endet an der Farbe stop_on_color (reason color), an einer Kreuzung (reason crossing, abschaltbar mit stop_at_crossing false), wenn die Linie aufhört (reason line_lost) oder nach max_cm (reason max_cm). Ergebnis: driven_cm, reason, color, colors_seen.",
+			props: static(map[string]any{
+				"max_cm":           map[string]any{"type": "number", "minimum": 1, "maximum": 300},
+				"stop_on_color":    map[string]any{"type": "string", "enum": floorColors},
+				"stop_at_crossing": map[string]any{"type": "boolean", "description": "Standard true."},
+				"speed":            map[string]any{"type": "number", "minimum": 10, "maximum": 60, "description": "Standard 30."},
+			}),
+			required: []string{"max_cm"}, robot: robotOne,
+			run: func(ctx context.Context, c *call) any {
+				return c.command(ctx, c.robots[0], "follow_line_until", c.pick("max_cm", "stop_on_color", "stop_at_crossing", "speed"), motionTimeout)
 			},
 		},
 		{

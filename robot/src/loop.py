@@ -3,13 +3,13 @@
 
 from compat import ticks_ms, ticks_diff, sleep_ms
 from config import ROBOT_ID, WIFI_SSID, WIFI_PASSWORD, BROKER_HOST, BROKER_PORT, BROKER_TLS, BROKER_PASSWORD
-from hw import (hw_motors_stop, hw_distance_cm, hw_ground_color, hw_line_state, hw_yaw,
-                hw_tilt, hw_battery, hw_button, hw_loudness, hw_mac, hw_play)
+from hw import hw_motors_stop, hw_mac, hw_play
+from sense import Sense
 from ui import Ui
 from events import Events
 from net import Link
 from skills import MOTION_SKILLS, make_motion_skill
-from reflexes import RF_STOP_CM, RF_WATCHDOG_MS, reflex_abort_reason, is_tilted
+from reflexes import RF_WATCHDOG_MS, reflex_abort_reason, stop_distance
 
 SCRIPT_VERSION = "0.1.0"
 PROTOCOL_VERSION = 1
@@ -25,6 +25,7 @@ MAX_MSGS_PER_LOOP = 5
 class Robot:
     def __init__(self):
         self.ui = Ui(ROBOT_ID)
+        self.sense = Sense()
         self.events = Events()
         self.link = Link(ROBOT_ID, BROKER_HOST, BROKER_PORT, BROKER_PASSWORD, BROKER_TLS, self.on_message)
         self.inbox = []
@@ -126,10 +127,10 @@ class Robot:
         except (ValueError, TypeError) as e:
             self.reply(cmd_id, False, "error", error=str(e))
             return
-        if skill.forward and self.s["distance_cm"] < RF_STOP_CM:
+        if skill.forward and self.s["distance_cm"] < stop_distance(skill):
             self.reply(cmd_id, False, "obstacle", {"distance_cm": self.s["distance_cm"]})
             return
-        skill.start()
+        skill.start(self.s)
         self.skill = skill
         self.skill_cmd_id = cmd_id
 
@@ -151,18 +152,7 @@ class Robot:
     # ---- sensing ----------------------------------------------------------
 
     def read_sensors(self):
-        pitch, roll = hw_tilt()
-        return {
-            "distance_cm": int(hw_distance_cm()),
-            "color": hw_ground_color(),
-            "line": hw_line_state(),
-            "yaw": int(hw_yaw()),
-            "battery": int(hw_battery()),
-            "tilted": is_tilted(pitch, roll),
-            "button_a": hw_button("a"),
-            "button_b": hw_button("b"),
-            "loudness": hw_loudness(),
-        }
+        return self.sense.read()
 
     def next_seq(self):
         self.seq += 1

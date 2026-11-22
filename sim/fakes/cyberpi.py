@@ -63,11 +63,11 @@ def reset_yaw():
 
 
 def get_pitch():
-    return simstate.world.pitch
+    return simstate.world.tilt_reading()[0]
 
 
 def get_roll():
-    return simstate.world.roll
+    return simstate.world.tilt_reading()[1]
 
 
 def get_battery():

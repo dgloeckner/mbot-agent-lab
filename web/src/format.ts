@@ -17,6 +17,7 @@ const REASONS: Record<string, string> = {
   done: 'fertig', wall: 'Wand erreicht', color: 'Farbe erreicht', max_cm: 'Strecke erreicht',
   timeout: 'Zeit abgelaufen', stopped: 'gestoppt', obstacle: 'Hindernis im Weg', busy: 'noch beschäftigt',
   tilted: 'umgekippt', reassigned: 'neu zugeteilt', error: 'Fehler',
+  clear: 'Weg frei', max_deg: 'kein freier Weg gefunden', line_lost: 'Linie zu Ende', crossing: 'Kreuzung erreicht',
 }
 
 export const colorName = (c: string) => COLORS[c] ?? c
@@ -81,6 +82,8 @@ function compactResult(result: unknown): string {
   if (typeof r.turned_deg === 'number') parts.push(`${r.turned_deg}° gedreht`)
   if (typeof r.distance_cm === 'number') parts.push(`Abstand ${r.distance_cm} cm`)
   if (typeof r.color === 'string' && r.color) parts.push(`Boden ${colorName(r.color)}`)
+  if (typeof r.best_deg === 'number') parts.push(`am freiesten bei ${r.best_deg}° (${r.best_cm} cm)`)
+  if (Array.isArray(r.colors_seen) && r.colors_seen.length > 1) parts.push(`unterwegs: ${r.colors_seen.map((c: string) => colorName(c)).join(' → ')}`)
   if (Array.isArray(r.delivered)) parts.push(r.delivered.length ? `an ${r.delivered.join(', ')}` : 'niemand erreicht')
   if (r.event) parts.push(`${r.event} von ${r.robot}`)
   if (r.note_id) parts.push(`Notiz ${r.note_id}`)
