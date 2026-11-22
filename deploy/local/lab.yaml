@@ -1,5 +1,5 @@
 # Local development: plain MQTT on :1883, HTTP on :8080, no TLS.
-# `make dev` sets the environment variables below to development values.
+# `npx nx run server:dev` sets the environment variables below to development values.
 
 server:
   http_addr: "127.0.0.1:8080"

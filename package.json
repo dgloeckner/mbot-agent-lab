@@ -1,0 +1,16 @@
+{
+  "name": "mbot-agent-lab",
+  "private": true,
+  "description": "Task runner for the mBot2 Agent Lab monorepo (Go server, MicroPython robot, Python simulator).",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "nx run server:dev",
+    "sim": "nx run sim:run",
+    "test": "nx run-many -t test",
+    "bundle": "nx run robot:bundle",
+    "build": "nx run server:build"
+  },
+  "devDependencies": {
+    "nx": "24.0.6"
+  }
+}

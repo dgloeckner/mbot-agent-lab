@@ -1,5 +1,5 @@
 # Per-robot configuration. Copy to config.py (never commit it) and fill in.
-# `make bundle CONFIG=robot/config.py` inlines it into robot/dist/main.py.
+# `npx nx run robot:bundle --config=robot/config.py` inlines it into robot/dist/main.py.
 
 ROBOT_ID = "mbot-1"
 

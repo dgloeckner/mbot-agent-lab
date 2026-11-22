@@ -21,3 +21,8 @@ autocert-cache/
 .DS_Store
 .idea/
 .vscode/
+
+# Nx / Node
+/node_modules/
+/.nx/cache/
+/.nx/workspace-data/
