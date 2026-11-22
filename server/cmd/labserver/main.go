@@ -17,12 +17,15 @@ import (
 
 	"golang.org/x/crypto/acme/autocert"
 
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/agent"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/broker"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/config"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/lab"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/live"
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/llm"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/robots"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/store"
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/tools"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/web"
 )
 
@@ -106,7 +109,18 @@ func run(configPath string, log *slog.Logger) error {
 		}
 	}()
 
-	ui := &web.Server{Config: cfg, Robots: reg, Store: db, Hub: hub, Lab: labSvc, Log: log}
+	models := llm.New(cfg.LLM, log)
+	agents := agent.NewManager(agent.Deps{
+		Store: db, Robots: reg, Hub: hub, LLM: models,
+		Tools:   tools.NewRegistry(reg, db, hub, cfg.Budgets),
+		Budgets: cfg.Budgets, Log: log,
+	})
+	go agents.Run(ctx)
+	labSvc.OnTeamEvent = func(teamID, kind, text string) {
+		agents.Deliver(teamID, agent.Message{From: agent.SourceSystem, Kind: kind, Text: text})
+	}
+
+	ui := &web.Server{Config: cfg, Robots: reg, Store: db, Hub: hub, Lab: labSvc, Agents: agents, Log: log}
 	go ui.Run(ctx)
 	srv := &http.Server{
 		Addr:              cfg.Server.HTTPAddr,
@@ -117,7 +131,7 @@ func run(configPath string, log *slog.Logger) error {
 	errc := make(chan error, 1)
 	go func() {
 		log.Info("labserver started", "version", version, "http", cfg.Server.HTTPAddr,
-			"mqtt", cfg.Server.MQTTPlainAddr, "mqtts", cfg.Server.MQTTTLSAddr, "lab_code", labSvc.LabCode())
+			"mqtt", cfg.Server.MQTTPlainAddr, "mqtts", cfg.Server.MQTTTLSAddr, "lab_code", labSvc.LabCode(), "model", models.DefaultModel())
 		if tlsConfig != nil {
 			errc <- srv.ListenAndServeTLS("", "")
 		} else {

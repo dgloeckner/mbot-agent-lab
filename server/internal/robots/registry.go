@@ -5,6 +5,8 @@ package robots
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -64,6 +66,7 @@ type Registry struct {
 	bus    Bus
 	log    *slog.Logger
 	cmdSeq atomic.Uint64
+	boot   string // random per server start, keeps command IDs unique across restarts
 
 	mu        sync.Mutex
 	robots    map[string]*Robot
@@ -81,7 +84,10 @@ func New(bus Bus, specs []Spec, logger *slog.Logger) *Registry {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	var nonce [3]byte
+	_, _ = rand.Read(nonce[:])
 	r := &Registry{
+		boot:    hex.EncodeToString(nonce[:]),
 		bus:     bus,
 		log:     logger.With("component", "robots"),
 		robots:  map[string]*Robot{},
@@ -99,6 +105,13 @@ type Owner struct {
 	TeamName string
 	Color    string
 	Alias    string
+}
+
+// nextCmdID returns a command ID that is unique across server restarts.
+// Robots ignore IDs they have seen recently, so a restarted server must not
+// reuse the IDs of the previous one.
+func (r *Registry) nextCmdID() string {
+	return fmt.Sprintf("c%s-%x", r.boot, r.cmdSeq.Add(1))
 }
 
 // Assign sets the owner of a robot. When the owner changes, the robot is
@@ -129,7 +142,7 @@ func (r *Registry) Assign(robotID string, o Owner) error {
 	if changed && online {
 		// Fire and forget: the robot also stops on its own when the heartbeat
 		// shows the new owner, this just makes it immediate.
-		cmd, _ := protocol.Marshal(protocol.Cmd{ID: fmt.Sprintf("c-%x", r.cmdSeq.Add(1)), Name: "stop"})
+		cmd, _ := protocol.Marshal(protocol.Cmd{ID: r.nextCmdID(), Name: "stop"})
 		if err := r.bus.Publish(protocol.Topic(robotID, protocol.TopicCmd), cmd, false, 0); err != nil {
 			r.log.Error("stop on reassign", "robot", robotID, "err", err)
 		}
@@ -155,6 +168,29 @@ func (r *Registry) Subscribe(ch chan<- Event) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.listeners = append(r.listeners, ch)
+}
+
+// Unsubscribe removes a channel registered with Subscribe.
+func (r *Registry) Unsubscribe(ch chan<- Event) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i, l := range r.listeners {
+		if l == ch {
+			r.listeners = append(r.listeners[:i], r.listeners[i+1:]...)
+			return
+		}
+	}
+}
+
+// TeamRobots returns the robots owned by a team, sorted by ID.
+func (r *Registry) TeamRobots(teamID string) []Robot {
+	var out []Robot
+	for _, rb := range r.Snapshot() {
+		if rb.Owner == teamID && teamID != "" {
+			out = append(out, rb)
+		}
+	}
+	return out
 }
 
 // Snapshot returns all robots sorted by ID.
@@ -279,7 +315,7 @@ func (r *Registry) handle(topic string, payload []byte) {
 // Send publishes a command and waits for its result or the timeout.
 // The timeout should be the skill's maximum duration plus two seconds.
 func (r *Registry) Send(ctx context.Context, robotID, name string, args map[string]any, timeout time.Duration) (protocol.Result, error) {
-	cmd := protocol.Cmd{ID: fmt.Sprintf("c-%x", r.cmdSeq.Add(1)), Name: name, Args: args}
+	cmd := protocol.Cmd{ID: r.nextCmdID(), Name: name, Args: args}
 	payload, err := protocol.Marshal(cmd)
 	if err != nil {
 		return protocol.Result{}, err

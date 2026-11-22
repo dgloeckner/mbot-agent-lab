@@ -10,16 +10,28 @@ server:
   db_path: lab-dev.db
 
 llm:
-  default: mistral
-  fallback: ollama
+  # "test" is a scripted model: it explores with the real tools and needs no
+  # API key. Set default to mistral (and MISTRAL_API_KEY) to use a real model.
+  default: test
   providers:
+    test:
+      kind: fake
     mistral:
       base_url: https://api.mistral.ai/v1
       api_key_env: MISTRAL_API_KEY
       model: mistral-small-latest
+      price_in: 0.1     # EUR per million tokens, check current prices
+      price_out: 0.3
     ollama:
       base_url: http://localhost:11434/v1
       model: qwen3
+
+budgets:
+  max_steps_per_wakeup: 12
+  max_tokens_per_run: 200000
+  max_agent_messages_per_minute: 6
+  max_run_minutes: 20
+  max_history_messages: 40
 
 robots:
   - { id: mbot-1, password_env: MBOT1_PASSWORD, color: red }

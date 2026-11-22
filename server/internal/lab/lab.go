@@ -69,6 +69,10 @@ type Service struct {
 	Config *config.Config
 	Log    *slog.Logger
 
+	// OnTeamEvent, if set, also passes notices about a team's robots and name
+	// to the team's agent (it decides itself whether that wakes it).
+	OnTeamEvent func(teamID, kind, text string)
+
 	mu      sync.Mutex // serializes changes to teams and assignments
 	labCode string
 }
@@ -297,6 +301,9 @@ func (s *Service) RenameRobot(ctx context.Context, teamID, robotID, alias string
 func (s *Service) notify(teamID, kind, text string, data any) {
 	raw, _ := json.Marshal(data)
 	s.Hub.Publish(teamID, live.LogEntry{Source: live.SourceSystem, Kind: kind, Text: text, Data: raw})
+	if s.OnTeamEvent != nil {
+		s.OnTeamEvent(teamID, kind, text)
+	}
 }
 
 func (s *Service) teamMap(ctx context.Context) (map[string]store.Team, error) {

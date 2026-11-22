@@ -150,14 +150,42 @@ robot's LEDs show, and the color band pulses in the robot's rhythm while the age
   UI preferences (theme, split, font size). Deployed versions live on the server. If another PC of
   the team deploys while this draft has changes, the page offers to take over the new version.
 
+## Agents
+
+Every team has one agent: a loop in the server with an inbox. It calls the model only when a
+message wakes it (team message, another agent, a robot pressing a button or tipping over, the
+start of a run). Routine readings such as obstacles or floor colors wait in the inbox for the next
+wake-up, so they do not burn tokens.
+
+- **Runs** start with "Lauf starten" and end with `finish(report)`, "Stopp" (which cancels a
+  running model call), the time limit or the token limit. "Deployen und neu starten" begins a
+  new run; a plain deploy takes effect at the next model call.
+- **Context** per model call: platform rules, the team prompt in its newest version, the notes,
+  the last messages of the run (older ones are left out), then the inbox as one JSON line per
+  message. The sender field (`Team`, `Roboter <Name>`, `Agent <Name>`, `System`) is set by the
+  server, so another agent cannot pose as the team.
+- **Tools** (`server/internal/tools`): robot tools become MQTT commands; with several robots
+  they get a `robot` parameter with the team's robot names. Mistakes by the model come back as
+  results with `ok: false` and a German explanation, so the agent can correct itself.
+- **Budgets** in the config: steps per wake-up, tokens per run, minutes per run, messages to
+  other agents per minute, messages kept in the context.
+- **Models** (`server/internal/llm`): any OpenAI-compatible endpoint (Mistral, Ollama, …) with
+  retries, a fallback provider and a cost estimate from the configured prices. `kind: fake` is a
+  scripted test model that explores with the real tools and needs no API key; the local
+  development config uses it by default. Set `default: mistral` and `MISTRAL_API_KEY` for a real
+  model.
+- **Log:** every run, message, tool call and model call is stored in SQLite for the comparison of
+  report and protocol ("Lügendetektor").
+
 ## Status
 
-Initial scaffold. Working: configuration with validation, protocol types, embedded broker with
-per-robot auth and ACL, robot registry with heartbeat and command/result matching, SQLite schema,
-status page, team joining with lab code, control room with robot assignment (1..N robots per
-team), team page with prompt versions, notes, robot names, stop and live log, robot script with
-`drive`, `turn`, `drive_until`, `stop`, reflexes and events, bundler, simulator. Not yet: agent
-runtime, LLM client, tool registry, chat wall, MCP.
+Working: configuration with validation, protocol, embedded broker with per-robot auth and ACL,
+robot registry, SQLite store, team joining with lab code, control room with robot assignment
+(1..N robots per team), team page with prompt editor, versions, notes, robot names and live log,
+agent runtime with tool registry, LLM client and test model, robot script with `drive`, `turn`,
+`drive_until`, `stop`, reflexes and events, bundler, simulator. Not yet: `follow_line_until`,
+`retrace_path`, `gesture`, `play_melody` on the robot, summaries of long runs, a run history view,
+chat wall, MCP. Vendor API calls on the robot are not verified on hardware yet.
 
 ## License
 

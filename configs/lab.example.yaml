@@ -21,6 +21,10 @@ llm:
       base_url: https://api.mistral.ai/v1
       api_key_env: MISTRAL_API_KEY
       model: mistral-small-latest  # pin a fixed version for competitions
+      price_in: 0.1                # EUR per million tokens, for the cost display; check current prices
+      price_out: 0.3
+    test:
+      kind: fake                   # scripted test model without network, for rehearsals
     ollama:
       base_url: http://localhost:11434/v1
       model: "<local model with tool calling>"
@@ -30,6 +34,8 @@ budgets:
   max_steps_per_wakeup: 12
   max_tokens_per_run: 200000
   max_agent_messages_per_minute: 6
+  max_run_minutes: 20              # a run ends after this long
+  max_history_messages: 40         # older messages of a run leave the model context
 
 robots:
   - { id: mbot-1, password_env: MBOT1_PASSWORD, color: red }

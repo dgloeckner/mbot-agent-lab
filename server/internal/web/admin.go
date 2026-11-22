@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/agent"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/live"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/protocol"
 )
@@ -41,12 +42,13 @@ type AdminRobot struct {
 
 // AdminTeam is one team as the control room sees it.
 type AdminTeam struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Color     string    `json:"color"`
-	Link      string    `json:"link"` // path of the secret team link
-	Connected int       `json:"connected"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        string       `json:"id"`
+	Name      string       `json:"name"`
+	Color     string       `json:"color"`
+	Link      string       `json:"link"` // path of the secret team link
+	Connected int          `json:"connected"`
+	CreatedAt time.Time    `json:"created_at"`
+	Agent     agent.Status `json:"agent"`
 }
 
 type adminState struct {
@@ -64,7 +66,7 @@ func (s *Server) buildAdminState(ctx context.Context) (adminState, error) {
 	for _, t := range teams {
 		st.Teams = append(st.Teams, AdminTeam{
 			ID: t.ID, Name: t.Name, Color: t.Color, Link: "/t/" + t.Token,
-			Connected: s.Hub.Connected(t.ID), CreatedAt: t.CreatedAt,
+			Connected: s.Hub.Connected(t.ID), CreatedAt: t.CreatedAt, Agent: s.Agents.Status(t.ID),
 		})
 	}
 	for _, rb := range s.Robots.Snapshot() {
@@ -171,11 +173,13 @@ func (s *Server) adminDeleteTeam(w http.ResponseWriter, r *http.Request) {
 		s.labError(w, err)
 		return
 	}
+	s.Agents.RemoveTeam(r.PathValue("id"))
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // adminStopAll is the emergency stop for every robot in the lab.
 func (s *Server) adminStopAll(w http.ResponseWriter, r *http.Request) {
+	s.Agents.StopAll("Leitstand")
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
 	type outcome struct {

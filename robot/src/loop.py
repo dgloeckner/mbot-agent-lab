@@ -206,6 +206,9 @@ class Robot:
             self.backoff = min(self.backoff * 2, RECONNECT_MAX_MS)
             return
         self.backoff = RECONNECT_MIN_MS
+        # A new connection may be a restarted server that counts command IDs
+        # from the start again: forget the old ones so nothing is skipped.
+        self.seen_ids = []
         self.last_hb = ticks_ms()  # grace period until the first heartbeat
         self.watchdog_tripped = False
         self.last_state = None

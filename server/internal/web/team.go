@@ -13,6 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/agent"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/live"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/protocol"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/store"
@@ -25,8 +26,6 @@ const (
 	MaxMessageChars = 500
 	MaxNoteChars    = 1000
 )
-
-const agentUnavailable = "Der Agent ist noch nicht verfügbar. Euer Prompt ist gespeichert und wird beim nächsten Lauf verwendet."
 
 // RobotView is what a team sees of one of its robots.
 type RobotView struct {
@@ -71,8 +70,8 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request, team store.Team
 	writeJSON(w, http.StatusOK, map[string]any{
 		"team":            map[string]string{"id": team.ID, "name": team.Name, "color": team.Color},
 		"robots":          s.teamRobots(team.ID),
-		"agent":           protocol.AgentWaiting,
-		"agent_available": false,
+		"agent":           s.Agents.Status(team.ID),
+		"agent_available": s.Agents.Available(),
 		"prompt":          prompt,
 		"versions":        versions,
 		"notes":           notes,
@@ -133,7 +132,11 @@ func (s *Server) deployPrompt(w http.ResponseWriter, r *http.Request, team store
 	}
 	data, _ := json.Marshal(map[string]any{"version": p.Version, "restart": req.Restart, "chars": p.Chars})
 	s.Hub.Publish(team.ID, live.LogEntry{Source: live.SourceTeam, Kind: "deploy", Data: data})
-	s.Hub.Publish(team.ID, live.LogEntry{Source: live.SourceSystem, Kind: "info", Text: agentUnavailable})
+	if req.Restart || s.Agents.Status(team.ID).Running {
+		if err := s.Agents.Deployed(r.Context(), team.ID, p.Version, req.Restart); err != nil {
+			s.agentNotice(team.ID, err)
+		}
+	}
 	writeJSON(w, http.StatusCreated, p)
 }
 
@@ -154,18 +157,41 @@ func (s *Server) message(w http.ResponseWriter, r *http.Request, team store.Team
 		return
 	}
 	e := s.Hub.Publish(team.ID, live.LogEntry{Source: live.SourceTeam, Kind: "chat", Text: text})
-	s.Hub.Publish(team.ID, live.LogEntry{Source: live.SourceSystem, Kind: "info", Text: "Der Agent ist noch nicht verfügbar und hat die Nachricht nicht gelesen."})
+	if !s.Agents.Deliver(team.ID, agent.Message{From: agent.SourceTeam, Kind: "chat", Text: text, Wake: true}) {
+		s.Hub.Publish(team.ID, live.LogEntry{Source: live.SourceSystem, Kind: "info", Text: "Euer Agent läuft gerade nicht. Startet einen Lauf, dann liest er eure Nachrichten."})
+	}
 	writeJSON(w, http.StatusAccepted, e)
 }
 
-func (s *Server) start(w http.ResponseWriter, _ *http.Request, team store.Team) {
-	s.Hub.Publish(team.ID, live.LogEntry{Source: live.SourceSystem, Kind: "info", Text: "Ein Lauf kann erst starten, wenn der Agent verfügbar ist."})
-	writeJSON(w, http.StatusAccepted, map[string]bool{"started": false})
+func (s *Server) start(w http.ResponseWriter, r *http.Request, team store.Team) {
+	if err := s.Agents.Start(r.Context(), team.ID); err != nil {
+		var se *agent.StartError
+		if errors.As(err, &se) {
+			writeError(w, http.StatusConflict, se.Msg)
+			return
+		}
+		s.serverError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, s.Agents.Status(team.ID))
+}
+
+// agentNotice tells the team why its agent could not (re)start.
+func (s *Server) agentNotice(teamID string, err error) {
+	var se *agent.StartError
+	msg := "Der Agent konnte nicht neu starten."
+	if errors.As(err, &se) {
+		msg = se.Msg
+	} else {
+		s.Log.Error("agent", "team", teamID, "err", err)
+	}
+	s.Hub.Publish(teamID, live.LogEntry{Source: live.SourceSystem, Kind: "info", Text: msg})
 }
 
 // stop sends the stop command to every robot of the team in parallel.
 func (s *Server) stop(w http.ResponseWriter, r *http.Request, team store.Team) {
 	s.Hub.Publish(team.ID, live.LogEntry{Source: live.SourceTeam, Kind: "stop"})
+	s.Agents.Stop(team.ID, "Team")
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
 	type outcome struct {
@@ -300,7 +326,16 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, team store.Team)
 	backlog, ch, cancel := s.Hub.Subscribe(team.ID, after)
 	defer cancel()
 
-	var lastRobots []byte
+	var lastRobots, lastAgent []byte
+	sendAgent := func() error {
+		b, _ := json.Marshal(s.Agents.Status(team.ID))
+		if bytes.Equal(b, lastAgent) {
+			return nil
+		}
+		lastAgent = b
+		_, err := fmt.Fprintf(w, "event: agent\ndata: %s\n\n", b)
+		return err
+	}
 	sendRobots := func() error {
 		b, _ := json.Marshal(s.teamRobots(team.ID))
 		if bytes.Equal(b, lastRobots) {
@@ -317,7 +352,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, team store.Team)
 	}
 
 	_, _ = fmt.Fprint(w, "retry: 2000\n\n")
-	if sendRobots() != nil {
+	if sendRobots() != nil || sendAgent() != nil {
 		return
 	}
 	for _, e := range backlog {
@@ -339,7 +374,10 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, team store.Team)
 		case e := <-ch:
 			err = sendLog(e)
 		case <-poll.C:
-			err = sendRobots() // only sends when something changed
+			// Both only send when something changed.
+			if err = sendRobots(); err == nil {
+				err = sendAgent()
+			}
 		case <-ping.C:
 			_, err = fmt.Fprint(w, ": ping\n\n")
 		}

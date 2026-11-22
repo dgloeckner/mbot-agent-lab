@@ -51,6 +51,57 @@ export function relativeTime(at: number | string, now = Date.now()): string {
     : d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
+const RUN_END: Record<string, string> = {
+  finish: 'Der Agent hat den Lauf beendet',
+  stop: 'Lauf gestoppt',
+  restart: 'Lauf für den Neustart beendet',
+  time_limit: 'Lauf beendet: Zeitlimit erreicht',
+  token_limit: 'Lauf beendet: Token-Limit erreicht',
+  team_deleted: 'Lauf beendet: Team gelöscht',
+  server_stop: 'Lauf beendet: Server wurde angehalten',
+  server_restart: 'Lauf beendet: Server wurde neu gestartet',
+}
+
+/** "max_cm: 120, robot: Scout" from tool arguments. */
+function compactArgs(args: unknown): string {
+  if (!args || typeof args !== 'object') return ''
+  return Object.entries(args as Record<string, unknown>)
+    .map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
+    .join(', ')
+}
+
+/** The essential outcome of a tool result. */
+function compactResult(result: unknown): string {
+  if (!result || typeof result !== 'object') return ''
+  const r = result as Record<string, any>
+  if (r.ok === false) return r.error ?? (r.reason ? reasonName(String(r.reason)) : 'fehlgeschlagen')
+  const parts: string[] = []
+  if (r.reason) parts.push(reasonName(String(r.reason)))
+  if (typeof r.driven_cm === 'number') parts.push(`${Math.round(r.driven_cm)} cm gefahren`)
+  if (typeof r.turned_deg === 'number') parts.push(`${r.turned_deg}° gedreht`)
+  if (typeof r.distance_cm === 'number') parts.push(`Abstand ${r.distance_cm} cm`)
+  if (typeof r.color === 'string' && r.color) parts.push(`Boden ${colorName(r.color)}`)
+  if (Array.isArray(r.delivered)) parts.push(r.delivered.length ? `an ${r.delivered.join(', ')}` : 'niemand erreicht')
+  if (r.event) parts.push(`${r.event} von ${r.robot}`)
+  if (r.note_id) parts.push(`Notiz ${r.note_id}`)
+  return parts.join(', ') || 'ok'
+}
+
+/** Tool call for the log: name, arguments and outcome. */
+export function describeTool(d: Record<string, any>): { call: string; outcome: string; failed: boolean } {
+  const args = compactArgs(d.args)
+  const result = d.result as Record<string, any> | undefined
+  return { call: `${d.name}(${args})`, outcome: compactResult(result), failed: result?.ok === false }
+}
+
+/** Cost in cents from micro-euros, readable for small amounts. */
+export function formatCost(microEUR: number): string {
+  const cents = microEUR / 10_000
+  if (microEUR === 0) return '0 ct'
+  if (cents < 0.01) return 'unter 0,01 ct'
+  return `${cents.toLocaleString('de-DE', { maximumFractionDigits: 2 })} ct`
+}
+
 /** One line of text for a log entry. */
 export function describe(e: LogEntry): string {
   const d = (e.data ?? {}) as Record<string, any>
@@ -79,6 +130,14 @@ export function describe(e: LogEntry): string {
       return d.restart ? `Version ${d.version} deployt, Neustart angefordert` : `Version ${d.version} deployt`
     case 'stop':
       return 'Stopp gedrückt'
+    case 'run_start':
+      return `Lauf gestartet mit Prompt-Version ${d.version}, Modell ${d.model}`
+    case 'run_end':
+      return `${RUN_END[String(d.reason)] ?? `Lauf beendet (${d.reason})`}${d.by && d.reason === 'stop' ? ` von ${d.by === 'Team' ? 'euch' : d.by}` : ''}`
+    case 'tool': {
+      const t = describeTool(d)
+      return `${t.call} → ${t.outcome}`
+    }
     default:
       return e.text ?? e.kind
   }

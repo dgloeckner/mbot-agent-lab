@@ -151,7 +151,7 @@
 
 .team-card {
   display: grid;
-  grid-template-rows: auto 1fr auto auto;
+  grid-template-rows: auto 1fr auto auto auto;
   background: var(--surface);
   border: 1px solid var(--line);
   overflow: hidden;
@@ -290,6 +290,17 @@
 
 .team-foot .spacer {
   flex: 1;
+}
+
+.team-agent {
+  padding: 8px 12px 2px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+.team-agent[data-running='true'] {
+  color: var(--ink);
+  font-weight: 600;
 }
 
 .team-age {

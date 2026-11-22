@@ -27,7 +27,10 @@ Full background and all decisions: `docs/handoff.md` (original handoff, German).
   heartbeat, cmd/result, reassignment), store (SQLite via modernc, migrations in
   `store/migrations`), lab (joining, teams, assignments, robot names, lab code: the rules live
   here, web handlers stay thin), live (per-team log hub for SSE), web.
-  Stubs with doc comments: tools, agent, llm, memory, auth, mcp.
+  agent (one actor per team: inbox, wake rules, context, budgets, runs), tools (registry with
+  model-facing German descriptions and JSON schemas), llm (OpenAI-compatible client, retries,
+  fallback, cost; `Fake` scripted test model), memory (history trimming, notes formatting).
+  Stubs: auth, mcp.
 - `robot/src/`: MicroPython modules, bundled in dependency order by `robot/tools/bundle.py` into
   one `main.py`. All modules share one namespace after bundling: no duplicate top-level names,
   import local names with `from module import name`. Only `hw.py` touches vendor modules.
@@ -58,5 +61,6 @@ the user chose Nx over Make). Run `npm install` once.
   dev secrets set in `server/project.json`).
 - `npx nx run sim:run --robots=2 --world=sim/worlds/labyrinth.json`: simulated robots.
 - `npx nx run robot:bundle [--config=robot/config.py]`: build `robot/dist/main.py`.
+- `go test -race ./...` in `server/` before touching agent, robots or tools: they are concurrent.
 - New inputs a task depends on (e.g. shared example files) must be listed in its `inputs`, or the
   Nx cache returns stale results.
