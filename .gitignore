@@ -1,0 +1,23 @@
+# Build output
+/bin/
+/robot/dist/
+/sim/.build/
+__pycache__/
+*.pyc
+
+# Robot secrets
+/robot/config.py
+
+# Local data and secrets
+*.db
+*.db-shm
+*.db-wal
+.env
+*.env
+/configs/lab.yaml
+autocert-cache/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="2">
+<title>mBot2 Agent Lab</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem; color: #1d1d1f; }
+  table { border-collapse: collapse; }
+  th, td { padding: .4rem .8rem; border-bottom: 1px solid #ddd; text-align: left; }
+  .on { color: #1a7f37; } .off { color: #b42318; }
+</style>
+</head>
+<body>
+<h1>mBot2 Agent Lab</h1>
+<p>Der Server läuft. Leitstand und Teamseiten folgen.</p>
+<table>
+  <tr><th>Roboter</th><th>Status</th><th>Besitzer</th><th>Skill</th><th>Abstand</th><th>Farbe</th><th>Akku</th><th>Skript</th><th>Zuletzt gesehen</th></tr>
+  {{range .}}
+  <tr>
+    <td>{{.ID}}</td>
+    <td>{{if .Online}}{{if .Accepted}}<span class="on">online</span>{{else}}<span class="off">falsche Version</span>{{end}}{{else}}<span class="off">offline</span>{{end}}</td>
+    <td>{{if .Owner}}{{.Owner}} ({{.Alias}}){{else}}frei{{end}}</td>
+    <td>{{.State.Skill}}</td>
+    <td>{{.State.DistanceCM}} cm</td>
+    <td>{{.State.Color}}</td>
+    <td>{{.State.Battery}} %</td>
+    <td>{{.Hello.Script}}</td>
+    <td>{{ago .SeenAt}}</td>
+  </tr>
+  {{end}}
+</table>
+</body>
+</html>

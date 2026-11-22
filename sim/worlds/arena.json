@@ -1,0 +1,20 @@
+{
+  "name": "arena",
+  "description": "Open 200 x 200 cm arena with colored fields in the corners and a line across.",
+  "floor": "white",
+  "walls": [[0, 0, 200, 0], [200, 0, 200, 200], [200, 200, 0, 200], [0, 200, 0, 0]],
+  "fields": [
+    {"rect": [0, 160, 40, 40], "color": "red"},
+    {"rect": [160, 160, 40, 40], "color": "blue"},
+    {"rect": [160, 0, 40, 40], "color": "green"},
+    {"rect": [0, 0, 40, 40], "color": "yellow"}
+  ],
+  "lines": [{"points": [[40, 100], [160, 100]], "width": 2}],
+  "starts": [
+    {"x": 60, "y": 60, "heading": 0},
+    {"x": 140, "y": 60, "heading": 0},
+    {"x": 60, "y": 140, "heading": 180},
+    {"x": 140, "y": 140, "heading": 180},
+    {"x": 100, "y": 40, "heading": 0}
+  ]
+}
