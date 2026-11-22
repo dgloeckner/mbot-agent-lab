@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "labserver",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["nx", "run", "server:dev", "--outputStyle=stream"],
+      "port": 8080
+    },
+    {
+      "name": "web-dev",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["nx", "run", "web:dev", "--outputStyle=stream"],
+      "port": 5173
+    }
+  ]
+}
