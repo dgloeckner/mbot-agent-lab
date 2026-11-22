@@ -1,5 +1,5 @@
 #cloud-config
-# Prepares an Ubuntu VM for labserver. The binary is installed by `make deploy`;
+# Prepares an Ubuntu VM for labserver. The binary is installed by `nx run server:deploy`;
 # config and secrets go into /etc/labserver by hand (see README.md).
 users:
   - default

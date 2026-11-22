@@ -1,0 +1,74 @@
+{
+  "$schema": "../node_modules/nx/schemas/project-schema.json",
+  "name": "server",
+  "projectType": "application",
+  "sourceRoot": "server",
+  "targets": {
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "server",
+        "commands": ["test -z \"$(gofmt -l .)\" || (gofmt -l . && exit 1)", "go vet ./..."],
+        "parallel": false
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "inputs": [
+        "default",
+        "protocol",
+        "{workspaceRoot}/configs/*.example.yaml",
+        "{workspaceRoot}/deploy/local/*.yaml"
+      ],
+      "options": {
+        "cwd": "server",
+        "command": "go test ./..."
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/bin/labserver"],
+      "options": {
+        "cwd": "server",
+        "command": "go build -ldflags \"-s -w -X main.version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)\" -o ../bin/labserver ./cmd/labserver"
+      }
+    },
+    "build-linux": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["default"],
+      "outputs": ["{workspaceRoot}/bin/labserver-linux-amd64"],
+      "options": {
+        "cwd": "server",
+        "command": "CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags \"-s -w -X main.version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)\" -o ../bin/labserver-linux-amd64 ./cmd/labserver"
+      }
+    },
+    "dev": {
+      "executor": "nx:run-commands",
+      "continuous": true,
+      "options": {
+        "cwd": "server",
+        "command": "MISTRAL_API_KEY=${MISTRAL_API_KEY:-unset} go run ./cmd/labserver -config ../deploy/local/lab.yaml",
+        "env": {
+          "LAB_ADMIN_PASSWORD": "dev",
+          "MBOT1_PASSWORD": "dev",
+          "MBOT2_PASSWORD": "dev",
+          "TEAM_ROT_TOKEN": "rot-dev",
+          "TEAM_BLAU_TOKEN": "blau-dev"
+        }
+      }
+    },
+    "deploy": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build-linux"],
+      "options": {
+        "commands": [
+          "test -n \"$HOST\" || (echo 'usage: HOST=user@vm npx nx run server:deploy' && exit 1)",
+          "scp bin/labserver-linux-amd64 \"$HOST\":/tmp/labserver",
+          "ssh \"$HOST\" 'sudo install -m 0755 /tmp/labserver /usr/local/bin/labserver && sudo systemctl restart labserver'"
+        ],
+        "parallel": false
+      }
+    }
+  }
+}

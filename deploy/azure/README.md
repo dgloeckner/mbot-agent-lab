@@ -8,7 +8,7 @@ TLS (8883), the lab PCs in the corporate network only need HTTPS (443) in the br
 2. Copy `configs/lab.example.yaml` to `/etc/labserver/lab.yaml` and adapt hosts, robots, teams.
 3. Create `/etc/labserver/secrets.env` (mode 600) with all variables named in the config.
 4. Install `deploy/systemd/labserver.service` to `/etc/systemd/system/` and enable it.
-5. `make deploy HOST=user@vm` builds for linux/amd64, copies the binary and restarts the service.
+5. `HOST=user@vm npx nx run server:deploy` builds for linux/amd64, copies the binary and restarts the service.
 
 Open points: VM creation script (`az` CLI), whether port 80 is needed for ACME, backups of
 `/var/lib/labserver/lab.db`.

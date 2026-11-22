@@ -35,7 +35,13 @@ Full background and all decisions: `docs/handoff.md` (original handoff, German).
 
 ## Commands
 
-- `make test`: Go vet + tests, Python tests.
-- `make dev`: server with `deploy/local/lab.yaml` (HTTP 127.0.0.1:8080, MQTT :1883, dev secrets).
-- `make sim ROBOTS=2 WORLD=sim/worlds/labyrinth.json`: simulated robots against the local server.
-- `make bundle [CONFIG=robot/config.py]`: build `robot/dist/main.py`.
+Tasks run through Nx (`nx:run-commands` in `server/`, `robot/`, `sim/` `project.json`; no Make,
+the user chose Nx over Make). Run `npm install` once.
+
+- `npx nx run-many -t lint test`: gofmt + go vet, Go tests, Python tests. Cached.
+- `npx nx run server:dev`: server with `deploy/local/lab.yaml` (HTTP 127.0.0.1:8080, MQTT :1883,
+  dev secrets set in `server/project.json`).
+- `npx nx run sim:run --robots=2 --world=sim/worlds/labyrinth.json`: simulated robots.
+- `npx nx run robot:bundle [--config=robot/config.py]`: build `robot/dist/main.py`.
+- New inputs a task depends on (e.g. shared example files) must be listed in its `inputs`, or the
+  Nx cache returns stale results.

@@ -1,0 +1,16 @@
+{
+  "$schema": "../node_modules/nx/schemas/project-schema.json",
+  "name": "robot",
+  "projectType": "application",
+  "sourceRoot": "robot/src",
+  "targets": {
+    "bundle": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "outputs": ["{projectRoot}/dist"],
+      "options": {
+        "command": "python3 robot/tools/bundle.py"
+      }
+    }
+  }
+}

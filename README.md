@@ -39,23 +39,43 @@ tools, understanding attacks such as prompt injection, and treating tokens as a 
 
 ## Quick start (no hardware needed)
 
-Requirements: Go (see `server/go.mod`), Python 3.10+, make.
+Requirements: Go (see `server/go.mod`), Python 3.10+, Node.js 20+ (only for the Nx task runner).
 
 ```bash
-make dev
+npm install
+```
+
+```bash
+npx nx run server:dev
 ```
 
 In a second terminal:
 
 ```bash
-make sim
+npx nx run sim:run --robots=2 --world=sim/worlds/labyrinth.json
 ```
 
 Open http://127.0.0.1:8080: both simulated robots show up as online.
 
 ```bash
-make test
+npx nx run-many -t lint test
 ```
+
+## Tasks
+
+Tasks run through [Nx](https://nx.dev). The workspace has three projects: `server`, `robot` and
+`sim`. Results of `lint`, `test` and the builds are cached, and `npx nx affected -t test` only
+tests what changed compared to `main`.
+
+| Command | What it does |
+| --- | --- |
+| `npx nx run server:dev` | server with `deploy/local/lab.yaml` and dev secrets (HTTP 127.0.0.1:8080, MQTT :1883) |
+| `npx nx run sim:run [--robots=2] [--world=…]` | simulated robots against the local server |
+| `npx nx run-many -t lint test` | gofmt and go vet, Go tests, robot and simulator tests |
+| `npx nx run robot:bundle [--config=robot/config.py]` | build `robot/dist/main.py` |
+| `npx nx run server:build` / `server:build-linux` | build the server into `bin/` |
+| `HOST=user@vm npx nx run server:deploy` | build for linux/amd64, copy to the VM, restart |
+| `npx nx graph` | show projects and task dependencies |
 
 ## Real robots
 
@@ -64,7 +84,7 @@ make test
 2. Bundle the script with the config inlined:
 
    ```bash
-   make bundle CONFIG=robot/config.py
+   npx nx run robot:bundle --config=robot/config.py
    ```
 
 3. Upload `robot/dist/main.py` to the CyberPi with mBlock in upload mode.
