@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
 import { useSignal } from '@preact/signals'
 import { clock, describe, logGroup, relativeTime } from '../format'
-import { addNote, deleteNote, editorBridge, log, notes, prefs, saveNote, sendMessage, session, updatePrefs } from '../state'
+import { addNote, deleteNote, editorBridge, log, notes, prefs, robots, saveNote, sendMessage, session, updatePrefs } from '../state'
 import type { SideTab } from '../storage'
 import type { LogEntry, Note } from '../types'
 import { SendIcon } from './icons'
@@ -196,6 +196,17 @@ function ToolsPanel() {
   return (
     <div class="tools-panel scroll">
       <p class="panel-intro">Diese Werkzeuge kann euer Agent benutzen. Klickt eins an, um seinen Namen in den Prompt einzufügen.</p>
+      {robots.value.length > 1 && (
+        <p class="panel-intro multi-robot">
+          Euer Agent steuert {robots.value.length} Roboter: {robots.value.map((r, i) => (
+            <span key={r.id}>
+              {i > 0 && (i === robots.value.length - 1 ? ' und ' : ', ')}
+              <button class="tool-inline" onClick={() => editorBridge.insert?.(r.alias)}>{r.alias}</button>
+            </span>
+          ))}
+          . Bewegungs-Werkzeuge bekommen dann den Parameter <code>robot</code> mit einem dieser Namen, <code>stop</code> geht auch mit <code>alle</code>.
+        </p>
+      )}
       {groups.map((g) => (
         <section key={g}>
           <h3>{g}</h3>

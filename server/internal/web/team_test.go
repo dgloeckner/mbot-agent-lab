@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/config"
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/lab"
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/live"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/robots"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/store"
 )
@@ -24,29 +26,51 @@ type nopBus struct{}
 func (nopBus) Publish(string, []byte, bool, byte) error       { return nil }
 func (nopBus) Handle(string, int, func(string, []byte)) error { return nil }
 
-func newTestServer(t *testing.T) *httptest.Server {
+// testLab is a server with two teams ("tok-rot" owns mbot-1, "tok-blau" owns
+// mbot-2) and a free robot mbot-3. The lab code is TEST and the admin password pw.
+type testLab struct {
+	*httptest.Server
+	lab *lab.Service
+	reg *robots.Registry
+}
+
+func newTestServer(t *testing.T) *testLab {
 	t.Helper()
+	ctx := context.Background()
 	cfg := &config.Config{
-		Robots:   []config.Robot{{ID: "mbot-1", Color: "red"}, {ID: "mbot-2", Color: "blue"}},
-		Teams:    []config.Team{{ID: "rot", Name: "Team Rot", Token: "tok-rot"}, {ID: "blau", Name: "Team Blau", Token: "tok-blau"}},
-		Profile:  "einzel",
-		Profiles: map[string]config.Profile{"einzel": {"rot": {"ich": "mbot-1"}, "blau": {"ich": "mbot-2"}}},
+		Server: config.Server{AdminPassword: "pw", LabCode: "TEST"},
+		Robots: []config.Robot{{ID: "mbot-1", Color: "red"}, {ID: "mbot-2", Color: "blue"}, {ID: "mbot-3", Color: "green"}},
 	}
-	st, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "lab.db"))
+	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "lab.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	reg := robots.New(nopBus{}, []robots.Spec{{ID: "mbot-1", Color: "red"}, {ID: "mbot-2", Color: "blue"}}, nil)
-	_ = reg.Assign("mbot-1", "rot", "Team Rot", "ich")
-	_ = reg.Assign("mbot-2", "blau", "Team Blau", "ich")
-	s := &Server{Config: cfg, Robots: reg, Store: st, Hub: NewHub(), Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	reg := robots.New(nopBus{}, []robots.Spec{{ID: "mbot-1", Color: "red"}, {ID: "mbot-2", Color: "blue"}, {ID: "mbot-3", Color: "green"}}, log)
+	hub := live.NewHub()
+	svc := &lab.Service{Store: st, Robots: reg, Hub: hub, Config: cfg, Log: log}
+	if err := svc.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, tm := range []store.Team{{ID: "rot", Name: "Team Rot", Token: "tok-rot", Color: "red"}, {ID: "blau", Name: "Team Blau", Token: "tok-blau", Color: "blue"}} {
+		if _, err := st.CreateTeam(ctx, tm); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := svc.AssignRobot(ctx, "mbot-1", "rot"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.AssignRobot(ctx, "mbot-2", "blau"); err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{Config: cfg, Robots: reg, Store: st, Hub: hub, Lab: svc, Log: log}
 	srv := httptest.NewServer(s.Handler())
 	t.Cleanup(srv.Close)
-	return srv
+	return &testLab{Server: srv, lab: svc, reg: reg}
 }
 
-func do(t *testing.T, srv *httptest.Server, method, path, body string) (int, map[string]any) {
+func do(t *testing.T, srv *testLab, method, path, body string) (int, map[string]any) {
 	t.Helper()
 	req, _ := http.NewRequest(method, srv.URL+path, strings.NewReader(body))
 	resp, err := http.DefaultClient.Do(req)
@@ -94,7 +118,7 @@ func TestDeployAndSession(t *testing.T) {
 	if n := len(sess["versions"].([]any)); n != 2 {
 		t.Errorf("versions = %d", n)
 	}
-	if robots := sess["robots"].([]any); len(robots) != 1 || robots[0].(map[string]any)["alias"] != "ich" {
+	if robots := sess["robots"].([]any); len(robots) != 1 || robots[0].(map[string]any)["alias"] != "rot" {
 		t.Errorf("robots = %v", robots)
 	}
 	_, other := do(t, srv, "GET", "/t/tok-blau/api/session", "")
@@ -147,8 +171,9 @@ func TestEventsStream(t *testing.T) {
 	}
 	next("event: robots")
 	do(t, srv, "POST", "/t/tok-rot/message", `{"text":"Hallo"}`)
-	next("event: log")
-	if data := next("data: "); !strings.Contains(data, `"text":"Hallo"`) {
-		t.Errorf("log data = %s", data)
+	for {
+		if data := next("data: "); strings.Contains(data, `"text":"Hallo"`) {
+			break
+		}
 	}
 }

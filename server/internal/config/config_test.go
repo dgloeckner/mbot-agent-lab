@@ -12,6 +12,7 @@ server:
   http_addr: ":8080"
   mqtt_plain_addr: ":1883"
   admin_password_env: ADMIN
+  lab_code_env: LAB_CODE
 llm:
   default: mistral
   providers:
@@ -20,21 +21,11 @@ llm:
 robots:
   - { id: mbot-1, password_env: P1, color: red }
   - { id: mbot-2, password_env: P2, color: blue }
-teams:
-  - { id: rot,  name: "Team Rot",  token_env: T_ROT }
-  - { id: blau, name: "Team Blau", token_env: T_BLAU }
-profile: einzel
-profiles:
-  einzel:
-    rot:  { ich: mbot-1 }
-    blau: { ich: mbot-2 }
-  duo:
-    rot: { links: mbot-1, rechts: mbot-2 }
 `
 
 func env(extra map[string]string) func(string) (string, bool) {
 	vals := map[string]string{
-		"ADMIN": "a", "MISTRAL": "k", "P1": "p1", "P2": "p2", "T_ROT": "tr", "T_BLAU": "tb",
+		"ADMIN": "a", "MISTRAL": "k", "P1": "p1", "P2": "p2", "LAB_CODE": " dev1 ",
 	}
 	for k, v := range extra {
 		vals[k] = v
@@ -47,15 +38,14 @@ func TestParseValid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Robots[0].Password != "p1" || c.Teams[1].Token != "tb" || c.LLM.Providers["mistral"].APIKey != "k" {
+	if c.Robots[0].Password != "p1" || c.LLM.Providers["mistral"].APIKey != "k" {
 		t.Errorf("secrets not resolved: %+v", c)
+	}
+	if c.Server.LabCode != "DEV1" {
+		t.Errorf("lab code = %q, want DEV1", c.Server.LabCode)
 	}
 	if c.Budgets.MaxStepsPerWakeup != DefaultMaxStepsPerWakeup {
 		t.Errorf("defaults not applied")
-	}
-	a := c.Assignments()
-	if a["mbot-2"].TeamID != "blau" || a["mbot-2"].Alias != "ich" {
-		t.Errorf("unexpected assignment %+v", a["mbot-2"])
 	}
 }
 
@@ -66,11 +56,9 @@ func TestParseErrors(t *testing.T) {
 		want       string
 	}{
 		{"missing secret", validYAML, map[string]string{"P2": ""}, "P2"},
-		{"robot assigned twice", strings.Replace(validYAML, "blau: { ich: mbot-2 }", "blau: { ich: mbot-1 }", 1), nil, `robot "mbot-1" assigned twice`},
-		{"unknown robot", strings.Replace(validYAML, "rechts: mbot-2", "rechts: mbot-9", 1), nil, `unknown robot "mbot-9"`},
-		{"unknown profile", strings.Replace(validYAML, "profile: einzel", "profile: nope", 1), nil, `"nope" is not defined`},
+		{"duplicate robot", strings.Replace(validYAML, "id: mbot-2", "id: mbot-1", 1), nil, `duplicate id "mbot-1"`},
 		{"unknown field", validYAML + "\nfoo: 1\n", nil, "field foo not found"},
-		{"reserved alias", strings.Replace(validYAML, "links:", "all:", 1), nil, "reserved"},
+		{"old teams section", validYAML + "\nteams: []\n", nil, "field teams not found"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

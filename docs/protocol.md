@@ -70,14 +70,19 @@ Sent immediately on change, otherwise two to five times per second.
 ### `hb`
 
 ```json
-{"owner":"Team Rot","color":"red","agent":"thinking"}
+{"team":"t4kq9ma","owner":"Rote Raketen","name":"Scout","color":"red","agent":"thinking"}
 ```
 
-> **Addition to the handoff, to be confirmed:** the handoff does not define the heartbeat
-> payload. Here it carries the owner's display name, the team color and the agent state
-> (`waiting`, `thinking`, `acting`). Because it arrives every second, a change reaches the robot
-> even if single QoS 0 messages get lost. `owner` is empty when the robot is free; it then shows
-> "frei" and stands still.
+- `team`: ID of the owning team, empty when the robot is free. When it changes, the robot stops,
+  clears its trip log and shows the new owner. Renaming the team or the robot does not change it,
+  so a run is not interrupted.
+- `owner`: team name, `name`: what the team calls this robot. Both are shown on the display.
+- `color`: team color for the LEDs. `agent`: `waiting`, `thinking` or `acting`; the LEDs pulse while
+  the agent thinks.
+
+> **Addition to the handoff:** the handoff does not define the heartbeat payload. It carries owner
+> and agent state so that changes reach the robot even when single QoS 0 messages get lost.
+> A free robot shows "frei" and stands still.
 
 ## Skills (`cmd.name`)
 

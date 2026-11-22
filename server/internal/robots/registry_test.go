@@ -116,3 +116,27 @@ func TestEventsAndState(t *testing.T) {
 		t.Errorf("snapshot = %+v", snap[0])
 	}
 }
+
+func TestReassignEndsRunningCommand(t *testing.T) {
+	r := newOnline(t, &fakeBus{})
+	_ = r.Assign("mbot-1", Owner{TeamID: "rot", TeamName: "Rot", Color: "red", Alias: "Scout"})
+	done := make(chan protocol.Result, 1)
+	go func() {
+		res, _ := r.Send(context.Background(), "mbot-1", "drive", nil, 5*time.Second)
+		done <- res
+	}()
+	time.Sleep(20 * time.Millisecond) // let Send register the pending command
+	_ = r.Assign("mbot-1", Owner{TeamID: "blau", TeamName: "Blau", Color: "blue", Alias: "rot"})
+	select {
+	case res := <-done:
+		if res.Reason != protocol.ReasonReassigned {
+			t.Errorf("reason = %q", res.Reason)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("running command did not end on reassignment")
+	}
+	snap := r.Snapshot()[0]
+	if snap.Owner != "blau" || snap.TeamColor != "blue" {
+		t.Errorf("snapshot = %+v", snap)
+	}
+}

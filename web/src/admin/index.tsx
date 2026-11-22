@@ -1,0 +1,382 @@
+import { render } from 'preact'
+import { useEffect, useState } from 'preact/hooks'
+import { signal } from '@preact/signals'
+import { COLOR_HEX, colorName, onColor, relativeTime, skillName } from '../format'
+import type { RobotState } from '../types'
+import './admin.css'
+
+interface AdminRobot {
+  id: string
+  color: string
+  online: boolean
+  accepted: boolean
+  script: string
+  team: string
+  alias: string
+  state: RobotState
+}
+
+interface AdminTeam {
+  id: string
+  name: string
+  color: string
+  link: string
+  connected: number
+  created_at: string
+}
+
+interface AdminState {
+  lab_code: string
+  teams: AdminTeam[]
+  robots: AdminRobot[]
+}
+
+const state = signal<AdminState | null>(null)
+const auth = signal<'checking' | 'login' | 'ok'>('checking')
+const live = signal(false)
+const toast = signal<{ text: string; error: boolean } | null>(null)
+let toastTimer: number | undefined
+
+function say(text: string, error = false) {
+  toast.value = { text, error }
+  window.clearTimeout(toastTimer)
+  toastTimer = window.setTimeout(() => (toast.value = null), error ? 6000 : 2600)
+}
+
+async function call(method: string, path: string, body?: unknown): Promise<any> {
+  let resp: Response
+  try {
+    resp = await fetch(`/admin/api${path}`, {
+      method,
+      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+  } catch {
+    throw new Error('Keine Verbindung zum Server.')
+  }
+  if (resp.status === 401) {
+    auth.value = 'login'
+    throw new Error('Bitte meldet euch neu an.')
+  }
+  if (resp.status === 204) return null
+  const data = await resp.json().catch(() => null)
+  if (!resp.ok) throw new Error(data?.error ?? `Fehler ${resp.status}`)
+  return data
+}
+
+async function act(p: Promise<unknown>, ok?: string) {
+  try {
+    await p
+    if (ok) say(ok)
+    // Show the result right away instead of waiting for the next live update.
+    if (auth.value === 'ok') state.value = await call('GET', '/state')
+  } catch (e) {
+    say((e as Error).message, true)
+  }
+}
+
+let es: EventSource | null = null
+function connect() {
+  es?.close()
+  es = new EventSource('/admin/api/events')
+  es.addEventListener('open', () => (live.value = true))
+  es.addEventListener('error', () => {
+    live.value = false
+    // A closed stream usually means the session expired: check and show the login if so.
+    if (es?.readyState === EventSource.CLOSED) void start()
+  })
+  es.addEventListener('state', (ev) => (state.value = JSON.parse((ev as MessageEvent).data)))
+}
+
+async function start() {
+  try {
+    state.value = await call('GET', '/state')
+    auth.value = 'ok'
+    connect()
+  } catch {
+    if (auth.value !== 'login') window.setTimeout(start, 3000)
+  }
+}
+
+const assign = (robot: string, team: string) => {
+  const r = state.value?.robots.find((x) => x.id === robot)
+  if (!r || r.team === team) return
+  const tname = state.value?.teams.find((t) => t.id === team)?.name
+  void act(call('POST', '/assign', { robot, team }), team ? `${robot} gehört jetzt ${tname}` : `${robot} ist frei`)
+}
+
+// ---------------------------------------------------------------------------
+
+function Login() {
+  const [pw, setPw] = useState('')
+  const [err, setErr] = useState<string | null>(null)
+  return (
+    <main class="admin-login">
+      <form
+        onSubmit={async (ev) => {
+          ev.preventDefault()
+          setErr(null)
+          try {
+            await call('POST', '/login', { password: pw })
+            setPw('')
+            await start()
+          } catch (e) {
+            setErr((e as Error).message)
+          }
+        }}
+      >
+        <h1>Leitstand</h1>
+        <label>
+          <span>Passwort</span>
+          <input type="password" value={pw} autoComplete="current-password" onInput={(e) => setPw(e.currentTarget.value)} autoFocus required />
+        </label>
+        {err && (
+          <p class="form-error" role="alert">
+            {err}
+          </p>
+        )}
+        <button class="btn btn-accent" type="submit">
+          Anmelden
+        </button>
+      </form>
+    </main>
+  )
+}
+
+function RobotChip({ r, teams, inTeam }: { r: AdminRobot; teams: AdminTeam[]; inTeam: boolean }) {
+  const status = !r.online ? 'offline' : !r.accepted ? 'falsche Version' : r.state.tilted ? 'umgekippt' : `${r.state.battery} %`
+  return (
+    <li
+      class="chip-robot"
+      data-online={r.online && r.accepted}
+      draggable
+      onDragStart={(ev) => {
+        ev.dataTransfer!.setData('text/robot', r.id)
+        ev.dataTransfer!.effectAllowed = 'move'
+      }}
+    >
+      <span class="robot-color" style={{ background: COLOR_HEX[r.color] ?? '#999' }} title={`Aufkleberfarbe: ${colorName(r.color)}`} />
+      <span class="chip-main">
+        <strong>{inTeam && r.alias ? r.alias : r.id}</strong>
+        <span>
+          {inTeam && r.alias ? `${r.id}, ` : ''}
+          {status}
+          {r.online && r.accepted ? `, ${skillName(r.state.skill)}` : ''}
+        </span>
+      </span>
+      <select
+        class="chip-move"
+        aria-label={`${r.id} zuteilen`}
+        value={r.team}
+        onChange={(e) => assign(r.id, e.currentTarget.value)}
+      >
+        <option value="">frei</option>
+        {teams.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.name}
+          </option>
+        ))}
+      </select>
+    </li>
+  )
+}
+
+function DropZone(props: { team: string; class: string; children: preact.ComponentChildren; label: string }) {
+  const [over, setOver] = useState(false)
+  return (
+    <section
+      class={`${props.class}${over ? ' drop-over' : ''}`}
+      aria-label={props.label}
+      onDragOver={(ev) => {
+        if (ev.dataTransfer?.types.includes('text/robot')) {
+          ev.preventDefault()
+          setOver(true)
+        }
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(ev) => {
+        ev.preventDefault()
+        setOver(false)
+        const id = ev.dataTransfer?.getData('text/robot')
+        if (id) assign(id, props.team)
+      }}
+    >
+      {props.children}
+    </section>
+  )
+}
+
+function TeamCard({ t, robots, teams }: { t: AdminTeam; robots: AdminRobot[]; teams: AdminTeam[] }) {
+  const [editing, setEditing] = useState(false)
+  const [name, setName] = useState(t.name)
+  const accent = COLOR_HEX[t.color] ?? COLOR_HEX.blue
+  const mine = robots.filter((r) => r.team === t.id)
+  return (
+    <DropZone team={t.id} class="team-card" label={`Team ${t.name}`}>
+      <header class="team-head" style={{ background: accent, color: onColor(accent) }}>
+        {editing ? (
+          <form
+            class="rename"
+            onSubmit={async (ev) => {
+              ev.preventDefault()
+              await act(call('PUT', `/teams/${t.id}`, { name }), 'Team umbenannt')
+              setEditing(false)
+            }}
+          >
+            <input value={name} maxLength={30} onInput={(e) => setName(e.currentTarget.value)} aria-label="Teamname" autoFocus />
+            <button class="btn btn-small" type="submit">
+              Speichern
+            </button>
+          </form>
+        ) : (
+          <h2>{t.name}</h2>
+        )}
+        <span class="presence" title="Offene Teamseiten">
+          {t.connected === 0 ? 'nicht verbunden' : t.connected === 1 ? '1 Browser' : `${t.connected} Browser`}
+        </span>
+      </header>
+      <ul class="robot-list">
+        {mine.length === 0 ? (
+          <li class="drop-hint">Roboter hierher ziehen oder unten auswählen</li>
+        ) : (
+          mine.map((r) => <RobotChip key={r.id} r={r} teams={teams} inTeam />)
+        )}
+      </ul>
+      <footer class="team-foot">
+        <select
+          aria-label={`Roboter zu ${t.name} hinzufügen`}
+          value=""
+          onChange={(e) => {
+            if (e.currentTarget.value) assign(e.currentTarget.value, t.id)
+            e.currentTarget.value = ''
+          }}
+        >
+          <option value="">Roboter hinzufügen …</option>
+          {robots
+            .filter((r) => r.team !== t.id)
+            .map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.id}
+                {r.team ? ` (bei ${teams.find((x) => x.id === r.team)?.name ?? '?'})` : ' (frei)'}
+              </option>
+            ))}
+        </select>
+        <span class="spacer" />
+        <button
+          class="btn-link"
+          onClick={() =>
+            act(
+              navigator.clipboard.writeText(location.origin + t.link),
+              'Team-Link kopiert',
+            )
+          }
+        >
+          Link kopieren
+        </button>
+        <button class="btn-link" onClick={() => (setName(t.name), setEditing(!editing))}>
+          {editing ? 'Abbrechen' : 'Umbenennen'}
+        </button>
+        <button
+          class="btn-link danger"
+          onClick={() => {
+            if (confirm(`Team „${t.name}“ löschen? Seine Roboter werden frei, und der Team-Link funktioniert nicht mehr.`)) {
+              void act(call('DELETE', `/teams/${t.id}`), `Team ${t.name} gelöscht`)
+            }
+          }}
+        >
+          Löschen
+        </button>
+      </footer>
+      <p class="team-age">Beigetreten {relativeTime(t.created_at)}</p>
+    </DropZone>
+  )
+}
+
+function Board() {
+  const s = state.value!
+  const free = s.robots.filter((r) => !r.team)
+  const joinUrl = `${location.host}/join`
+  const online = s.robots.filter((r) => r.online).length
+  return (
+    <div class="admin">
+      <header class="admin-bar">
+        <div class="admin-title">
+          <h1>Leitstand</h1>
+          <span class={live.value ? 'live on' : 'live'}>{live.value ? 'live' : 'verbinde …'}</span>
+        </div>
+        <div class="labcode" aria-label="Lab-Code">
+          <span class="labcode-label">
+            Teams gründen auf <strong>{joinUrl}</strong> mit dem Code
+          </span>
+          <span class="labcode-value">{s.lab_code}</span>
+          <button
+            class="btn btn-quiet btn-small"
+            onClick={() => {
+              if (confirm('Neuen Lab-Code erzeugen? Der alte gilt dann nicht mehr. Teams, die schon beigetreten sind, behalten ihren Link.')) {
+                void act(call('POST', '/lab-code'), 'Neuer Lab-Code')
+              }
+            }}
+          >
+            Neuer Code
+          </button>
+        </div>
+        <div class="admin-actions">
+          <button class="btn btn-stop-all" onClick={() => act(call('POST', '/stop-all'), 'Alle Roboter angehalten')}>
+            Alle anhalten
+          </button>
+          <button class="btn btn-quiet" onClick={() => act(call('POST', '/logout').then(() => (auth.value = 'login')))}>
+            Abmelden
+          </button>
+        </div>
+      </header>
+
+      <main class="admin-main">
+        <DropZone team="" class="pool" label="Freie Roboter">
+          <h2>Freie Roboter</h2>
+          <p class="pool-sub">
+            {online} von {s.robots.length} online. Zieht einen Roboter auf ein Team.
+          </p>
+          <ul class="robot-list">
+            {free.length === 0 ? <li class="drop-hint">Alle Roboter sind zugeteilt. Hierher ziehen gibt einen frei.</li> : free.map((r) => <RobotChip key={r.id} r={r} teams={s.teams} inTeam={false} />)}
+          </ul>
+        </DropZone>
+
+        <section class="teams" aria-label="Teams">
+          {s.teams.length === 0 ? (
+            <div class="teams-empty">
+              <h2>Noch keine Teams</h2>
+              <p>
+                Teams öffnen <strong>{joinUrl}</strong>, geben den Lab-Code <strong>{s.lab_code}</strong> und ihren Namen ein. Sie erscheinen
+                dann hier.
+              </p>
+            </div>
+          ) : (
+            s.teams.map((t) => <TeamCard key={t.id} t={t} robots={s.robots} teams={s.teams} />)
+          )}
+        </section>
+      </main>
+    </div>
+  )
+}
+
+function AdminApp() {
+  useEffect(() => {
+    void start()
+    return () => es?.close()
+  }, [])
+  return (
+    <>
+      {auth.value === 'login' ? <Login /> : auth.value === 'ok' && state.value ? <Board /> : <main class="fullpage-message" aria-busy="true" />}
+      {toast.value && (
+        <div class={`toast${toast.value.error ? ' toast-error' : ''}`} role={toast.value.error ? 'alert' : 'status'}>
+          {toast.value.text}
+        </div>
+      )}
+    </>
+  )
+}
+
+export function mount(el: HTMLElement) {
+  document.title = 'Leitstand: mBot2 Agent Lab'
+  render(<AdminApp />, el)
+}

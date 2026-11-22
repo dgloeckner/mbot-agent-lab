@@ -1,4 +1,6 @@
-package web
+// Package live fans out log entries to the browsers of each team (SSE) and
+// counts how many browsers of a team are connected.
+package live
 
 import (
 	"encoding/json"
@@ -87,4 +89,18 @@ func (h *Hub) Subscribe(team string, afterID int64) (backlog []LogEntry, ch <-ch
 		delete(h.subs[team], c)
 		h.mu.Unlock()
 	}
+}
+
+// Connected returns how many live connections a team has open.
+func (h *Hub) Connected(team string) int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.subs[team])
+}
+
+// Forget drops the backlog of a deleted team.
+func (h *Hub) Forget(team string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.backlog, team)
 }

@@ -19,6 +19,8 @@ import (
 
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/broker"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/config"
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/lab"
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/live"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/robots"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/store"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/web"
@@ -92,11 +94,10 @@ func run(configPath string, log *slog.Logger) error {
 	defer mq.Close()
 
 	reg := robots.New(mq, specs, log)
-	for robotID, a := range cfg.Assignments() {
-		team, _ := cfg.Team(a.TeamID)
-		if err := reg.Assign(robotID, a.TeamID, team.Name, a.Alias); err != nil {
-			return err
-		}
+	hub := live.NewHub()
+	labSvc := &lab.Service{Store: db, Robots: reg, Hub: hub, Config: cfg, Log: log}
+	if err := labSvc.Start(ctx); err != nil {
+		return fmt.Errorf("load teams: %w", err)
 	}
 	go func() {
 		if err := reg.Run(ctx); err != nil {
@@ -105,7 +106,7 @@ func run(configPath string, log *slog.Logger) error {
 		}
 	}()
 
-	ui := &web.Server{Config: cfg, Robots: reg, Store: db, Hub: web.NewHub(), Log: log}
+	ui := &web.Server{Config: cfg, Robots: reg, Store: db, Hub: hub, Lab: labSvc, Log: log}
 	go ui.Run(ctx)
 	srv := &http.Server{
 		Addr:              cfg.Server.HTTPAddr,
@@ -116,7 +117,7 @@ func run(configPath string, log *slog.Logger) error {
 	errc := make(chan error, 1)
 	go func() {
 		log.Info("labserver started", "version", version, "http", cfg.Server.HTTPAddr,
-			"mqtt", cfg.Server.MQTTPlainAddr, "mqtts", cfg.Server.MQTTTLSAddr, "profile", cfg.Profile)
+			"mqtt", cfg.Server.MQTTPlainAddr, "mqtts", cfg.Server.MQTTTLSAddr, "lab_code", labSvc.LabCode())
 		if tlsConfig != nil {
 			errc <- srv.ListenAndServeTLS("", "")
 		} else {

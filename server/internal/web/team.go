@@ -13,7 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/dgloeckner/mbot-agent-lab/server/internal/config"
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/live"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/protocol"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/store"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/tools"
@@ -49,7 +49,7 @@ func (s *Server) teamRobots(teamID string) []RobotView {
 	return out
 }
 
-func (s *Server) session(w http.ResponseWriter, r *http.Request, team config.Team) {
+func (s *Server) session(w http.ResponseWriter, r *http.Request, team store.Team) {
 	ctx := r.Context()
 	var prompt *store.Prompt
 	if p, err := s.Store.GetPrompt(ctx, team.ID, 0); err == nil {
@@ -69,7 +69,7 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request, team config.Tea
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"team":            map[string]string{"id": team.ID, "name": team.Name, "color": s.Config.TeamColor(team.ID)},
+		"team":            map[string]string{"id": team.ID, "name": team.Name, "color": team.Color},
 		"robots":          s.teamRobots(team.ID),
 		"agent":           protocol.AgentWaiting,
 		"agent_available": false,
@@ -83,7 +83,7 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request, team config.Tea
 	})
 }
 
-func (s *Server) listPrompts(w http.ResponseWriter, r *http.Request, team config.Team) {
+func (s *Server) listPrompts(w http.ResponseWriter, r *http.Request, team store.Team) {
 	versions, err := s.Store.ListPrompts(r.Context(), team.ID)
 	if err != nil {
 		s.serverError(w, err)
@@ -92,7 +92,7 @@ func (s *Server) listPrompts(w http.ResponseWriter, r *http.Request, team config
 	writeJSON(w, http.StatusOK, versions)
 }
 
-func (s *Server) getPrompt(w http.ResponseWriter, r *http.Request, team config.Team) {
+func (s *Server) getPrompt(w http.ResponseWriter, r *http.Request, team store.Team) {
 	v, err := strconv.Atoi(r.PathValue("version"))
 	if err != nil || v < 1 {
 		writeError(w, http.StatusBadRequest, "Unbekannte Version.")
@@ -110,7 +110,7 @@ func (s *Server) getPrompt(w http.ResponseWriter, r *http.Request, team config.T
 	writeJSON(w, http.StatusOK, p)
 }
 
-func (s *Server) deployPrompt(w http.ResponseWriter, r *http.Request, team config.Team) {
+func (s *Server) deployPrompt(w http.ResponseWriter, r *http.Request, team store.Team) {
 	var req struct {
 		Text    string `json:"text"`
 		Restart bool   `json:"restart"`
@@ -132,12 +132,12 @@ func (s *Server) deployPrompt(w http.ResponseWriter, r *http.Request, team confi
 		return
 	}
 	data, _ := json.Marshal(map[string]any{"version": p.Version, "restart": req.Restart, "chars": p.Chars})
-	s.Hub.Publish(team.ID, LogEntry{Source: SourceTeam, Kind: "deploy", Data: data})
-	s.Hub.Publish(team.ID, LogEntry{Source: SourceSystem, Kind: "info", Text: agentUnavailable})
+	s.Hub.Publish(team.ID, live.LogEntry{Source: live.SourceTeam, Kind: "deploy", Data: data})
+	s.Hub.Publish(team.ID, live.LogEntry{Source: live.SourceSystem, Kind: "info", Text: agentUnavailable})
 	writeJSON(w, http.StatusCreated, p)
 }
 
-func (s *Server) message(w http.ResponseWriter, r *http.Request, team config.Team) {
+func (s *Server) message(w http.ResponseWriter, r *http.Request, team store.Team) {
 	var req struct {
 		Text string `json:"text"`
 	}
@@ -153,19 +153,19 @@ func (s *Server) message(w http.ResponseWriter, r *http.Request, team config.Tea
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("Die Nachricht hat %d Zeichen, erlaubt sind %d.", n, MaxMessageChars))
 		return
 	}
-	e := s.Hub.Publish(team.ID, LogEntry{Source: SourceTeam, Kind: "chat", Text: text})
-	s.Hub.Publish(team.ID, LogEntry{Source: SourceSystem, Kind: "info", Text: "Der Agent ist noch nicht verfügbar und hat die Nachricht nicht gelesen."})
+	e := s.Hub.Publish(team.ID, live.LogEntry{Source: live.SourceTeam, Kind: "chat", Text: text})
+	s.Hub.Publish(team.ID, live.LogEntry{Source: live.SourceSystem, Kind: "info", Text: "Der Agent ist noch nicht verfügbar und hat die Nachricht nicht gelesen."})
 	writeJSON(w, http.StatusAccepted, e)
 }
 
-func (s *Server) start(w http.ResponseWriter, _ *http.Request, team config.Team) {
-	s.Hub.Publish(team.ID, LogEntry{Source: SourceSystem, Kind: "info", Text: "Ein Lauf kann erst starten, wenn der Agent verfügbar ist."})
+func (s *Server) start(w http.ResponseWriter, _ *http.Request, team store.Team) {
+	s.Hub.Publish(team.ID, live.LogEntry{Source: live.SourceSystem, Kind: "info", Text: "Ein Lauf kann erst starten, wenn der Agent verfügbar ist."})
 	writeJSON(w, http.StatusAccepted, map[string]bool{"started": false})
 }
 
 // stop sends the stop command to every robot of the team in parallel.
-func (s *Server) stop(w http.ResponseWriter, r *http.Request, team config.Team) {
-	s.Hub.Publish(team.ID, LogEntry{Source: SourceTeam, Kind: "stop"})
+func (s *Server) stop(w http.ResponseWriter, r *http.Request, team store.Team) {
+	s.Hub.Publish(team.ID, live.LogEntry{Source: live.SourceTeam, Kind: "stop"})
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
 	type outcome struct {
@@ -193,12 +193,12 @@ func (s *Server) stop(w http.ResponseWriter, r *http.Request, team config.Team) 
 		if !o.OK {
 			text = fmt.Sprintf("%s hat den Stopp nicht bestätigt (%s).", o.Alias, o.Error)
 		}
-		s.Hub.Publish(team.ID, LogEntry{Source: SourceSystem, Kind: "info", Robot: o.Alias, Text: text})
+		s.Hub.Publish(team.ID, live.LogEntry{Source: live.SourceSystem, Kind: "info", Robot: o.Alias, Text: text})
 	}
 	writeJSON(w, http.StatusOK, results)
 }
 
-func (s *Server) listNotes(w http.ResponseWriter, r *http.Request, team config.Team) {
+func (s *Server) listNotes(w http.ResponseWriter, r *http.Request, team store.Team) {
 	notes, err := s.Store.ListNotes(r.Context(), team.ID)
 	if err != nil {
 		s.serverError(w, err)
@@ -226,7 +226,7 @@ func noteText(w http.ResponseWriter, r *http.Request) (string, bool) {
 	return text, true
 }
 
-func (s *Server) addNote(w http.ResponseWriter, r *http.Request, team config.Team) {
+func (s *Server) addNote(w http.ResponseWriter, r *http.Request, team store.Team) {
 	text, ok := noteText(w, r)
 	if !ok {
 		return
@@ -239,7 +239,7 @@ func (s *Server) addNote(w http.ResponseWriter, r *http.Request, team config.Tea
 	writeJSON(w, http.StatusCreated, n)
 }
 
-func (s *Server) updateNote(w http.ResponseWriter, r *http.Request, team config.Team) {
+func (s *Server) updateNote(w http.ResponseWriter, r *http.Request, team store.Team) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "Unbekannte Notiz.")
@@ -252,7 +252,7 @@ func (s *Server) updateNote(w http.ResponseWriter, r *http.Request, team config.
 	s.noteResult(w, s.Store.UpdateNote(r.Context(), team.ID, id, text))
 }
 
-func (s *Server) deleteNote(w http.ResponseWriter, r *http.Request, team config.Team) {
+func (s *Server) deleteNote(w http.ResponseWriter, r *http.Request, team store.Team) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "Unbekannte Notiz.")
@@ -285,7 +285,7 @@ const (
 
 // events streams robot snapshots ("robots") and log entries ("log") to the
 // team page. Last-Event-ID lets a reconnecting browser catch up on the log.
-func (s *Server) events(w http.ResponseWriter, r *http.Request, team config.Team) {
+func (s *Server) events(w http.ResponseWriter, r *http.Request, team store.Team) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		writeError(w, http.StatusInternalServerError, "Live-Verbindung nicht möglich.")
@@ -310,7 +310,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, team config.Team
 		_, err := fmt.Fprintf(w, "event: robots\ndata: %s\n\n", b)
 		return err
 	}
-	sendLog := func(e LogEntry) error {
+	sendLog := func(e live.LogEntry) error {
 		b, _ := json.Marshal(e)
 		_, err := fmt.Fprintf(w, "id: %d\nevent: log\ndata: %s\n\n", e.ID, b)
 		return err

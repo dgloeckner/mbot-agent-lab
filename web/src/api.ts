@@ -38,6 +38,9 @@ export const api = {
   addNote: (text: string) => req<Note>('POST', '/notes', { text }),
   updateNote: (id: number, text: string) => req<void>('PUT', `/notes/${id}`, { text }),
   deleteNote: (id: number) => req<void>('DELETE', `/notes/${id}`),
+  renameTeam: (name: string) => req<void>('PUT', '/name', { name }),
+  renameRobot: (robot: string, alias: string) => req<void>('PUT', `/robots/${encodeURIComponent(robot)}/alias`, { alias }),
+  identify: (robot: string) => req<void>('POST', `/robots/${encodeURIComponent(robot)}/identify`),
 }
 
 export type ConnState = 'connecting' | 'live' | 'reconnecting'
