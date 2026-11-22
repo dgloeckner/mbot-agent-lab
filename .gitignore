@@ -23,6 +23,9 @@ autocert-cache/
 .vscode/
 
 # Nx / Node
-/node_modules/
+node_modules/
 /.nx/cache/
 /.nx/workspace-data/
+
+# Team page build (embedded into the server)
+/server/internal/web/dist/app/

@@ -24,6 +24,12 @@ Full background and all decisions: `docs/handoff.md` (original handoff, German).
 - `robot/src/`: MicroPython modules, bundled in dependency order by `robot/tools/bundle.py` into
   one `main.py`. All modules share one namespace after bundling: no duplicate top-level names,
   import local names with `from module import name`. Only `hw.py` touches vendor modules.
+- `web/`: team page (Preact + signals, CodeMirror 6, Vite). `vite build` writes to
+  `server/internal/web/dist/app`, which the server embeds; `dist/README.md` keeps the embed
+  compiling without a build. No CDN assets: lab PCs sit behind a corporate proxy. Keep the
+  initial bundle lean: rarely used views (preview, history) are lazy-loaded via `web/src/lazy.tsx`,
+  and use `markdownLanguage` instead of `markdown()` (which drags in HTML/CSS/JS parsers).
+  Browser storage is only for drafts, draft snapshots and UI prefs (`web/src/storage.ts`).
 - `sim/`: fakes for `cyberpi`, `mbot2`, `mbuild`, `umqtt.simple` in `sim/fakes/`; 2D world in
   `sim/world.py`; tests in `sim/tests/` run the real bundle in-process.
 
@@ -39,6 +45,7 @@ Tasks run through Nx (`nx:run-commands` in `server/`, `robot/`, `sim/` `project.
 the user chose Nx over Make). Run `npm install` once.
 
 - `npx nx run-many -t lint test`: gofmt + go vet, Go tests, Python tests. Cached.
+- `npm run dev`: `server:dev` + `web:dev`; team page at http://localhost:5173/t/rot-dev.
 - `npx nx run server:dev`: server with `deploy/local/lab.yaml` (HTTP 127.0.0.1:8080, MQTT :1883,
   dev secrets set in `server/project.json`).
 - `npx nx run sim:run --robots=2 --world=sim/worlds/labyrinth.json`: simulated robots.

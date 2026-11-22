@@ -92,8 +92,26 @@ type Team struct {
 	ID       string `yaml:"id"`
 	Name     string `yaml:"name"`
 	TokenEnv string `yaml:"token_env"`
+	Color    string `yaml:"color"` // accent of the team page; defaults to the first robot's color
 
 	Token string `yaml:"-"`
+}
+
+// TeamColor returns the team's configured color, else the color of the
+// alphabetically first robot assigned to it in the active profile.
+func (c *Config) TeamColor(teamID string) string {
+	if t, ok := c.Team(teamID); ok && t.Color != "" {
+		return t.Color
+	}
+	aliases := c.Profiles[c.Profile][teamID]
+	for _, alias := range sortedKeys(aliases) {
+		for _, r := range c.Robots {
+			if r.ID == aliases[alias] && r.Color != "" {
+				return r.Color
+			}
+		}
+	}
+	return "blue"
 }
 
 // Profile is a complete assignment of robots: team ID -> alias -> robot ID.

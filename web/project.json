@@ -1,0 +1,27 @@
+{
+  "$schema": "../node_modules/nx/schemas/project-schema.json",
+  "name": "web",
+  "projectType": "application",
+  "sourceRoot": "web/src",
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "inputs": ["default", "{workspaceRoot}/package-lock.json"],
+      "outputs": ["{workspaceRoot}/server/internal/web/dist/app"],
+      "options": { "command": "vite build --config web/vite.config.mts" }
+    },
+    "dev": {
+      "executor": "nx:run-commands",
+      "continuous": true,
+      "options": { "command": "vite --config web/vite.config.mts" }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": { "command": "tsc -p web/tsconfig.json --noEmit" }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": { "command": "vitest run --config web/vite.config.mts" }
+    }
+  }
+}

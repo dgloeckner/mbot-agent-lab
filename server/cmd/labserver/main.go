@@ -105,7 +105,8 @@ func run(configPath string, log *slog.Logger) error {
 		}
 	}()
 
-	ui := &web.Server{Robots: reg, Log: log}
+	ui := &web.Server{Config: cfg, Robots: reg, Store: db, Hub: web.NewHub(), Log: log}
+	go ui.Run(ctx)
 	srv := &http.Server{
 		Addr:              cfg.Server.HTTPAddr,
 		Handler:           ui.Handler(),

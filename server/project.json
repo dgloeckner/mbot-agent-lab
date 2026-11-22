@@ -8,9 +8,20 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "server",
-        "commands": ["test -z \"$(gofmt -l .)\" || (gofmt -l . && exit 1)", "go vet ./..."],
+        "commands": [
+          "test -z \"$(gofmt -l .)\" || (gofmt -l . && exit 1)",
+          "go vet ./..."
+        ],
         "parallel": false
-      }
+      },
+      "dependsOn": [
+        {
+          "projects": [
+            "web"
+          ],
+          "target": "build"
+        }
+      ]
     },
     "test": {
       "executor": "nx:run-commands",
@@ -23,25 +34,66 @@
       "options": {
         "cwd": "server",
         "command": "go test ./..."
-      }
+      },
+      "dependsOn": [
+        {
+          "projects": [
+            "web"
+          ],
+          "target": "build"
+        }
+      ]
     },
     "build": {
       "executor": "nx:run-commands",
-      "outputs": ["{workspaceRoot}/bin/labserver"],
+      "outputs": [
+        "{workspaceRoot}/bin/labserver"
+      ],
       "options": {
         "cwd": "server",
         "command": "go build -ldflags \"-s -w -X main.version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)\" -o ../bin/labserver ./cmd/labserver"
-      }
+      },
+      "dependsOn": [
+        {
+          "projects": [
+            "web"
+          ],
+          "target": "build"
+        }
+      ],
+      "inputs": [
+        "default",
+        {
+          "dependentTasksOutputFiles": "**/*",
+          "transitive": true
+        }
+      ]
     },
     "build-linux": {
       "executor": "nx:run-commands",
       "cache": true,
-      "inputs": ["default"],
-      "outputs": ["{workspaceRoot}/bin/labserver-linux-amd64"],
+      "inputs": [
+        "default",
+        {
+          "dependentTasksOutputFiles": "**/*",
+          "transitive": true
+        }
+      ],
+      "outputs": [
+        "{workspaceRoot}/bin/labserver-linux-amd64"
+      ],
       "options": {
         "cwd": "server",
         "command": "CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags \"-s -w -X main.version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)\" -o ../bin/labserver-linux-amd64 ./cmd/labserver"
-      }
+      },
+      "dependsOn": [
+        {
+          "projects": [
+            "web"
+          ],
+          "target": "build"
+        }
+      ]
     },
     "dev": {
       "executor": "nx:run-commands",
@@ -56,11 +108,21 @@
           "TEAM_ROT_TOKEN": "rot-dev",
           "TEAM_BLAU_TOKEN": "blau-dev"
         }
-      }
+      },
+      "dependsOn": [
+        {
+          "projects": [
+            "web"
+          ],
+          "target": "build"
+        }
+      ]
     },
     "deploy": {
       "executor": "nx:run-commands",
-      "dependsOn": ["build-linux"],
+      "dependsOn": [
+        "build-linux"
+      ],
       "options": {
         "commands": [
           "test -n \"$HOST\" || (echo 'usage: HOST=user@vm npx nx run server:deploy' && exit 1)",
@@ -70,5 +132,8 @@
         "parallel": false
       }
     }
-  }
+  },
+  "implicitDependencies": [
+    "web"
+  ]
 }
