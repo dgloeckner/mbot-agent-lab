@@ -11,6 +11,8 @@ import mbuild
 # Wheel geometry: centimetres per wheel degree. VERIFY/calibrate on the floor.
 WHEEL_DIAMETER_CM = 6.5
 CM_PER_WHEEL_DEG = 3.14159 * WHEEL_DIAMETER_CM / 360
+# Track width: wheel center to wheel center, as in sim/mbot2.json. VERIFY: measure.
+TRACK_CM = 12.0
 
 # Motor direction: the right motor is mounted mirrored. VERIFY sign.
 RIGHT_MOTOR_SIGN = -1

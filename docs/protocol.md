@@ -95,6 +95,7 @@ Sent immediately on change, otherwise two to five times per second.
 | --- | --- | --- |
 | `drive` | `cm`, `speed?` | `driven_cm`, `distance_cm`, `color`, trace |
 | `turn` | `deg`, positive is right | `turned_deg`, `distance_cm`, trace |
+| `drive_arc` | `radius_cm` (10..200, to the center), `deg` (heading change, positive is right), `speed?` (40, of the center) | `turned_deg`, `driven_cm`, `distance_cm`, trace (position in degrees) |
 | `drive_until` | `max_cm`, `stop_below_cm?`, `stop_on_color?`, `speed?` | `driven_cm`, `distance_cm`, `color`, trace |
 | `turn_until_clear` | `direction` (`left`/`right`), `min_cm?` (40), `min_deg?` (20), `max_deg?` (360) | `turned_deg`, `distance_cm`, trace |
 | `scan` | `from_deg?` (-90), `to_deg?` (90), `step_deg?` (15), `face?` (`best`/`start`) | `profile` (`[[deg, cm], …]`, `cm` null if no reading), `best_deg`, `best_cm`, `turned_deg`, `distance_cm` |
@@ -142,7 +143,8 @@ Sent immediately on change, otherwise two to five times per second.
 
 The robot logs every finished or aborted motion skill as a segment, `drive` with signed cm or
 `turn` with signed degrees (positive right). The log is the way from where it began to the
-current pose. It is cleared by `clear_log`, on owner change and on restart. The server sends
+current pose. `drive_arc` goes in as its chord: a turn by half the heading change, a drive of the
+chord length (from `driven_cm` and `turned_deg`), the other half turn; zero entries are left out. It is cleared by `clear_log`, on owner change and on restart. The server sends
 `clear_log` to a team's robots when the team's agent starts a run, so `retrace_path` never drives
 back through earlier runs; a robot that is offline then keeps its log.
 
@@ -177,7 +179,7 @@ classifies each into a letter: `w` white, `k` black, `r` red, `y` yellow, `g` gr
   0.5 cm (4° when turning) is such a transition and left out of `floor`.
 - `floor` in a result is a list of `[position, pattern]`. An entry starts where its pattern
   began. Position counts from the start of the motion: cm when driving, degrees (positive right)
-  when turning, one decimal. An entry lasts until the next begins.
+  when turning or driving an arc, one decimal. An entry lasts until the next begins.
 - At most 20 entries; then `floor_truncated: true` and the motion goes on.
 - The robot never interprets patterns. What a stripe means is up to the agent and its prompt
   (see `docs/field.md`).
