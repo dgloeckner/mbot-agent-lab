@@ -84,7 +84,8 @@ class BundleTest(unittest.TestCase):
 
     def test_bundle_size_budget(self):
         # The CyberPi has little RAM. Raise this deliberately, not by accident.
-        self.assertLess(len(bundle.bundle().encode()), 40000)
+        # 40000 -> 43000: one screen per state on the display (ui.py).
+        self.assertLess(len(bundle.bundle().encode()), 43000)
 
 
 if __name__ == "__main__":

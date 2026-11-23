@@ -34,12 +34,20 @@ class _Led:
         _set_leds((0, 0, 0))
 
 
-class _Console:
+class _Display:
+    def __init__(self):
+        self._rgb = (255, 255, 255)
+
     def clear(self):
         simstate.display = []
+        simstate.screen = []
 
-    def println(self, text):
+    def set_brush(self, r, g, b):
+        self._rgb = (r, g, b)
+
+    def show_label(self, text, size, x, y):
         simstate.display.append(str(text))
+        simstate.screen.append((str(text), size, x, y, self._rgb))
 
 
 class _Audio:
@@ -53,7 +61,7 @@ class _Audio:
 wifi = _Wifi()
 controller = _Controller()
 led = _Led()
-console = _Console()
+display = _Display()
 audio = _Audio()
 
 

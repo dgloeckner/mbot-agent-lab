@@ -117,3 +117,27 @@ time.sleep(1)
 check("turn 180", lambda: turn_check(180))
 
 out("HW check done")
+
+
+# Display labels, like robot/src/hw.py hw_screen and ui.py. Look at the screen:
+# - the row of 16 digits at size 16 fills the width exactly (8 px per glyph),
+#   the 10 letters at size 24 (12 px) and the 8 at size 32 (16 px) too;
+# - the digits start in the top left corner (x = 0, y = 0), nothing is cut off;
+# - "Grün Weiß" shows its umlauts; red, green, orange and gray are colored.
+# If a row is shorter, longer or wraps, fix UI_CHAR_W in robot/src/ui.py.
+def display_check():
+    d = cyberpi.display
+    d.clear()
+    for text, size, y, rgb in (("1234567890123456", 16, 0, (255, 255, 255)),
+                               ("ABCDEFGHIJ", 24, 20, (255, 0, 0)),
+                               ("Scout123", 32, 48, (0, 255, 0)),
+                               ("Grün Weiß", 16, 88, (255, 100, 0)),
+                               ("mbot-1  81%", 16, 110, (120, 120, 120))):
+        d.set_brush(*rgb)
+        d.show_label(text, size, 0, y)
+
+
+out("HW display in 3 s")
+time.sleep(3)
+check("display labels", display_check)
+time.sleep(10)

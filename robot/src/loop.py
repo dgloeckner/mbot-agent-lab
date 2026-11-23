@@ -74,6 +74,7 @@ class Robot:
             hw_motors_stop()
             self.trip_log = []
             self.ui.led = None
+            self.ui.text = ""
         self.owner = team
         self.ui.set_owner(p.get("owner", "") if team else "", p.get("name", ""), p.get("color"))
         self.ui.set_agent(p.get("agent", "waiting"))
@@ -257,6 +258,7 @@ class Robot:
 
         # 5. State.
         self.publish_state(now)
+        self.ui.set_battery(self.s["battery"])
         self.ui.tick(now)
 
     def run(self, alive=None):

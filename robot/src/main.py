@@ -12,8 +12,9 @@
 import sys
 
 from compat import sleep_ms
-from hw import hw_motors_stop, hw_show_lines
+from hw import hw_motors_stop
 from loop import Robot
+from ui import ui_error
 
 MAIN_STACK = 32 * 1024
 
@@ -23,7 +24,7 @@ def run_robot(gen, mine):
         Robot().run(lambda: sys.modules.get("mbot_gen") is gen and gen[0] == mine)
     except Exception as e:
         hw_motors_stop()
-        hw_show_lines(["Fehler", repr(e)[:60]])
+        ui_error(repr(e)[:60])
         raise
 
 

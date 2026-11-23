@@ -22,6 +22,7 @@ COLOR_RGB = {
     "red": (255, 0, 0), "green": (0, 255, 0), "blue": (0, 0, 255),
     "yellow": (255, 200, 0), "purple": (160, 0, 255), "cyan": (0, 255, 255),
     "white": (255, 255, 255), "orange": (255, 100, 0), "off": (0, 0, 0),
+    "gray": (120, 120, 120),
 }
 
 
@@ -123,10 +124,12 @@ def hw_leds(color, brightness=100):
     cyberpi.led.on(int(r * k), int(g * k), int(b * k), "all")  # VERIFY
 
 
-def hw_show_lines(lines):
-    cyberpi.console.clear()  # VERIFY
-    for line in lines:
-        cyberpi.console.println(line)
+def hw_screen(labels):
+    """Clear the display and draw labels (text, size 16/24/32, x, y, color)."""
+    cyberpi.display.clear()  # VERIFY
+    for text, size, x, y, color in labels:
+        cyberpi.display.set_brush(*COLOR_RGB.get(color, COLOR_RGB["white"]))  # VERIFY
+        cyberpi.display.show_label(text, size, x, y)  # VERIFY: x, y = top left in pixels
 
 
 def hw_play(name):
