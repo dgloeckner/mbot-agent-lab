@@ -20,6 +20,7 @@ takes a color only, no pattern.
 | --- | --- | --- | --- |
 | Move | `drive` | `cm`, `speed?` | `driven_cm`, `reason`, `floor`, `min_distance_cm` |
 | Move | `turn` | `degrees`, positive is right | `turned_deg`, `reason`, `distance_cm`, `floor` |
+| Move | `drive_arc` | `radius_cm`, `degrees` (positive is right), `speed?` | `turned_deg`, `driven_cm`, `reason`, `distance_cm`, `floor`, `min_distance_cm` |
 | Move | `drive_until` | `max_cm`, `stop_below_cm?`, `stop_on_color?` | `driven_cm`, `reason`, `distance_cm`, `color`, `floor`, `min_distance_cm` |
 | Move | `turn_until_clear` | `direction`, `min_cm?`, `min_deg?`, `max_deg?` | `turned_deg`, `reason` (`clear`, `max_deg`), `distance_cm`, `floor` |
 | Move | `follow_line_until` | `max_cm`, `stop_on_color?`, `stop_at_crossing?` | `driven_cm`, `reason` (`color`, `crossing`, `line_lost`, `max_cm`), `color`, `floor` |
@@ -59,6 +60,11 @@ takes a color only, no pattern.
 - **`retrace_path` turns around:** it drives the way back forward, so the obstacle reflex
   stays on, and ends at the start facing the way it came. After an abort the rest stays in the
   trip log and the next call continues (details in `docs/protocol.md`, "Trip log").
+- **`drive_arc` curves:** it drives forward on a circle of `radius_cm` (10 to 200 cm, to the
+  center) until the heading has changed by `degrees`, measured like `turn`; 360 is a full circle.
+  The sign follows `turn`: positive curves right. The obstacle reflex looks along the tangent.
+  `floor` counts degrees. In the trip log an arc is its chord (half turn, straight drive, half
+  turn), so `retrace_path` drives back on a straight line.
 - **`say` is a bundle:** text on the speaker's display, light, sound, optional gesture, and the
   message lands in the recipient's inbox. `to` is an agent name or `"all"`.
 - **`finish` delivers the report** that the team later compares with the log.
@@ -78,7 +84,7 @@ takes a color only, no pattern.
 
 ## Mapping to the protocol
 
-Motion and expression tools become a `cmd` with the same name (exception: `turn` maps `degrees`
-to `deg`). The server answers `read_sensors` and `list_robots` from the last received `state`
+Motion and expression tools become a `cmd` with the same name (exceptions: `turn` and `drive_arc`
+map `degrees` to `deg`). The server answers `read_sensors` and `list_robots` from the last received `state`
 without asking the robot. `wait_for`, `say`, `tell_team`, `remember`, `forget` and `finish` run
 only in the server.
