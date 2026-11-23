@@ -8,6 +8,8 @@ group('describe', () => {
       'drive abgebrochen: Hindernis im Weg',
     )
     expect(describe({ id: 1, at: '', source: 'robot', kind: 'color_changed', data: { color: 'blue' } })).toBe('Boden ist jetzt blau')
+    expect(describe({ id: 1, at: '', source: 'robot', kind: 'joystick', data: { dir: 'left' } })).toBe('Joystick nach links')
+    expect(describe({ id: 1, at: '', source: 'robot', kind: 'light_down', data: { light: 8, base: 40 } })).toBe('Dunkler geworden (40 → 8)')
   })
   it('falls back to free text', () => {
     expect(describe({ id: 1, at: '', source: 'team', kind: 'chat', text: 'Hallo' })).toBe('Hallo')

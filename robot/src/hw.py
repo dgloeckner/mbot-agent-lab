@@ -129,6 +129,30 @@ def hw_loudness():
     return cyberpi.get_loudness("maximum")  # VERIFY
 
 
+def hw_light():
+    return cyberpi.get_bri()  # VERIFY: 0..100
+
+
+def hw_acc():
+    """(x, y, z) acceleration in m/s^2, about 9.8 on z at rest. VERIFY axes and units."""
+    return cyberpi.get_acc("x"), cyberpi.get_acc("y"), cyberpi.get_acc("z")
+
+
+def hw_shake():
+    return bool(cyberpi.is_shake())  # VERIFY
+
+
+JOYSTICK = ("up", "down", "left", "right", "middle")
+
+
+def hw_joystick():
+    """Direction the joystick is pushed (or "middle" when pressed), else None."""
+    for d in JOYSTICK:
+        if cyberpi.controller.is_press(d):  # VERIFY key names
+            return d
+    return None
+
+
 def hw_button(name):
     return bool(cyberpi.controller.is_press(name))  # VERIFY: "a", "b"
 

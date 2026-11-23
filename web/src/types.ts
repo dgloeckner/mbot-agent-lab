@@ -14,6 +14,10 @@ export interface RobotState {
   yaw: number
   battery: number
   tilted: boolean
+  pitch: number
+  roll: number
+  light: number
+  loudness: number
   seq: number
   t_ms: number
 }

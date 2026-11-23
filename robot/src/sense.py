@@ -10,7 +10,8 @@
 # The robot never interprets patterns; it reports them.
 
 from hw import (hw_distance_cm, hw_probe_rgb, hw_probe_name, hw_line_offset, hw_yaw,
-                hw_tilt, hw_battery, hw_button, hw_loudness, PROBES)
+                hw_tilt, hw_battery, hw_button, hw_loudness, hw_light, hw_acc, hw_shake,
+                hw_joystick, PROBES)
 
 SN_DIST_WINDOW = 5      # median over the last valid distance readings
 SN_DIST_MIN = 2         # readings below are dropouts (the sensor reports 0 on errors)
@@ -193,9 +194,15 @@ class Sense:
             "yaw": int(hw_yaw()),
             "battery": int(hw_battery()),
             "tilted": self.tilt(pitch, roll),
+            "pitch": int(pitch),
+            "roll": int(roll),
             "button_a": hw_button("a"),
             "button_b": hw_button("b"),
-            "loudness": hw_loudness(),
+            "joystick": hw_joystick(),
+            "loudness": int(hw_loudness()),
+            "light": int(hw_light()),
+            "acc": hw_acc(),
+            "shake": hw_shake(),
         }
 
 

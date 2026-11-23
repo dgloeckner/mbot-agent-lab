@@ -97,6 +97,12 @@ const (
 	EventButtonA       = "button_a"
 	EventButtonB       = "button_b"
 	EventClap          = "clap"
+	EventJoystick      = "joystick"
+	EventLifted        = "lifted"
+	EventBumped        = "bumped"
+	EventShake         = "shake"
+	EventLightUp       = "light_up"
+	EventLightDown     = "light_down"
 	EventBatteryLow    = "battery_low"
 	EventSkillDone     = "skill_done"
 	EventSkillAborted  = "skill_aborted"
@@ -120,6 +126,10 @@ type State struct {
 	Yaw        int    `json:"yaw"`
 	Battery    int    `json:"battery"`
 	Tilted     bool   `json:"tilted"`
+	Pitch      int    `json:"pitch"`    // degrees
+	Roll       int    `json:"roll"`     // degrees
+	Light      int    `json:"light"`    // ambient light 0..100
+	Loudness   int    `json:"loudness"` // 0..100
 	Seq        uint32 `json:"seq"`
 	TMS        uint32 `json:"t_ms"`
 }

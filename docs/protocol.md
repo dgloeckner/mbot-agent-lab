@@ -48,17 +48,44 @@ Every robot has its own prefix `lab/<robot_id>/`, e.g. `lab/mbot-1/`.
 ### `event`
 
 ```json
-{"kind":"obstacle_near","data":{"distance_cm":8},"seq":117,"t_ms":123456}
+{"kind":"light_up","data":{"light":71,"base":37},"seq":117,"t_ms":123456}
 ```
 
-Values for `kind`: `obstacle_near`, `obstacle_clear`, `color_changed`, `tilted`, `button_a`,
-`button_b`, `clap`, `battery_low`, `skill_done`, `skill_aborted`.
+| `kind` | When | `data` |
+| --- | --- | --- |
+| `obstacle_near`, `obstacle_clear` | filtered distance below 15 cm, back above 20 cm | `distance_cm` |
+| `color_changed` | floor color under both outer probes changes | `color`, `previous` |
+| `button_a`, `button_b` | key pressed | none |
+| `joystick` | joystick pushed or pressed | `dir`: `up`, `down`, `left`, `right`, `middle` |
+| `lifted` | vertical acceleration well above gravity | none |
+| `bumped` | horizontal acceleration spike | none |
+| `tilted` | tilt held for 0.5 s (the abort reflex reacts sooner) | `pitch`, `roll` |
+| `shake` | robot is shaken | none |
+| `clap` | loudness jumps above its mean | `loudness` |
+| `light_up`, `light_down` | light jumps away from its mean | `light`, `base` (the mean) |
+| `battery_low` | battery below 15 %, once | `battery` |
+| `skill_done`, `skill_aborted` | a motion skill ends | `skill`, `reason` |
+
+Rules for the newer events (from `joystick` to `light_down`, and the buttons):
+
+- Each kind at most once per 500 ms.
+- Light and loudness count against a running mean over about 10 s, not against fixed levels.
+  A jump of 15 points fires once; the next one needs the value back near the mean first.
+  Going back to the usual level after a short while is no event: the mean hardly moved.
+- While a motion skill runs the motors are loud and shake the robot: `clap` and `bumped` need
+  more then.
+- `lifted` only says the robot was lifted; what follows is up to the agent.
+- All thresholds are start values (`robot/src/events.py`) until measured
+  (`robot/tools/measure.py`, `docs/measurements.md`).
 
 ### `state`
 
 ```json
-{"skill":"idle","distance_cm":34,"floor":"wkkw","color":"white","line":"center","yaw":-2,"battery":81,"tilted":false,"seq":118,"t_ms":123460}
+{"skill":"idle","distance_cm":34,"floor":"wkkw","color":"white","line":"center","yaw":-2,"battery":81,"tilted":false,"pitch":1,"roll":-2,"light":37,"loudness":12,"seq":118,"t_ms":123460}
 ```
+
+`pitch` and `roll` are the tilt in degrees, `light` and `loudness` go from 0 to 100. The yaw of
+the gyro is reported but not used for turns (they use the encoders).
 
 `floor` is the current floor pattern (see [Floor trace](#floor-trace)). `color` is the floor color
 both outer probes agree on, `line` where black is under the probes (`none`, `left`, `center`,
