@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 User=labserver
 Group=labserver
-# Secrets (LAB_ADMIN_PASSWORD, MISTRAL_API_KEY, MBOTn_PASSWORD, TEAM_*_TOKEN), mode 0600.
+# Secrets (LAB_ADMIN_PASSWORD, MISTRAL_API_KEY, ANTHROPIC_API_KEY, MBOTn_PASSWORD, TEAM_*_TOKEN), mode 0600.
 EnvironmentFile=/etc/labserver/secrets.env
 ExecStart=/usr/local/bin/labserver -config /etc/labserver/lab.yaml
 WorkingDirectory=/var/lib/labserver

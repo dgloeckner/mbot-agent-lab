@@ -63,22 +63,24 @@ type LLM struct {
 	MaxParallelCalls int                 `yaml:"max_parallel_calls"`
 }
 
-// Provider is one OpenAI-compatible chat completions endpoint.
+// Provider is one model endpoint.
 type Provider struct {
-	Kind      string  `yaml:"kind"` // openai (default) or fake (scripted test model, no network)
-	BaseURL   string  `yaml:"base_url"`
+	Kind      string  `yaml:"kind"`     // openai (default), anthropic (Claude) or fake (scripted test model)
+	BaseURL   string  `yaml:"base_url"` // anthropic: empty for the Claude API
 	APIKeyEnv string  `yaml:"api_key_env"`
 	Model     string  `yaml:"model"`
 	PriceIn   float64 `yaml:"price_in"`  // EUR per million input tokens, for the cost display
 	PriceOut  float64 `yaml:"price_out"` // EUR per million output tokens
+	Effort    string  `yaml:"effort"`    // anthropic: low, medium, high, xhigh or max; empty = model default
 
 	APIKey string `yaml:"-"`
 }
 
 // Provider kinds.
 const (
-	ProviderOpenAI = "openai"
-	ProviderFake   = "fake"
+	ProviderOpenAI    = "openai"
+	ProviderAnthropic = "anthropic"
+	ProviderFake      = "fake"
 )
 
 // Budgets limit what a single agent may consume.
@@ -242,6 +244,15 @@ func (c *Config) Validate() error {
 		case ProviderOpenAI:
 			if p.BaseURL == "" || p.Model == "" {
 				add("llm: provider %q needs base_url and model", name)
+			}
+		case ProviderAnthropic:
+			if p.Model == "" || p.APIKeyEnv == "" {
+				add("llm: provider %q needs model and api_key_env", name)
+			}
+			switch p.Effort {
+			case "", "low", "medium", "high", "xhigh", "max":
+			default:
+				add("llm: provider %q has unknown effort %q", name, p.Effort)
 			}
 		case ProviderFake:
 		default:

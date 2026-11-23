@@ -59,6 +59,8 @@ func TestParseErrors(t *testing.T) {
 		{"duplicate robot", strings.Replace(validYAML, "id: mbot-2", "id: mbot-1", 1), nil, `duplicate id "mbot-1"`},
 		{"unknown field", validYAML + "\nfoo: 1\n", nil, "field foo not found"},
 		{"old teams section", validYAML + "\nteams: []\n", nil, "field teams not found"},
+		{"claude without key", strings.Replace(validYAML, "    ollama:", "    claude: { kind: anthropic, model: claude-opus-5-5 }\n    ollama:", 1), nil, `provider "claude" needs model and api_key_env`},
+		{"claude effort", strings.Replace(validYAML, "    ollama:", "    claude: { kind: anthropic, model: claude-opus-5-5, api_key_env: MISTRAL, effort: fast }\n    ollama:", 1), nil, `unknown effort "fast"`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -100,7 +100,7 @@
       "continuous": true,
       "options": {
         "cwd": "server",
-        "command": "MISTRAL_API_KEY=${MISTRAL_API_KEY:-unset} go run ./cmd/labserver -config ../deploy/local/lab.yaml",
+        "command": "MISTRAL_API_KEY=${MISTRAL_API_KEY:-unset} ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-unset} go run ./cmd/labserver -config ../deploy/local/lab.yaml",
         "env": {
           "LAB_ADMIN_PASSWORD": "dev",
           "LAB_CODE": "DEV1",
