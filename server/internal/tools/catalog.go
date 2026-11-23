@@ -29,6 +29,7 @@ var Catalog = []Info{
 	{"show_text", "Ausdrücken", "text", "Zeigt bis zu 60 Zeichen auf dem Display.", true},
 	{"gesture", "Ausdrücken", "kind: nod, shake, spin", "Nicken, Kopfschütteln oder Drehen.", false},
 	{"identify", "Ausdrücken", "", "Blinkt und zeigt „Hier bin ich!“, damit ihr euren Roboter findet.", true},
+	{"ask_human", "Reden", "question, seconds?", "Stellt eine Ja-Nein-Frage auf dem Display; ein Mensch antwortet mit Taste A oder B.", true},
 	{"say", "Reden", "to, text, emotion?", "Sagt etwas zu einem anderen Agenten oder zu allen.", true},
 	{"tell_team", "Reden", "text", "Schreibt euch eine Nachricht.", true},
 	{"remember", "Merken", "text", "Legt eine Notiz an, die auch im nächsten Lauf bleibt.", true},

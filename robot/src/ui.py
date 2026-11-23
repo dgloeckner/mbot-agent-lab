@@ -15,6 +15,7 @@ class Ui:
         self.name = ""
         self.conn = "startet"
         self.text = ""
+        self.question = None  # ask_human: shown instead of the text, with the keys
         self.color = "white"
         self.led = None  # agent's set_leds color; loop clears it when the team changes
         self.agent = "waiting"
@@ -40,6 +41,10 @@ class Ui:
         self.text = text[:60]
         self.dirty = True
 
+    def set_question(self, text):
+        self.question = text
+        self.dirty = True
+
     def set_agent(self, agent):
         self.agent = agent
 
@@ -54,12 +59,16 @@ class Ui:
         if self.dirty and ticks_diff(now, self.last_display) >= UI_DISPLAY_MIN_MS:
             self.dirty = False
             self.last_display = now
-            hw_show_lines([
+            lines = [
                 "%s (%s)" % (self.name, self.robot_id) if self.name else self.robot_id,
                 self.owner or "frei",
                 self.conn,
-                "Hier bin ich!" if finding else self.text,
-            ])
+            ]
+            if self.question is not None:
+                lines += [self.question, "A = ja, B = nein"]
+            else:
+                lines.append("Hier bin ich!" if finding else self.text)
+            hw_show_lines(lines)
         if ticks_diff(now, self.last_led) < UI_LED_PERIOD_MS:
             return
         self.last_led = now
