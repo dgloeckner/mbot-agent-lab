@@ -49,6 +49,31 @@ func TestParseValid(t *testing.T) {
 	}
 }
 
+func TestParseLeavesOutUnkeyedProviders(t *testing.T) {
+	yaml := strings.Replace(validYAML, "    ollama:", "    claude: { kind: anthropic, model: claude-opus-5-5, api_key_env: ANTHROPIC }\n    ollama:", 1)
+	c, err := Parse([]byte(yaml), env(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := c.LLM.Providers["claude"]; ok {
+		t.Errorf("claude without key should be left out: %+v", c.LLM.Providers)
+	}
+	if len(c.LLM.Unkeyed) != 1 || c.LLM.Unkeyed[0] != "claude" {
+		t.Errorf("Unkeyed = %v, want [claude]", c.LLM.Unkeyed)
+	}
+	if _, ok := c.LLM.Providers["ollama"]; !ok {
+		t.Errorf("ollama needs no key and must stay")
+	}
+
+	c, err = Parse([]byte(yaml), env(map[string]string{"ANTHROPIC": "k2"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.LLM.Providers["claude"].APIKey != "k2" || len(c.LLM.Unkeyed) != 0 {
+		t.Errorf("claude with key: %+v, Unkeyed %v", c.LLM.Providers["claude"], c.LLM.Unkeyed)
+	}
+}
+
 func TestParseErrors(t *testing.T) {
 	cases := []struct {
 		name, yaml string
@@ -56,6 +81,8 @@ func TestParseErrors(t *testing.T) {
 		want       string
 	}{
 		{"missing secret", validYAML, map[string]string{"P2": ""}, "P2"},
+		{"missing default key", validYAML, map[string]string{"MISTRAL": ""}, "MISTRAL"},
+		{"missing fallback key", strings.Replace(validYAML, "  default: mistral", "  default: ollama\n  fallback: mistral", 1), map[string]string{"MISTRAL": ""}, "MISTRAL"},
 		{"duplicate robot", strings.Replace(validYAML, "id: mbot-2", "id: mbot-1", 1), nil, `duplicate id "mbot-1"`},
 		{"unknown field", validYAML + "\nfoo: 1\n", nil, "field foo not found"},
 		{"old teams section", validYAML + "\nteams: []\n", nil, "field teams not found"},
