@@ -33,6 +33,8 @@ SK_CLEAR_CONFIRM = 3       # same for "the way ahead is clear"
 SK_LOST_CONFIRM = 8        # same for "the line is gone": long enough to bridge tape gaps
                            # and to let the color vote settle where a line ends in a field
 SK_FLOOR_MAX = 20          # floor trace entries per motion; more sets floor_truncated
+SK_FLOOR_MIN_CM = 0.5      # a trace entry shorter than this is an edge transition and dropped
+SK_FLOOR_MIN_DEG = 4       # the same for turns
 
 
 def _clamp(v, lo, hi):
@@ -89,23 +91,36 @@ class Trace:
     An entry [position, pattern] starts where a new floor pattern began, once
     it held SN_FLOOR_STEADY readings. Position counts from the start of the
     motion: cm when driving, degrees (positive right) when turning.
+
+    At the edge of a stripe the probes rarely change together: one sees the
+    color a few millimetres before the others. An entry that the next one
+    replaces within min_step (cm or degrees) is such a transition and dropped.
     """
 
-    def __init__(self, s):
+    def __init__(self, s, min_step=SK_FLOOR_MIN_CM):
         self.steady = Steady(SN_FLOOR_STEADY)
         self.steady.update(s["floor"], 0)
         self.entries = [[0, s["floor"]]]
+        self.min_step = min_step
         self.truncated = False
         self.min_cm = s["distance_cm"]
 
     def update(self, s, pos):
         if self.steady.update(s["floor_raw"], pos):
-            if len(self.entries) < SK_FLOOR_MAX:
-                self.entries.append([round(self.steady.tag, 1), self.steady.value])
-            else:
-                self.truncated = True
+            self.add(round(self.steady.tag, 1), self.steady.value)
         if s["distance_cm"] < self.min_cm:
             self.min_cm = s["distance_cm"]
+
+    def add(self, pos, pattern):
+        e = self.entries
+        if len(e) > 1 and abs(pos - e[-1][0]) < self.min_step:
+            e.pop()  # the last entry was an edge transition
+            if e[-1][1] == pattern:
+                return
+        if len(e) < SK_FLOOR_MAX:
+            e.append([pos, pattern])
+        else:
+            self.truncated = True
 
     def data(self, out):
         out["floor"] = self.entries
@@ -217,7 +232,7 @@ class TurnSkill:
         self.trace = None
 
     def start(self, s):
-        self.trace = Trace(s)
+        self.trace = Trace(s, SK_FLOOR_MIN_DEG)
         self.heading = Heading()
         self.started = ticks_ms()
         _rotate(1 if self.target > 0 else -1, SK_TURN_SPEED)
@@ -266,7 +281,7 @@ class TurnUntilClearSkill:
         self.started = 0
 
     def start(self, s):
-        self.trace = Trace(s)
+        self.trace = Trace(s, SK_FLOOR_MIN_DEG)
         self.heading = Heading()
         self.started = ticks_ms()
         _rotate(self.direction, SK_TURN_SPEED)
