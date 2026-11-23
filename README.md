@@ -186,7 +186,8 @@ start of a run). Routine readings such as obstacles or floor colors wait in the 
 wake-up, so they do not burn tokens.
 
 - **Runs** start with "Lauf starten" and end with `finish(report)`, "Stopp" (which cancels a
-  running model call), the time limit or the token limit. "Deployen und neu starten" begins a
+  running model call or tool calls and stops the robots), the time limit (likewise) or the token
+  limit. "Deployen und neu starten" begins a
   new run; a plain deploy takes effect at the next model call.
 - **Conversations:** while no run is active, a team message wakes the agent in conversation
   mode instead of being dropped. It runs in the same actor on the team's model, but starts no
@@ -203,7 +204,9 @@ wake-up, so they do not burn tokens.
   message. The sender field (`Team`, `Roboter <Name>`, `Agent <Name>`, `System`) is set by the
   server, so another agent cannot pose as the team.
 - **Tools** (`server/internal/tools`): robot tools become MQTT commands; with several robots
-  they get a `robot` parameter with the team's robot names. Mistakes by the model come back as
+  they get a `robot` parameter with the team's robot names. The tool calls of one model answer
+  run at the same time when they act on different robots, so several robots can move at once;
+  calls for the same robot and calls without a robot keep their order (`docs/tools.md`). Mistakes by the model come back as
   results with `ok: false` and a German explanation, so the agent can correct itself.
 - **Budgets** in the config: steps per wake-up, tokens per run, minutes per run, messages to
   other agents per minute, messages kept in the context, team messages per minute and tokens

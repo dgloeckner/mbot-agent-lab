@@ -141,13 +141,19 @@ func TestFakeExploresAndFinishes(t *testing.T) {
 		}
 		tc := resp.Message.ToolCalls[0]
 		names = append(names, tc.Function.Name)
-		if tc.Function.Name == "read_sensors" && tc.Function.Arguments != `{"robot":"Scout"}` {
-			t.Errorf("robot param not filled: %s", tc.Function.Arguments)
+		if tc.Function.Name == "read_sensors" {
+			// Every robot at once, in one answer.
+			calls := resp.Message.ToolCalls
+			if len(calls) != 2 || calls[0].Function.Arguments != `{"robot":"Scout"}` || calls[1].Function.Arguments != `{"robot":"Träger"}` || calls[0].ID == calls[1].ID {
+				t.Errorf("robot param not filled for every robot: %+v", calls)
+			}
 		}
 		if tc.Function.Name == "finish" {
 			break
 		}
-		msgs = append(msgs, Message{Role: RoleTool, Name: tc.Function.Name, ToolCallID: tc.ID, Content: `{"ok":true,"reason":"wall"}`})
+		for _, tc := range resp.Message.ToolCalls {
+			msgs = append(msgs, Message{Role: RoleTool, Name: tc.Function.Name, ToolCallID: tc.ID, Content: `{"ok":true,"reason":"wall"}`})
+		}
 	}
 	if names[0] != "read_sensors" || names[len(names)-1] != "finish" {
 		t.Errorf("sequence = %v", names)

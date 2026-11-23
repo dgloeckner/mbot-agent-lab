@@ -62,7 +62,17 @@ takes a color only, no pattern.
 - **`say` is a bundle:** text on the speaker's display, light, sound, optional gesture, and the
   message lands in the recipient's inbox. `to` is an agent name or `"all"`.
 - **`finish` delivers the report** that the team later compares with the log.
-- **Later:** `run_together(steps)` for simultaneous choreographies of several robots.
+- **Several robots at once:** the tool calls of one model answer that act on different robots
+  run at the same time, so the agent moves several robots by calling a motion tool for each in
+  one answer. Calls for the same robot keep their order, and so do calls that act on every robot
+  (`stop` with `"alle"`). Calls without a robot (`wait_for`, `say`, `tell_team`, `list_robots`,
+  `remember`, `forget`, `finish`) wait for all earlier calls of the answer and hold up the later
+  ones. Each call shows up in the team's log when it ends; the model gets all results together,
+  in its call order, once the whole answer is done. The platform rules tell a team with several
+  robots so. A stop by the team, the time limit or deleting the team cancels every running
+  call and stops all robots of the team.
+- **Later:** motion tools that return at once and report the end as an event, so the agent can
+  react to one robot while another still moves.
 - **Deliberately no tool for:** Wi-Fi, vendor cloud services, reboot, setting the name, raw motor
   power.
 

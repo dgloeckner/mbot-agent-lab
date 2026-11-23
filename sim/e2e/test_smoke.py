@@ -1,4 +1,4 @@
-"""End-to-end smoke test: real labserver + one simulated robot + scripted agent.
+"""End-to-end smoke test: real labserver + simulated robots + scripted agent.
 
 Starts the built `labserver` binary with the scripted fake model (no API key,
 no network), starts one robot through sim/run.py, then drives the HTTP side
@@ -6,7 +6,8 @@ like a lab: the control room logs in, a team joins, gets the robot, deploys a
 prompt, starts its agent and sends it a message. It checks that the robot's
 heartbeat reaches the registry, the run starts, a robot command comes back
 with a result and the simulated robot moved. After a stop, a message gets an
-answer in the conversation without starting a run.
+answer in the conversation without starting a run. A second test gives one
+team two robots and checks that they move at the same time.
 
 Run with `npx nx run sim:e2e` (builds the server first). The binary comes from
 $LABSERVER or bin/labserver.
@@ -36,12 +37,14 @@ BINARY = pathlib.Path(os.environ.get("LABSERVER", ROOT / "bin" / "labserver"))
 BASE_CONFIG = ROOT / "deploy" / "local" / "lab.yaml"
 WORLD = ROOT / "sim" / "worlds" / "arena.json"
 ROBOT = "mbot-1"
+ROBOT2 = "mbot-2"
 SEED = 1234
 TOTAL_TIMEOUT = 60  # seconds for the whole chain
 POSE = re.compile(r"^\[(\S+)\] x=(-?[\d.]+) y=(-?[\d.]+) heading=(-?\d+)")
 
 # Skills that send a cmd to the robot and wait for its result.
 ROBOT_TOOLS = {"drive_until", "turn", "turn_until_clear", "drive", "stop"}
+MOTION_TOOLS = ROBOT_TOOLS - {"stop"}
 
 
 def free_port():
@@ -99,7 +102,7 @@ class SmokeTest(unittest.TestCase):
         self.sim_log = self.tmp / "sim.log"
         self.spawn([str(BINARY), "-config", str(cfg), "-debug"], env, self.server_log)
         self.wait_for(self.healthy, "server /healthz")
-        self.spawn([sys.executable, str(ROOT / "sim" / "run.py"), "--robots", "1",
+        self.spawn([sys.executable, str(ROOT / "sim" / "run.py"), "--robots", "2",
                     "--port", str(mqtt_port), "--world", str(WORLD),
                     "--trace", "0.2", "--seed", str(SEED)], env, self.sim_log)
 
@@ -194,8 +197,10 @@ class SmokeTest(unittest.TestCase):
                     if line.startswith("event: "):
                         event = line[7:]
                     elif line.startswith("data: ") and event == "log":
+                        entry = json.loads(line[6:])
+                        entry["e2e_received"] = time.monotonic()
                         with self.events_lock:
-                            self.events.append(json.loads(line[6:]))
+                            self.events.append(entry)
             except Exception as e:  # closing the response under the reader raises various errors
                 if not closing.is_set():
                     with self.events_lock:
@@ -209,29 +214,30 @@ class SmokeTest(unittest.TestCase):
 
     # --- robot pose from the sim trace ---------------------------------------
 
-    def poses(self):
+    def poses(self, robot=ROBOT):
         if not self.sim_log.exists():
             return []
         out = []
         for line in self.sim_log.read_text(encoding="utf-8", errors="replace").splitlines():
             m = POSE.match(line)
-            if m and m.group(1) == ROBOT:
+            if m and m.group(1) == robot:
                 out.append((float(m.group(2)), float(m.group(3)), int(m.group(4))))
         return out
 
     # --- the chain -------------------------------------------------------------
 
-    def test_team_agent_drives_simulated_robot(self):
-        self.request("POST", "/admin/api/login", {"password": self.admin_password}, expect=(204,))
-
-        def robot_online():
+    def robot_online(self, robot):
+        def probe():
             st = self.request("GET", "/admin/api/state")
             for rb in st["robots"]:
-                if rb["id"] == ROBOT and rb["online"] and rb["accepted"] and rb["state"]["seq"] > 0:
+                if rb["id"] == robot and rb["online"] and rb["accepted"] and rb["state"]["seq"] > 0:
                     return rb
             return None
+        return self.wait_for(probe, "heartbeat of %s in the registry" % robot)
 
-        rb = self.wait_for(robot_online, "heartbeat of %s in the registry" % ROBOT)
+    def test_team_agent_drives_simulated_robot(self):
+        self.request("POST", "/admin/api/login", {"password": self.admin_password}, expect=(204,))
+        rb = self.robot_online(ROBOT)
         self.assertTrue(rb["script"], "hello without script version")
         start_pose = self.wait_for(lambda: self.poses()[:1], "sim pose trace")[0]
 
@@ -297,6 +303,50 @@ class SmokeTest(unittest.TestCase):
         self.assertFalse(self.log_entries(lambda e: e.get("kind") == "run_start" and e.get("data", {}).get("run") != status.get("run_id")),
                          "the conversation started a run")
         print("e2e: conversation answer %r after %s" % (answer[0].get("text"), tools), file=sys.stderr)
+
+    def test_two_robots_move_at_once(self):
+        """The scripted model moves every robot of the team in one answer; the
+        server runs those calls at the same time."""
+        self.request("POST", "/admin/api/login", {"password": self.admin_password}, expect=(204,))
+        for robot in (ROBOT, ROBOT2):
+            self.robot_online(robot)
+        team = self.request("POST", "/api/join", {"code": self.lab_code, "name": "Duo"},
+                            opener=urllib.request.build_opener(), expect=(201,))
+        token = team["token"]
+        for robot in (ROBOT, ROBOT2):
+            self.request("POST", "/admin/api/assign", {"robot": robot, "team": team["id"]}, expect=(204,))
+        self.follow_team_log(token)
+        self.wait_for(lambda: len([r for r in self.request("GET", "/t/%s/api/session" % token)["robots"] if r["online"]]) == 2,
+                      "both robots assigned to the team")
+
+        t = "/t/%s" % token
+        self.request("POST", t + "/prompt", {"text": "Erkundet die Arena, beide gleichzeitig."}, expect=(201,))
+        self.request("POST", t + "/start", expect=(202,))
+
+        def overlap():
+            # A tool entry is logged when its call ends; data.ms is how long it ran.
+            spans = []
+            for e in self.log_entries(lambda e: e.get("kind") == "tool"):
+                d = e.get("data") or {}
+                res = d.get("result") or {}
+                if d.get("name") in MOTION_TOOLS and res.get("ok") and d.get("ms", 0) > 200:
+                    end = e["e2e_received"]
+                    spans.append((res.get("robot"), end - d["ms"] / 1000.0, end, d["name"]))
+            for a in spans:
+                for b in spans:
+                    # Sequential calls would touch at most; demand a clear overlap.
+                    if a[0] != b[0] and min(a[2], b[2]) - max(a[1], b[1]) > 0.2:
+                        return (a, b)
+            return None
+
+        a, b = self.wait_for(overlap, "motion calls of two robots that overlap in time")
+        print("e2e: %s %s and %s %s moved at the same time" % (a[0], a[3], b[0], b[3]), file=sys.stderr)
+        for robot in (ROBOT, ROBOT2):
+            poses = self.poses(robot)
+            self.assertTrue(poses, "no pose trace for %s" % robot)
+            start = poses[0]
+            self.assertTrue(any(abs(x - start[0]) > 2 or abs(y - start[1]) > 2 or abs(h - start[2]) > 5 for x, y, h in poses),
+                            "%s did not move\n%s" % (robot, self.logs()))
 
 
 if __name__ == "__main__":
