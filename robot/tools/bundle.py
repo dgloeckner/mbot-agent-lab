@@ -23,7 +23,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "src"
 
 # Dependency order: every module only uses names from modules above it.
-MODULES = ["compat", "hw", "sense", "ui", "events", "net", "skills", "calib", "reflexes", "loop", "main"]
+MODULES = ["compat", "hw", "sense", "ui", "events", "mqtt", "net", "skills", "calib", "reflexes", "loop", "main"]
 
 
 def top_level_names(tree):

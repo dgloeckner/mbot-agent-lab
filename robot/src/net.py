@@ -2,7 +2,7 @@
 
 from compat import json, ticks_ms, ticks_diff, sleep_ms
 from hw import hw_wifi_connect, hw_wifi_ok
-from umqtt.simple import MQTTClient
+from mqtt import MQTTClient
 
 NET_KEEPALIVE_S = 30
 NET_PING_MS = 10000
