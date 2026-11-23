@@ -142,6 +142,7 @@ Sent immediately on change, otherwise two to five times per second.
 | `set_leds` | `color` or `pattern` | none |
 | `show_text` | `text` | none |
 | `gesture` | `kind`: `nod`, `shake`, `spin` | none |
+| `ask_human` | `text` (at most 40 characters), `s` (1..60, 20) | `answer`: `a`, `b` or `timeout` (`reason` `done` or `timeout`); `stopped`/`reassigned` with `ok:false` when a motion command, `stop` or a new owner ends the question; `busy` while a motion skill or another question runs |
 | `identify` | none: blinks white and shows "Hier bin ich!" for 3 s, silently | none |
 | `clear_log` | none | none |
 | `restart` | none; control room only | none. The robot stops, answers, sets `status` to `restarting` and restarts its script; after the new `hello` it belongs to the same team, because assignments live in the server. A hung script needs the power switch |
@@ -154,6 +155,10 @@ Sent immediately on change, otherwise two to five times per second.
   20 seconds on the robot (`SK_MAX_MS` in `robot/src/skills.py`), so the server waits 22 seconds.
 - **Duplicate commands:** the robot remembers the last 16 IDs and ignores repeats. It forgets them
   on every new connection.
+- **ask_human** answers late: the robot keeps the command ID, shows the question and runs its
+  loop on. The result comes when someone presses A or B or after `s` seconds; the server waits
+  `s` + 3 seconds. Meanwhile A and B produce no `button_a`/`button_b` events, and a key that was
+  held when the question came only counts after it was released.
 - **One motion skill at a time:** a new motion command during a drive ends with `ok:false` and
   `reason:"busy"`. `stop` is always accepted and idempotent.
 - **Values for `reason`:** `done`, `wall`, `color`, `max_cm`, `timeout`, `stopped`, `obstacle`,

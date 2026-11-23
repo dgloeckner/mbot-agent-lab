@@ -49,6 +49,9 @@ func (b *robotBus) Publish(topic string, payload []byte, _ bool, _ byte) error {
 	h := b.handler
 	b.mu.Unlock()
 	res := protocol.Result{ID: cmd.ID, OK: true, Reason: protocol.ReasonDone}
+	if cmd.Name == "ask_human" {
+		res.Data = json.RawMessage(`{"answer":"a"}`)
+	}
 	if cmd.Name == "drive_until" {
 		res.Reason = protocol.ReasonWall
 		res.Data = json.RawMessage(`{"driven_cm":42,"distance_cm":11,"color":"white"}`)
@@ -356,5 +359,31 @@ func TestScope(t *testing.T) {
 		if c.a.Overlaps(c.b) != c.want || c.b.Overlaps(c.a) != c.want {
 			t.Errorf("%+v overlaps %+v: want %v", c.a, c.b, c.want)
 		}
+	}
+}
+
+func TestAskHuman(t *testing.T) {
+	r, bus, _ := setup(t, map[string]string{"mbot-1": "Scout"})
+	env := &Env{TeamID: "rot"}
+	ctx := context.Background()
+	got := schemaOf(t, r.Call(ctx, env, "ask_human", `{"question":"Darf ich jetzt über die rote Linie fahren, bitte?"}`))
+	if got["ok"] != false || !strings.Contains(got["error"].(string), "höchstens 40") {
+		t.Errorf("long question = %v", got)
+	}
+	bus.mu.Lock()
+	_, sent := bus.args["ask_human"]
+	bus.mu.Unlock()
+	if sent {
+		t.Error("a refused question reached the robot")
+	}
+	got = schemaOf(t, r.Call(ctx, env, "ask_human", `{"question":"Darf ich losfahren?","seconds":90}`))
+	if got["ok"] != true || got["answer"] != "a" {
+		t.Errorf("ask_human = %v", got)
+	}
+	bus.mu.Lock()
+	args := bus.args["ask_human"]
+	bus.mu.Unlock()
+	if args["text"] != "Darf ich losfahren?" || args["s"] != 60.0 {
+		t.Errorf("args = %v", args)
 	}
 }

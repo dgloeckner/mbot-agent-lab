@@ -21,6 +21,7 @@ DEDUP_SIZE = 16
 RECONNECT_MIN_MS = 500
 RECONNECT_MAX_MS = 10000
 MAX_MSGS_PER_LOOP = 5
+ASK_MAX_S = 60
 
 
 class Robot:
@@ -32,6 +33,7 @@ class Robot:
         self.inbox = []
         self.skill = None
         self.skill_cmd_id = None
+        self.question = None  # ask_human: (cmd id, deadline, a key was held when asked)
         self.seen_ids = []
         self.trip_log = []
         self.seq = 0
@@ -71,6 +73,7 @@ class Robot:
         team = p.get("team", "")
         if self.owner is not None and team != self.owner:
             self.end_skill("reassigned")
+            self.end_question(False, "reassigned")
             hw_motors_stop()
             self.trip_log = []
             self.ui.led = None
@@ -92,10 +95,14 @@ class Robot:
 
         if name == "stop":
             self.end_skill("stopped")
+            self.end_question(False, "stopped")
             hw_motors_stop()
             self.reply(cmd_id, True, "done")
         elif name in MOTION_SKILLS or name == "calibrate_colors":
+            self.end_question(False, "stopped")
             self.start_motion(cmd_id, name, args)
+        elif name == "ask_human":
+            self.ask(cmd_id, args)
         elif name == "set_leds":
             self.ui.led = args.get("color") or self.ui.led
             self.reply(cmd_id, True, "done")
@@ -122,6 +129,39 @@ class Robot:
             self.reply(cmd_id, True, "done")
         else:
             self.reply(cmd_id, False, "error", error="unknown or not implemented: %s" % name)
+
+    # ---- ask_human: a yes/no question on the display, answered with A or B --
+
+    def ask(self, cmd_id, args):
+        if self.skill is not None or self.question is not None:
+            self.reply(cmd_id, False, "busy")
+            return
+        secs = min(max(int(args.get("s", 20)), 1), ASK_MAX_S)
+        held = self.s["button_a"] or self.s["button_b"]
+        self.question = (cmd_id, ticks_ms() + secs * 1000, held)
+        self.ui.set_question(str(args.get("text", ""))[:40])
+        self.events.quiet_buttons = True
+
+    def end_question(self, ok, reason, answer=None):
+        if self.question is not None:
+            self.reply(self.question[0], ok, reason, {"answer": answer or reason})
+            self.question = None
+            self.ui.set_question(None)
+            self.events.quiet_buttons = False
+
+    def check_question(self, now):
+        q = self.question
+        if q is None:
+            return
+        a, b = self.s["button_a"], self.s["button_b"]
+        if q[2]:
+            if not (a or b):  # the key held when asking is released: now it counts
+                self.question = (q[0], q[1], False)
+        elif a or b:
+            self.end_question(True, "done", "a" if a else "b")
+            return
+        if ticks_diff(now, q[1]) >= 0:
+            self.end_question(True, "timeout")
 
     def start_motion(self, cmd_id, name, args):
         if self.skill is not None:
@@ -195,6 +235,7 @@ class Robot:
         if self.link.up:
             return
         self.end_skill("error")
+        self.end_question(False, "error")
         hw_motors_stop()
         self.ui.set_conn("getrennt")
         if ticks_diff(now, self.next_connect) < 0:
@@ -227,6 +268,7 @@ class Robot:
         if ticks_diff(now, self.last_hb) > RF_WATCHDOG_MS:
             self.watchdog_tripped = True
             self.end_skill("stopped")
+            self.end_question(False, "stopped")
             hw_motors_stop()
             self.ui.set_conn("getrennt")
 
@@ -266,6 +308,8 @@ class Robot:
             if data:
                 msg["data"] = data
             self.link.publish("event", msg)
+        # After the events: a key that answers a question is not also a button event.
+        self.check_question(now)
 
         # 5. State.
         self.publish_state(now)

@@ -47,6 +47,7 @@ class Events:
         self.light_armed = True   # a jump fires once, then waits until light is near the mean
         self.loud_mean = None
         self.clap_armed = True
+        self.quiet_buttons = False  # ask_human owns A and B
 
     def emit(self, kind, data=None):
         self.queue.append((kind, data))
@@ -81,7 +82,7 @@ class Events:
 
         for name in ("a", "b"):
             pressed = s["button_" + name]
-            if pressed and not self.buttons[name]:
+            if pressed and not self.buttons[name] and not self.quiet_buttons:
                 self.emit_gap("button_" + name, now)
             self.buttons[name] = pressed
 

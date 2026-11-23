@@ -360,6 +360,10 @@ var robotEvents = []string{"obstacle_near", "obstacle_clear", "color_changed", "
 
 const maxNotes = 20
 
+// askMaxRunes is the longest question ask_human shows; longer ones are refused,
+// not cut, so the agent rephrases instead of asking half a question.
+const askMaxRunes = 40
+
 func static(props map[string]any) func(*Env) map[string]any {
 	return func(*Env) map[string]any {
 		out := make(map[string]any, len(props))
@@ -575,6 +579,31 @@ func builtins() []*tool {
 			robot: robotOne,
 			run: func(ctx context.Context, c *call) any {
 				return c.command(ctx, c.robots[0], "identify", nil, 3*time.Second)
+			},
+		},
+		{
+			name: "ask_human",
+			desc: "Fragt einen Menschen am Roboter: Das Display zeigt question und darunter \"A = ja, B = nein\". Wartet, bis jemand Taste A (ja) oder B (nein) drückt, höchstens seconds Sekunden. Der Roboter steht dabei; ein Fahrbefehl an ihn bricht die Frage ab. question hat höchstens 40 Zeichen. Ergebnis: answer ist a, b oder timeout (niemand hat geantwortet), bei einem Abbruch stopped.",
+			props: static(map[string]any{
+				"question": map[string]any{"type": "string", "maxLength": askMaxRunes},
+				"seconds":  map[string]any{"type": "number", "minimum": 5, "maximum": 60, "description": "Wartezeit, Standard 20."},
+			}),
+			required: []string{"question"}, robot: robotOne,
+			run: func(ctx context.Context, c *call) any {
+				q := c.str("question")
+				switch n := utf8.RuneCountInString(q); {
+				case n == 0:
+					return fail("Die Frage ist leer.")
+				case n > askMaxRunes:
+					return fail("Die Frage hat %d Zeichen, erlaubt sind höchstens %d. Formuliere sie kürzer.", n, askMaxRunes)
+				}
+				secs := int(max(5, min(60, c.num("seconds", 20))))
+				res := c.command(ctx, c.robots[0], "ask_human", map[string]any{"text": q, "s": secs}, time.Duration(secs+3)*time.Second)
+				if _, ok := res["answer"]; !ok {
+					// The robot did not answer the question itself (offline, busy, ...).
+					res["answer"] = res["reason"]
+				}
+				return res
 			},
 		},
 		{

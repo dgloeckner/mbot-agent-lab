@@ -41,6 +41,7 @@ animations (`led.play`, the ultrasonic sensor's emotion effects), cloud speech
 | Express | `show_text` | `text`, at most 60 characters | `ok` |
 | Express | `gesture` | `kind`: `nod`, `shake`, `spin` | `ok` |
 | Express | `identify` | none | `ok` |
+| Talk | `ask_human` | `question` (at most 40 characters), `seconds?` (5..60, 20) | `answer`: `a`, `b`, `timeout` or `stopped` |
 | Talk | `say` | `to`, `text` up to 60 characters, `emotion?` | `delivered` |
 | Talk | `tell_team` | `text` | `ok` |
 | Remember | `remember` | `text` | `note_id` |
@@ -71,6 +72,10 @@ animations (`led.play`, the ultrasonic sensor's emotion effects), cloud speech
   The sign follows `turn`: positive curves right. The obstacle reflex looks along the tangent.
   `floor` counts degrees. In the trip log an arc is its chord (half turn, straight drive, half
   turn), so `retrace_path` drives back on a straight line.
+- **`ask_human` asks a person at the robot:** the display shows the question and "A = ja, B = nein".
+  The agent waits like with `wait_for`; the robot does not. The robot stands meanwhile; a motion
+  command to it ends the question with `stopped`. A longer question is refused, not cut, so the
+  agent rephrases it. Uses: confirm before something risky, ask for help, games with hints.
 - **`say` is a bundle:** text on the speaker's display, light, sound, optional gesture, and the
   message lands in the recipient's inbox. `to` is an agent name or `"all"`.
 - **`finish` delivers the report** that the team later compares with the log.
