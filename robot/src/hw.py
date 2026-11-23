@@ -157,10 +157,9 @@ def hw_button(name):
     return bool(cyberpi.controller.is_press(name))  # VERIFY: "a", "b"
 
 
-def hw_leds(color, brightness=100):
-    r, g, b = COLOR_RGB.get(color, COLOR_RGB["white"])
-    k = brightness / 100
-    cyberpi.led.on(int(r * k), int(g * k), int(b * k), "all")  # VERIFY
+def hw_led(rgb, i=None):
+    """Set LED i (0..4, left to right) or all five to (r, g, b)."""
+    cyberpi.led.on(rgb[0], rgb[1], rgb[2], "all" if i is None else i + 1)  # VERIFY: ids 1..5, which is left
 
 
 def hw_show_lines(lines):

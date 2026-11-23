@@ -76,7 +76,7 @@ class Robot:
             self.end_question(False, "reassigned")
             hw_motors_stop()
             self.trip_log = []
-            self.ui.led = None
+            self.ui.set_color(None)
         self.owner = team
         self.ui.set_owner(p.get("owner", "") if team else "", p.get("name", ""), p.get("color"))
         self.ui.set_agent(p.get("agent", "waiting"))
@@ -104,7 +104,10 @@ class Robot:
         elif name == "ask_human":
             self.ask(cmd_id, args)
         elif name == "set_leds":
-            self.ui.led = args.get("color") or self.ui.led
+            self.ui.set_color(args.get("color") or self.ui.led)
+            self.reply(cmd_id, True, "done")
+        elif name == "led_effect":
+            self.ui.set_effect(args, ticks_ms())
             self.reply(cmd_id, True, "done")
         elif name == "show_text":
             self.ui.set_text(str(args.get("text", "")))
@@ -313,7 +316,7 @@ class Robot:
 
         # 5. State.
         self.publish_state(now)
-        self.ui.tick(now)
+        self.ui.tick(now, self.skill is not None)
 
     def run(self, alive=None):
         """Loop until alive() turns false, then stop and drop the connection."""

@@ -139,7 +139,8 @@ Sent immediately on change, otherwise two to five times per second.
 | `calibrate_colors` | `cm?` (38) | `refs`: per probe six `[r, g, b]` for white, black, red, yellow, green, blue; `driven_cm` |
 | `retrace_path` | none | `segments`, `distance_cm` (see [Trip log](#trip-log)) |
 | `stop` | none | none |
-| `set_leds` | `color` or `pattern` | none |
+| `set_leds` | `color`; ends a running effect | none |
+| `led_effect` | `fx` (effect name), `c`, `c2` (`[r, g, b]`), `v` (0..100, `level`), `p` (period in ms), `ms` (duration, none = until replaced) | none; the robot computes the frames in its loop (`robot/src/fx.py`) and sets only LEDs that changed |
 | `show_text` | `text` | none |
 | `gesture` | `kind`: `nod`, `shake`, `spin` | none |
 | `ask_human` | `text` (at most 40 characters), `s` (1..60, 20) | `answer`: `a`, `b` or `timeout` (`reason` `done` or `timeout`); `stopped`/`reassigned` with `ok:false` when a motion command, `stop` or a new owner ends the question; `busy` while a motion skill or another question runs |
