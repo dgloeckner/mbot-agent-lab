@@ -148,6 +148,8 @@ classifies each into a letter: `w` white, `k` black, `r` red, `y` yellow, `g` gr
   black (the edge of a line under the probe's spot) counts as the nearer of the two. Without
   references it uses the sensor's built-in color names.
 - A pattern counts after 3 equal readings in a row; shorter flicker never shows up.
+- At a stripe edge the probes rarely change together. An entry that the next one replaces within
+  0.5 cm (4° when turning) is such a transition and left out of `floor`.
 - `floor` in a result is a list of `[position, pattern]`. An entry starts where its pattern
   began. Position counts from the start of the motion: cm when driving, degrees (positive right)
   when turning, one decimal. An entry lasts until the next begins.

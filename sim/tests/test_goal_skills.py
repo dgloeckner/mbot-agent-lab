@@ -34,6 +34,14 @@ class FilterTest(unittest.TestCase):
         self.assertEqual(changed, [False, False, True])
         self.assertEqual((steady.value, steady.tag), ("rkkr", 7), "the change begins at the first reading")
 
+    def test_trace_drops_edge_transitions(self):
+        trace = self.ns["Trace"]({"floor": "wkkw", "distance_cm": 300})
+        # One outer probe reaches each stripe edge 2 mm before the other.
+        for pos, pattern in [(2.0, "gkkw"), (2.2, "gkkg"), (3.9, "gkkw"), (4.1, "wkkw"),
+                             (6.0, "wkkr"), (6.2, "wkkw"), (9.0, "rkkr")]:
+            trace.add(pos, pattern)
+        self.assertEqual(trace.entries, [[0, "wkkw"], [2.2, "gkkg"], [4.1, "wkkw"], [9.0, "rkkr"]])
+
     def test_tilt_hysteresis_and_duration(self):
         sense = self.ns["Sense"]()
         self.assertFalse(sense.tilt(60, 0))  # one spike is not a tip-over
