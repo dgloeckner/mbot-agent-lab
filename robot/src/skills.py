@@ -11,14 +11,15 @@
 # Every motion except scan reports its floor trace ("floor"): what the four
 # probes saw on the way. The robot reports it and never interprets it.
 
-from compat import ticks_ms, ticks_diff
-from hw import (hw_motors, hw_motors_stop, hw_wheels_reset, hw_wheels_deg,
-                hw_yaw, hw_yaw_reset, CM_PER_WHEEL_DEG, TRACK_CM)
+from compat import ticks_ms, ticks_diff, sleep_ms
+from hw import hw_motors, hw_motors_stop, hw_wheels_reset, hw_wheels_deg, CM_PER_WHEEL_DEG, TRACK_CM
 from sense import Steady, SN_FLOOR_STEADY, SN_FROM_NAME
 
 SK_DEFAULT_SPEED = 40      # RPM
 SK_MAX_SPEED = 80          # RPM, hard limit
 SK_TURN_SPEED = 30         # RPM
+SK_MIN_SPEED = 8           # RPM; drives and turns slow down to this before the target
+SK_DRIVE_KP = 10           # RPM per cm still to go while slowing down (turns: 1 RPM per degree)
 SK_SCAN_SPEED = 20         # RPM, slower so every angle gets several readings
 SK_LINE_SPEED = 30         # RPM
 SK_LINE_MAX_SPEED = 60
@@ -28,6 +29,12 @@ SK_MAX_CM = 300            # per command
 SK_MAX_DEG = 720           # per command
 SK_MAX_MS = 20000          # per command; the server waits this + 2 s
 SK_TURN_TOLERANCE_DEG = 2
+SK_RUNON_S = 0.1           # the wheels run on for about this long at full speed after a stop.
+                           # VERIFY/calibrate: robot/tools/hwcheck.py prints the run-on
+# Body rotation per wheel degree of (left - right): in place each wheel runs on a
+# circle with the track width as diameter.
+SK_DEG_PER_WHEEL = CM_PER_WHEEL_DEG / TRACK_CM * 57.2958
+SK_TURN_RUNON = 12 * SK_RUNON_S * SK_DEG_PER_WHEEL  # degrees per RPM (2 wheels, 6 deg/s per RPM)
 SK_ARC_MIN_CM = 10         # arc radius limits; the inner wheel turns forward down to TRACK_CM / 2
 SK_ARC_MAX_CM = 200
 SK_CONFIRM = 2             # loop iterations a stop condition must hold
@@ -50,6 +57,21 @@ def _num(args, key, default=None):
     if not isinstance(v, (int, float)):
         raise ValueError("%s must be a number" % key)
     return v
+
+
+def _halt():
+    """Stop and wait until the wheels stand still (at most 400 ms), so a
+    measurement after it includes the run-on. The motors are off, so this
+    short wait may block. The wheels only run on away from the reset."""
+    hw_motors_stop()
+    last = -9
+    for _ in range(16):
+        sleep_ms(25)
+        left, right = hw_wheels_deg()
+        now = abs(left) + abs(right)
+        if now - last < 1:
+            return
+        last = now
 
 
 def _driven_cm():
@@ -132,43 +154,44 @@ class Trace:
         return out
 
 
-class Heading:
-    """Accumulated rotation from gyro yaw deltas; works past +-180 degrees."""
-
-    def __init__(self):
-        hw_yaw_reset()
-        self.last = 0
-        self.value = 0
-
-    def update(self):
-        yaw = hw_yaw()
-        delta = yaw - self.last
-        if delta > 180:
-            delta -= 360
-        elif delta < -180:
-            delta += 360
-        self.value += delta
-        self.last = yaw
-        return self.value
-
-
-def _rotate(direction, speed):
-    """Turn on the spot; direction 1 is right (clockwise), -1 left."""
-    v = direction * speed
-    hw_motors(v, -v)
-
-
 class Motion:
-    """What the motion skills share. Turning skills keep a Heading."""
+    """What the motion skills share. Turning skills measure self.deg."""
 
     forward = False
-    heading = None
+    deg = 0
 
     def segment(self):
-        return ("turn", round(self.heading.value) if self.heading else 0)
+        return ("turn", round(self.deg))
 
     def abort(self, reason, s):
         return self._end(False, reason, s)
+
+    def turned(self):
+        """Rotation in degrees since the wheel reset, positive right.
+
+        On the spot and on a curve the body turns by (left - right) wheel
+        travel over the track width. The gyro lags and sees nothing on a
+        stand; the encoders count what the wheels did. Slip is not seen.
+        """
+        left, right = hw_wheels_deg()
+        self.deg = (left - right) * SK_DEG_PER_WHEEL
+        return self.deg
+
+    def toward(self, target, speed):
+        """Turn on the spot toward target degrees; True once stopped.
+
+        Slows down over the last degrees and stops early by the run-on
+        expected at the speed it turns with, so it comes to rest on target.
+        """
+        rest = target - self.turned()
+        v = _clamp(abs(rest), SK_MIN_SPEED, speed)
+        if abs(rest) <= v * SK_TURN_RUNON:
+            hw_motors_stop()
+            return True
+        if rest < 0:
+            v = -v
+        hw_motors(v, -v)
+        return False
 
 
 class DriveSkill(Motion):
@@ -201,21 +224,22 @@ class DriveSkill(Motion):
         self.trace = Trace(s)
         hw_wheels_reset()
         self.started = ticks_ms()
-        v = self.direction * self.speed
-        hw_motors(v, v)
 
     def segment(self):
         return ("drive", round(self.direction * self.driven, 1))
 
     def _end(self, ok, reason, s):
-        hw_motors_stop()
+        _halt()
+        self.driven = abs(_driven_cm())
         data = {"driven_cm": round(self.driven, 1), "distance_cm": s["distance_cm"], "color": s["color"]}
         return ok, reason, self.trace.data(data)
 
     def step(self, s, now):
         self.driven = abs(_driven_cm())
         self.trace.update(s, self.driven)
-        if self.driven >= self.target:
+        rest = self.target - self.driven
+        v = _clamp(rest * SK_DRIVE_KP, SK_MIN_SPEED, self.speed)
+        if rest <= v * 6 * SK_RUNON_S * CM_PER_WHEEL_DEG:  # the run-on at this speed
             return self._end(True, "max_cm" if self.until else "done", s)
         if self.stop_below is not None and self.forward and self.wall.check(s["distance_cm"] < self.stop_below):
             return self._end(True, "wall", s)
@@ -223,11 +247,13 @@ class DriveSkill(Motion):
             return self._end(True, "color", s)
         if ticks_diff(now, self.started) > SK_MAX_MS:
             return self._end(False, "timeout", s)
+        v *= self.direction
+        hw_motors(v, v)
         return None
 
 
 class TurnSkill(Motion):
-    """turn(deg): positive is right, measured with the gyro."""
+    """turn(deg): positive is right, measured with the wheel encoders."""
 
     name = "turn"
 
@@ -240,19 +266,20 @@ class TurnSkill(Motion):
 
     def start(self, s):
         self.trace = Trace(s, SK_FLOOR_MIN_DEG)
-        self.heading = Heading()
+        hw_wheels_reset()
         self.started = ticks_ms()
-        _rotate(self.direction, SK_TURN_SPEED)
 
     def _end(self, ok, reason, s):
-        hw_motors_stop()
-        return ok, reason, self.trace.data({"turned_deg": round(self.heading.value), "distance_cm": s["distance_cm"]})
+        _halt()
+        return ok, reason, self.trace.data({"turned_deg": round(self.turned()), "distance_cm": s["distance_cm"]})
+
+    def there(self):
+        return self.toward(self.target, SK_TURN_SPEED)
 
     def step(self, s, now):
-        turned = self.heading.update()
-        self.trace.update(s, turned)
-        if abs(turned) >= abs(self.target) - SK_TURN_TOLERANCE_DEG:
+        if self.there():
             return self._end(True, "done", s)
+        self.trace.update(s, self.deg)
         if ticks_diff(now, self.started) > SK_MAX_MS:
             return self._end(False, "timeout", s)
         return None
@@ -278,12 +305,11 @@ class TurnUntilClearSkill(TurnSkill):
         self.clear = Confirm(SK_CLEAR_CONFIRM)
 
     def step(self, s, now):
-        self.trace.update(s, self.heading.update())
-        turned = abs(self.heading.value)
-        if turned >= self.min_deg and self.clear.check(s["distance_cm"] >= self.min_cm):
-            return self._end(True, "clear", s)
-        if turned >= self.max_deg:
+        if self.toward(self.direction * self.max_deg, SK_TURN_SPEED):
             return self._end(True, "max_deg", s)
+        self.trace.update(s, self.deg)
+        if abs(self.deg) >= self.min_deg and self.clear.check(s["distance_cm"] >= self.min_cm):
+            return self._end(True, "clear", s)
         if ticks_diff(now, self.started) > SK_MAX_MS:
             return self._end(False, "timeout", s)
         return None
@@ -314,17 +340,8 @@ class ScanSkill(Motion):
         self.best = None
 
     def start(self, s):
-        self.heading = Heading()
+        hw_wheels_reset()
         self.started = ticks_ms()
-
-    def _toward(self, target, speed):
-        """Rotate toward target; True when there."""
-        diff = target - self.heading.value
-        if abs(diff) <= SK_TURN_TOLERANCE_DEG:
-            hw_motors_stop()
-            return True
-        _rotate(1 if diff > 0 else -1, speed)
-        return False
 
     def _profile(self):
         out = []
@@ -336,19 +353,19 @@ class ScanSkill(Motion):
         return out
 
     def _end(self, ok, reason, s):
-        hw_motors_stop()
-        data = {"turned_deg": round(self.heading.value), "distance_cm": s["distance_cm"]}
+        _halt()
+        data = {"turned_deg": round(self.turned()), "distance_cm": s["distance_cm"]}
         if self.best is not None:
             data["profile"] = self._profile()
             data["best_deg"], data["best_cm"] = self.best
         return ok, reason, data
 
     def step(self, s, now):
-        heading = self.heading.update()
+        heading = self.turned()
         if ticks_diff(now, self.started) > SK_MAX_MS:
             return self._end(False, "timeout", s)
         if self.phase == "to_start":
-            if self._toward(self.from_deg, SK_TURN_SPEED):
+            if self.toward(self.from_deg, SK_TURN_SPEED):
                 self.phase = "sweep"
             return None
         if self.phase == "sweep":
@@ -357,7 +374,7 @@ class ScanSkill(Motion):
                 i = int(round((heading - self.from_deg) / self.step_deg))
                 if i >= 0:
                     self.bins.setdefault(i, []).append(min(raw, 300))
-            if self._toward(self.to_deg, SK_SCAN_SPEED):
+            if self.toward(self.to_deg, SK_SCAN_SPEED):
                 best_deg, best_cm = 0, -1
                 for deg, cm in self._profile():
                     if cm is not None and cm > best_cm:
@@ -366,7 +383,7 @@ class ScanSkill(Motion):
                 self.target = best_deg if self.face == "best" else 0
                 self.phase = "face"
             return None
-        if self._toward(self.target, SK_TURN_SPEED):
+        if self.toward(self.target, SK_TURN_SPEED):
             return self._end(True, "done", s)
         return None
 
@@ -518,9 +535,9 @@ class RetraceSkill(Motion):
 class ArcSkill(TurnSkill):
     """drive_arc(radius_cm, deg, speed): drive forward along a circle.
 
-    deg is the heading change, positive curves right; it ends when the gyro
-    says so, like turn, and the floor trace counts degrees too. radius_cm is
-    to the circle's center, speed the speed of the robot's center.
+    deg is the heading change, positive curves right; it ends when the wheel
+    encoders say so, like turn, and the floor trace counts degrees too.
+    radius_cm is to the circle's center, speed the speed of the robot's center.
     The trip log gets the arc as its chord (turn half, drive, turn half), so
     retrace_path drives a straight line back.
     """
@@ -536,22 +553,29 @@ class ArcSkill(TurnSkill):
         self.r = _clamp(r, SK_ARC_MIN_CM, SK_ARC_MAX_CM)
         self.speed = _clamp(abs(_num(args, "speed", SK_DEFAULT_SPEED)), 5, SK_MAX_SPEED)
         self.log = log
-        self.driven = 0
 
     def start(self, s):
-        TurnSkill.start(self, s)  # then curve instead of turning on the spot
-        hw_wheels_reset()
-        k = TRACK_CM / 2 / self.r * self.direction
-        v = min(self.speed, SK_MAX_SPEED / (1 + abs(k)))
+        TurnSkill.start(self, s)
+        k = TRACK_CM / 2 / self.r
+        v = min(self.speed, SK_MAX_SPEED / (1 + k))
+        self.runon = v * k * SK_TURN_RUNON  # the wheels differ by 2 v k
+        k *= self.direction
         hw_motors(v * (1 + k), v * (1 - k))
+
+    def there(self):
+        """Stop early by the expected run-on; no slowing down on a curve."""
+        if (self.target - self.turned()) * self.direction > self.runon:
+            return False
+        hw_motors_stop()
+        return True
 
     def segment(self):
         return ("drive", 0)  # _end logs the arc
 
     def _end(self, ok, reason, s):
         r = TurnSkill._end(self, ok, reason, s)
-        r[2]["driven_cm"] = cm = round(self.driven, 1)
-        h = self.heading.value
+        r[2]["driven_cm"] = cm = round(abs(_driven_cm()), 1)
+        h = self.deg
         if abs(h) > 1:
             cm = abs(cm * 114.6 * _sin(h / 2) / h)  # chord = 2 r sin(h / 2), r = cm / h in radians
         h = round(h / 2)
@@ -559,10 +583,6 @@ class ArcSkill(TurnSkill):
             if e[1]:
                 self.log.append(e)
         return r
-
-    def step(self, s, now):
-        self.driven = abs(_driven_cm())
-        return TurnSkill.step(self, s, now)
 
 
 MOTION_SKILLS = ("drive", "turn", "drive_until", "turn_until_clear", "scan", "follow_line_until",

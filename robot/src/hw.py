@@ -12,6 +12,7 @@ import mbuild
 WHEEL_DIAMETER_CM = 6.5
 CM_PER_WHEEL_DEG = 3.14159 * WHEEL_DIAMETER_CM / 360
 # Track width: wheel center to wheel center, as in sim/mbot2.json. VERIFY: measure.
+# Turns are measured with it: calibrate so that turn(360) ends facing the start.
 TRACK_CM = 12.0
 
 # Motor direction: the right motor is mounted mirrored. VERIFY sign.
@@ -60,16 +61,15 @@ def hw_wheels_deg():
 
 
 def hw_yaw():
-    """Heading in degrees, positive = right (clockwise seen from above).
+    """Gyro heading in degrees, positive = right (clockwise seen from above).
+
+    Only for the state's yaw field: turns are measured with the wheel encoders,
+    which also work on a stand and do not lag.
 
     The CyberPi counts yaw the other way round: on the robot a right turn by
     90 degrees read -100 (checked 2026-11-23).
     """
     return -cyberpi.get_yaw()
-
-
-def hw_yaw_reset():
-    cyberpi.reset_yaw()  # VERIFY
 
 
 def hw_tilt():

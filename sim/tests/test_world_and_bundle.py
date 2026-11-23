@@ -24,6 +24,7 @@ class WorldTest(unittest.TestCase):
     def setUp(self):
         self.clock = FakeClock()
         self.w = World(BOX, clock=self.clock)
+        self.w.motor_lag = 0  # ideal motors; WorldMotorTest covers the lag
 
     def test_distance_ahead(self):
         # Sensor sits 7 cm ahead of the centre, wall at y=100.
