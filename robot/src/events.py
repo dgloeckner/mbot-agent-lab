@@ -8,7 +8,10 @@ EV_NEAR_CM = 15         # obstacle_near below this distance
 EV_CLEAR_CM = 20        # obstacle_clear above this distance (hysteresis)
 EV_BATTERY_LOW = 15     # percent
 EV_CLAP_LEVEL = 70      # loudness 0..100
+EV_CLAP_JUMP = 40       # a clap stands this far above the background level
 EV_CLAP_COOLDOWN_MS = 1000
+EV_HUSH_MOTION_MS = 500  # deaf to claps while motors run and this long after
+EV_HUSH_SOUND_MS = 2000  # deaf to claps this long after the robot plays a sound
 
 
 class Events:
@@ -20,9 +23,19 @@ class Events:
         self.battery_warned = False
         self.tilted = False
         self.last_clap = -EV_CLAP_COOLDOWN_MS
+        self.noise = 0
+        self.hush_at = 0
+        self.hush_ms = 0
 
     def emit(self, kind, data=None):
         self.queue.append((kind, data))
+
+    def hush(self, now, ms):
+        """Ignore claps until ms after now: the robot's own motors and speaker
+        sit right next to the microphone."""
+        if ms > self.hush_ms - ticks_diff(now, self.hush_at):
+            self.hush_at = now
+            self.hush_ms = ms
 
     def update(self, s, now):
         """s is the sensor snapshot dict built by the main loop."""
@@ -55,6 +68,12 @@ class Events:
             self.emit("tilted")
         self.tilted = s["tilted"]
 
-        if s["loudness"] >= EV_CLAP_LEVEL and ticks_diff(now, self.last_clap) > EV_CLAP_COOLDOWN_MS:
+        # A clap is a short peak above the background level, which follows
+        # steady noise (talking, music) so that alone never counts as a clap.
+        x = s["loudness"]
+        if (x >= EV_CLAP_LEVEL and x - self.noise >= EV_CLAP_JUMP
+                and ticks_diff(now, self.hush_at) > self.hush_ms
+                and ticks_diff(now, self.last_clap) > EV_CLAP_COOLDOWN_MS):
             self.last_clap = now
-            self.emit("clap", {"loudness": s["loudness"]})
+            self.emit("clap", {"loudness": x})
+        self.noise += (x - self.noise) / 8
