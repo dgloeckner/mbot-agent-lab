@@ -96,22 +96,27 @@ export function TeamBand() {
       ? 'Deployt zuerst einen Prompt.'
       : 'Startet einen neuen Lauf mit eurem aktuellen Prompt.'
   return (
-    <header class="band" data-agent={a.running ? a.state : 'off'} data-robots={robots.value.length > 1 ? 'many' : 'one'}>
+    <header class="band" data-agent={a.running || a.state !== 'waiting' ? a.state : 'off'} data-robots={robots.value.length > 1 ? 'many' : 'one'}>
       <div class="band-team">
         <h1>
           <InlineEdit value={s.team.name} label="Teamname" maxLength={30} onSave={renameTeam} />
         </h1>
         <p class="agent-state" aria-live="polite">
           <span class="agent-dot" aria-hidden="true" />
-          {a.running ? `Agent ${AGENT_LABEL[a.state]}` : 'Kein Lauf'}
+          {a.running ? `Agent ${AGENT_LABEL[a.state]}` : a.state !== 'waiting' ? 'Kein Lauf, Agent antwortet im Gespräch' : 'Kein Lauf'}
           {a.calls > 0 && (
             <span class="run-usage" title={`Modell ${a.model ?? ''}, ${a.calls} Aufrufe`}>
               {a.running ? 'dieser Lauf' : 'letzter Lauf'}: {formatUsage(a.tokens_in + a.tokens_out, a.cost_micro_eur)}
             </span>
           )}
-          {totals.value.runs > 1 && (
-            <span class="run-usage" title={`Alle ${totals.value.runs} Läufe eures Teams`}>
+          {(totals.value.runs > 1 || totals.value.conversation.count > 0) && (
+            <span class="run-usage" title={`Alle ${totals.value.runs} Läufe und ${totals.value.conversation.count} Gespräche eures Teams`}>
               gesamt: {formatUsage(totals.value.tokens_in + totals.value.tokens_out, totals.value.cost_micro_eur)}
+            </span>
+          )}
+          {totals.value.conversation.count > 0 && (
+            <span class="run-usage" title="Davon eure Gespräche mit dem Agenten ohne Lauf">
+              davon Gespräche: {formatUsage(totals.value.conversation.tokens_in + totals.value.conversation.tokens_out, totals.value.conversation.cost_micro_eur)}
             </span>
           )}
         </p>

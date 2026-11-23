@@ -57,6 +57,8 @@ export interface LogEntry {
   robot?: string
   text?: string
   data?: Record<string, unknown>
+  /** 'conversation' for the talk with the agent while no run is active; unset for the run protocol. */
+  channel?: 'conversation'
 }
 
 export type AgentState = 'waiting' | 'thinking' | 'acting'
@@ -72,14 +74,19 @@ export interface AgentStatus {
   tokens_out: number
   cost_micro_eur: number
   calls: number
+  /** The team can talk with its agent while no run is active. */
+  conversation: boolean
+  conversation_id?: number
+  conversation_tokens?: number
 }
 
-/** Sum of all runs of a team. */
+/** Sum of all runs and conversations of a team; `conversation` is the conversations' share. */
 export interface Totals {
   runs: number
   tokens_in: number
   tokens_out: number
   cost_micro_eur: number
+  conversation: { count: number; tokens_in: number; tokens_out: number; cost_micro_eur: number }
 }
 
 /** A language model the team may choose (server/internal/lab/models.go). */

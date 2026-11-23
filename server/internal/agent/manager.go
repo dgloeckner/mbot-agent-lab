@@ -60,6 +60,12 @@ type Status struct {
 	TokensOut    int       `json:"tokens_out"`
 	CostMicroEUR int64     `json:"cost_micro_eur"`
 	Calls        int       `json:"calls"`
+
+	// Conversation reports whether the team can talk with its agent while no
+	// run is active. ConversationID is the open conversation, if any.
+	Conversation       bool  `json:"conversation"`
+	ConversationID     int64 `json:"conversation_id,omitempty"`
+	ConversationTokens int   `json:"conversation_tokens,omitempty"`
 }
 
 // Robot events that wake the agent. Others (obstacle, color) wait in the
@@ -83,6 +89,10 @@ type Deps struct {
 	// TeamProvider names the model provider for a team's next run
 	// (lab.Service.TeamProvider). Nil or "" means the default provider.
 	TeamProvider func(ctx context.Context, teamID string) string
+
+	// Conversations reports whether the control room allows conversations
+	// (lab.Service.ConversationEnabled). Nil means allowed.
+	Conversations func() bool
 }
 
 // Manager owns the actors. Safe for concurrent use.
@@ -91,11 +101,12 @@ type Manager struct {
 	ctx    context.Context
 	mu     sync.Mutex
 	actors map[string]*actor
+	talks  map[string][]time.Time // team -> recent conversation messages
 }
 
 // NewManager creates the runtime. Call Run before use.
 func NewManager(d Deps) *Manager {
-	return &Manager{Deps: d, actors: map[string]*actor{}, ctx: context.Background()}
+	return &Manager{Deps: d, actors: map[string]*actor{}, talks: map[string][]time.Time{}, ctx: context.Background()}
 }
 
 // Run closes runs a previous server left open, then routes robot events to
@@ -145,10 +156,12 @@ func (m *Manager) actor(teamID string, create bool) *actor {
 
 // Status returns the agent status of a team.
 func (m *Manager) Status(teamID string) Status {
+	s := Status{State: StateWaiting}
 	if a := m.actor(teamID, false); a != nil {
-		return a.getStatus()
+		s = a.getStatus()
 	}
-	return Status{State: StateWaiting}
+	s.Conversation = m.ConversationEnabled()
+	return s
 }
 
 // StartError is a reason why a run cannot start. Its text is German.
@@ -170,6 +183,7 @@ func (m *Manager) Start(ctx context.Context, teamID string) error {
 	if a.getStatus().Running {
 		return &StartError{"Euer Agent läuft schon."}
 	}
+	a.interrupt() // an answer in the conversation must not hold up the run
 	reply := make(chan error, 1)
 	a.ctrl <- control{kind: ctrlStart, reply: reply}
 	select {
@@ -215,7 +229,8 @@ func (m *Manager) RemoveTeam(teamID string) {
 }
 
 // Deliver puts a message into a team's inbox. It returns false when the team
-// has no running agent; such messages are not kept.
+// has no running agent; such messages are not kept (team messages then go to
+// Talk instead).
 func (m *Manager) Deliver(teamID string, msg Message) bool {
 	a := m.actor(teamID, false)
 	if a == nil || !a.getStatus().Running {

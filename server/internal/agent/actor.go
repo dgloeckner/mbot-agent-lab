@@ -20,6 +20,7 @@ const (
 	ctrlStop
 	ctrlRestart
 	ctrlRemove
+	ctrlNewConversation
 )
 
 type control struct {
@@ -50,7 +51,9 @@ type actor struct {
 	m     *Manager
 	team  string
 	inbox chan Message
+	talk  chan Message // team messages while no run is active
 	ctrl  chan control
+	conv  *conversation // open conversation; only the actor goroutine touches it
 
 	mu     sync.Mutex
 	status Status
@@ -58,7 +61,7 @@ type actor struct {
 }
 
 func newActor(m *Manager, team string) *actor {
-	return &actor{m: m, team: team, inbox: make(chan Message, 256), ctrl: make(chan control, 16), status: Status{State: StateWaiting}}
+	return &actor{m: m, team: team, inbox: make(chan Message, 256), talk: make(chan Message, 8), ctrl: make(chan control, 16), status: Status{State: StateWaiting}}
 }
 
 func (a *actor) getStatus() Status {
@@ -111,6 +114,10 @@ func (a *actor) loop(ctx context.Context) {
 		}
 	}
 	start := func() error {
+		if a.conv != nil {
+			a.endConversation("run_start")
+			a.talkInfo("Ein Lauf hat begonnen, das Gespräch ist zu Ende. Im Lauf kennt euer Agent davon nur seine Notizen.")
+		}
 		r, err := a.startRun(ctx)
 		if err != nil {
 			return err
@@ -125,6 +132,7 @@ func (a *actor) loop(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			end("server_stop", "")
+			a.endConversation("server_stop")
 			return
 		case c := <-a.ctrl:
 			var err error
@@ -140,7 +148,13 @@ func (a *actor) loop(ctx context.Context) {
 				err = start()
 			case ctrlRemove:
 				end("team_deleted", "")
+				a.endConversation("team_deleted")
 				return
+			case ctrlNewConversation:
+				if a.conv != nil {
+					a.endConversation("new")
+					a.talkInfo("Neues Gespräch: Euer Agent kennt jetzt nur noch seine Notizen und den letzten Lauf.")
+				}
 			}
 			if c.reply != nil {
 				c.reply <- err
@@ -148,6 +162,18 @@ func (a *actor) loop(ctx context.Context) {
 		case msg := <-a.inbox:
 			if cur != nil {
 				pending = append(pending, msg)
+			}
+		case msg := <-a.talk:
+			msgs := append([]Message{msg}, a.drainTalk()...)
+			if cur != nil {
+				// A run began after the team wrote: the run gets the message.
+				for _, m := range msgs {
+					a.log(live.SourceTeam, "chat", m.Text, nil)
+				}
+				a.talkInfo("Gerade läuft ein Lauf. Eure Nachricht ist an den Lauf gegangen.")
+				pending = append(pending, msgs...)
+			} else {
+				a.converse(ctx, msgs)
 			}
 		case <-timer.C:
 			end("time_limit", "")
@@ -302,6 +328,18 @@ func (a *actor) process(parent context.Context, r *run, pending []Message) []Mes
 		if fresh := a.drainInbox(); len(fresh) > 0 {
 			a.addInbox(ctx, r, fresh)
 			env.MsgID = r.lastMsgID
+		}
+	}
+}
+
+func (a *actor) drainTalk() []Message {
+	var out []Message
+	for {
+		select {
+		case m := <-a.talk:
+			out = append(out, m)
+		default:
+			return out
 		}
 	}
 }

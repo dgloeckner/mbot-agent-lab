@@ -25,6 +25,13 @@ import (
 type robotBus struct {
 	mu      sync.Mutex
 	handler func(string, []byte)
+	cmds    []string // names of the commands sent
+}
+
+func (b *robotBus) sent() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]string(nil), b.cmds...)
 }
 
 func (b *robotBus) Handle(_ string, _ int, fn func(string, []byte)) error {
@@ -44,6 +51,7 @@ func (b *robotBus) Publish(topic string, payload []byte, _ bool, _ byte) error {
 	res, _ := json.Marshal(protocol.Result{ID: cmd.ID, OK: true, Reason: protocol.ReasonDone, Data: json.RawMessage(`{"driven_cm":20}`)})
 	b.mu.Lock()
 	h := b.handler
+	b.cmds = append(b.cmds, cmd.Name)
 	b.mu.Unlock()
 	go h(protocol.Topic(id, protocol.TopicResult), res)
 	return nil

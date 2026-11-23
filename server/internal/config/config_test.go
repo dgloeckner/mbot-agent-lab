@@ -44,6 +44,9 @@ func TestParseValid(t *testing.T) {
 	if c.Server.LabCode != "DEV1" {
 		t.Errorf("lab code = %q, want DEV1", c.Server.LabCode)
 	}
+	if c.Budgets.MaxConversationMessagesPerMinute != DefaultMaxConversationMessages || c.Budgets.MaxTokensPerConversation != DefaultMaxTokensPerConversation {
+		t.Errorf("conversation budgets = %+v", c.Budgets)
+	}
 	if c.Budgets.MaxStepsPerWakeup != DefaultMaxStepsPerWakeup {
 		t.Errorf("defaults not applied")
 	}

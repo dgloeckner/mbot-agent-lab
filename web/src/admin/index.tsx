@@ -25,12 +25,13 @@ interface AdminTeam {
   created_at: string
   provider: string // model provider of the team's next run
   agent: AgentStatus // current or last run
-  total: Totals // all runs
+  total: Totals // all runs and conversations
 }
 
 interface AdminState {
   lab_code: string
   models: ModelOption[]
+  conversation: boolean // teams may talk with their agent while no run is active
   teams: AdminTeam[]
   robots: AdminRobot[]
 }
@@ -308,14 +309,18 @@ function TeamCard({ t, robots, teams }: { t: AdminTeam; robots: AdminRobot[]; te
         </button>
       </footer>
       <p class="team-agent" data-running={t.agent.running}>
-        {t.agent.running ? `Agent ${AGENT_LABEL[t.agent.state]}` : 'Kein Lauf'}
+        {t.agent.running ? `Agent ${AGENT_LABEL[t.agent.state]}` : t.agent.state !== 'waiting' ? 'Kein Lauf, Agent im Gespräch' : 'Kein Lauf'}
         {t.agent.calls > 0 &&
           `, ${t.agent.running ? 'dieser' : 'letzter'} Lauf: ${formatUsage(t.agent.tokens_in + t.agent.tokens_out, t.agent.cost_micro_eur)}`}
       </p>
-      {t.total.runs > 0 && (
+      {(t.total.runs > 0 || t.total.conversation.count > 0) && (
         <p class="team-model">
           Gesamt: {formatUsage(t.total.tokens_in + t.total.tokens_out, t.total.cost_micro_eur)} in{' '}
           {t.total.runs === 1 ? '1 Lauf' : `${t.total.runs} Läufen`}
+          {t.total.conversation.count > 0 &&
+            `, davon ${formatUsage(t.total.conversation.tokens_in + t.total.conversation.tokens_out, t.total.conversation.cost_micro_eur)} in ${
+              t.total.conversation.count === 1 ? '1 Gespräch' : `${t.total.conversation.count} Gesprächen`
+            }`}
         </p>
       )}
       <p class="team-model">
@@ -351,6 +356,33 @@ function ModelsPanel({ models, teams }: { models: ModelOption[]; teams: AdminTea
             </li>
           )
         })}
+      </ul>
+    </section>
+  )
+}
+
+function ConversationPanel({ on }: { on: boolean }) {
+  return (
+    <section class="models-panel" aria-label="Gespräch">
+      <h2>Gespräch</h2>
+      <p class="pool-sub">Ohne Lauf können Teams ihrem Agenten Fragen stellen. Er bewegt dabei keinen Roboter. Die Kosten zählen zum Team.</p>
+      <ul class="model-list">
+        <li>
+          <label>
+            <input
+              type="checkbox"
+              checked={on}
+              onChange={(e) => {
+                const next = e.currentTarget.checked
+                void act(call('PUT', '/conversation', { on: next }), next ? 'Gespräche eingeschaltet' : 'Gespräche abgeschaltet')
+              }}
+            />
+            <span class="model-main">
+              <strong>Gespräch ohne Lauf erlauben</strong>
+              <span>Für Wettkämpfe abschalten.</span>
+            </span>
+          </label>
+        </li>
       </ul>
     </section>
   )
@@ -406,6 +438,7 @@ function Board() {
             </ul>
           </DropZone>
           <ModelsPanel models={s.models} teams={s.teams} />
+          <ConversationPanel on={s.conversation} />
         </div>
 
         <section class="teams" aria-label="Teams">

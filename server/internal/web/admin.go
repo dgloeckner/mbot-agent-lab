@@ -29,6 +29,7 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 	admin("DELETE /admin/api/teams/{id}", s.adminDeleteTeam)
 	admin("POST /admin/api/stop-all", s.adminStopAll)
 	admin("PUT /admin/api/models", s.adminSetModels)
+	admin("PUT /admin/api/conversation", s.adminSetConversation)
 }
 
 // AdminRobot is one robot as the control room sees it.
@@ -53,14 +54,16 @@ type AdminTeam struct {
 	CreatedAt time.Time    `json:"created_at"`
 	Provider  string       `json:"provider"` // model provider of the team's next run
 	Agent     agent.Status `json:"agent"`    // current or last run
-	Total     store.Totals `json:"total"`    // all runs of the team
+	Total     store.Totals `json:"total"`    // all runs and conversations of the team
 }
 
 type adminState struct {
-	LabCode string       `json:"lab_code"`
-	Models  []lab.Model  `json:"models"`
-	Teams   []AdminTeam  `json:"teams"`
-	Robots  []AdminRobot `json:"robots"`
+	LabCode string      `json:"lab_code"`
+	Models  []lab.Model `json:"models"`
+	// Conversation: teams may talk with their agent while no run is active.
+	Conversation bool         `json:"conversation"`
+	Teams        []AdminTeam  `json:"teams"`
+	Robots       []AdminRobot `json:"robots"`
 }
 
 func (s *Server) buildAdminState(ctx context.Context) (adminState, error) {
@@ -72,7 +75,7 @@ func (s *Server) buildAdminState(ctx context.Context) (adminState, error) {
 	if err != nil {
 		return adminState{}, err
 	}
-	st := adminState{LabCode: s.Lab.LabCode(), Models: s.Lab.Models(), Teams: []AdminTeam{}, Robots: []AdminRobot{}}
+	st := adminState{LabCode: s.Lab.LabCode(), Models: s.Lab.Models(), Conversation: s.Lab.ConversationEnabled(), Teams: []AdminTeam{}, Robots: []AdminRobot{}}
 	for _, t := range teams {
 		st.Teams = append(st.Teams, AdminTeam{
 			ID: t.ID, Name: t.Name, Color: t.Color, Link: "/t/" + t.Token,
@@ -164,6 +167,21 @@ func (s *Server) adminSetModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.Lab.SetAllowedModels(r.Context(), req.Allowed); err != nil {
+		s.labError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// adminSetConversation switches conversations on or off for all teams.
+func (s *Server) adminSetConversation(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		On bool `json:"on"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.Lab.SetConversationEnabled(r.Context(), req.On); err != nil {
 		s.labError(w, err)
 		return
 	}

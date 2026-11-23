@@ -5,7 +5,8 @@ no network), starts one robot through sim/run.py, then drives the HTTP side
 like a lab: the control room logs in, a team joins, gets the robot, deploys a
 prompt, starts its agent and sends it a message. It checks that the robot's
 heartbeat reaches the registry, the run starts, a robot command comes back
-with a result and the simulated robot moved.
+with a result and the simulated robot moved. After a stop, a message gets an
+answer in the conversation without starting a run.
 
 Run with `npx nx run sim:e2e` (builds the server first). The binary comes from
 $LABSERVER or bin/labserver.
@@ -278,6 +279,24 @@ class SmokeTest(unittest.TestCase):
         agent = next(x for x in st["teams"] if x["id"] == team["id"])["agent"]
         self.assertTrue(agent["running"], agent)
         self.assertGreater(agent["calls"], 0, agent)
+
+        # Without a run, a team message goes to the conversation: the agent
+        # answers there, may read the sensors, and moves nothing.
+        self.request("POST", t + "/stop", expect=(200,))
+        self.wait_for(lambda: self.log_entries(lambda e: e.get("kind") == "run_end"), "run_end in the team log")
+        sent = self.request("POST", t + "/message", {"text": "Wie weit ist die Wand weg?"}, expect=(202,))
+        self.assertEqual(sent.get("channel"), "conversation", sent)
+
+        def conversation(e):
+            return e.get("channel") == "conversation"
+
+        answer = self.wait_for(lambda: self.log_entries(lambda e: conversation(e) and e.get("source") == "agent" and e.get("kind") == "text"),
+                               "the agent's answer in the conversation")
+        tools = [(e.get("data") or {}).get("name") for e in self.log_entries(lambda e: conversation(e) and e.get("kind") == "tool")]
+        self.assertTrue(set(tools) <= {"read_sensors", "remember"}, tools)
+        self.assertFalse(self.log_entries(lambda e: e.get("kind") == "run_start" and e.get("data", {}).get("run") != status.get("run_id")),
+                         "the conversation started a run")
+        print("e2e: conversation answer %r after %s" % (answer[0].get("text"), tools), file=sys.stderr)
 
 
 if __name__ == "__main__":

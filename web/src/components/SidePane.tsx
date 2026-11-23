@@ -1,7 +1,23 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
 import { useSignal } from '@preact/signals'
 import { clock, describe, describeTool, logGroup, relativeTime } from '../format'
-import { addNote, deleteNote, editorBridge, log, notes, prefs, robots, saveNote, sendMessage, session, updatePrefs } from '../state'
+import {
+  addNote,
+  agent,
+  conversation,
+  conversationUnread,
+  deleteNote,
+  editorBridge,
+  log,
+  newConversation,
+  notes,
+  prefs,
+  robots,
+  saveNote,
+  sendMessage,
+  session,
+  updatePrefs,
+} from '../state'
 import type { SideTab } from '../storage'
 import type { LogEntry, Note } from '../types'
 import { SendIcon } from './icons'
@@ -40,16 +56,25 @@ function LogLine({ e }: { e: LogEntry }) {
   )
 }
 
-function LogPanel() {
-  const filter = useSignal<Filter>('all')
+/** Keeps a list scrolled to the bottom while the reader is there. */
+function useStickToBottom(...deps: unknown[]) {
   const list = useRef<HTMLOListElement>(null)
   const stick = useRef(true)
-  const entries = filter.value === 'all' ? log.value : log.value.filter((e) => logGroup(e) === filter.value)
-
   useLayoutEffect(() => {
     const el = list.current
     if (el && stick.current) el.scrollTop = el.scrollHeight
-  }, [entries.length, filter.value])
+  }, deps)
+  const onScroll = (ev: Event) => {
+    const el = ev.currentTarget as HTMLElement
+    stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+  }
+  return { list, onScroll }
+}
+
+function LogPanel() {
+  const filter = useSignal<Filter>('all')
+  const entries = filter.value === 'all' ? log.value : log.value.filter((e) => logGroup(e) === filter.value)
+  const { list, onScroll } = useStickToBottom(entries.length, filter.value)
 
   return (
     <div class="log-panel">
@@ -64,10 +89,7 @@ function LogPanel() {
         class="log"
         ref={list}
         aria-live="polite"
-        onScroll={(ev) => {
-          const el = ev.currentTarget
-          stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40
-        }}
+        onScroll={onScroll}
       >
         {entries.length === 0 ? (
           <li class="empty-state">
@@ -79,12 +101,91 @@ function LogPanel() {
           entries.map((e) => <LogLine key={e.id} e={e} />)
         )}
       </ol>
-      <Composer />
+      {agent.value.running ? <Composer placeholder="Nachricht an euren Agenten" /> : <NoRunHint />}
     </div>
   )
 }
 
-function Composer() {
+/** Shown in the protocol instead of the composer while no run is active. */
+function NoRunHint() {
+  const talk = agent.value.conversation
+  return (
+    <div class="composer-hint">
+      <p>
+        Gerade läuft kein Lauf.{' '}
+        {talk ? 'Fragen an euren Agenten stellt ihr im Gespräch.' : 'Startet einen Lauf, dann liest euer Agent eure Nachrichten.'}
+      </p>
+      {talk && (
+        <button class="btn btn-small" onClick={() => updatePrefs({ sideTab: 'conversation' })}>
+          Zum Gespräch
+        </button>
+      )}
+    </div>
+  )
+}
+
+function TalkLine({ e }: { e: LogEntry }) {
+  if (e.kind === 'tool') {
+    return (
+      <li class="talk-note">
+        <ToolText d={e.data ?? {}} />
+      </li>
+    )
+  }
+  if (e.source !== 'team' && e.source !== 'agent') {
+    return <li class="talk-note">{e.text}</li>
+  }
+  const team = e.source === 'team'
+  return (
+    <li class="talk-msg" data-from={team ? 'team' : 'agent'}>
+      <span class="talk-who">
+        {team ? 'Ihr' : 'Agent'} <time dateTime={e.at}>{clock(e.at)}</time>
+      </span>
+      <p>{e.text}</p>
+    </li>
+  )
+}
+
+function ConversationPanel() {
+  const a = agent.value
+  const entries = conversation.value
+  const thinking = !a.running && a.state !== 'waiting'
+  const { list, onScroll } = useStickToBottom(entries.length, thinking)
+  return (
+    <div class="log-panel conversation-panel">
+      <div class="conversation-head">
+        <p class="panel-intro">
+          Ohne Lauf redet ihr hier mit eurem Agenten: über seine Werkzeuge, euren Plan oder den letzten Lauf. Er bewegt dabei keinen Roboter. Im
+          nächsten Lauf kennt er von diesem Gespräch nur die Notizen, die er sich macht.
+        </p>
+        {a.conversation_id && !a.running && (
+          <button class="btn btn-small btn-quiet" onClick={() => void newConversation()} title="Der Agent vergisst dieses Gespräch, Notizen bleiben.">
+            Neues Gespräch
+          </button>
+        )}
+      </div>
+      <ol class="talk" ref={list} aria-live="polite" onScroll={onScroll}>
+        {entries.length === 0 && !thinking ? (
+          <li class="empty-state">Noch kein Gespräch. Fragt euren Agenten zum Beispiel: „Welche Werkzeuge hast du zum Fahren?“</li>
+        ) : (
+          entries.map((e) => <TalkLine key={e.id} e={e} />)
+        )}
+        {thinking && <li class="talk-note talk-thinking">Euer Agent denkt nach …</li>}
+      </ol>
+      {a.running ? (
+        <p class="composer-hint">Gerade läuft ein Lauf. Schreibt eurem Agenten im Protokoll.</p>
+      ) : !a.conversation ? (
+        <p class="composer-hint">
+          {session.value!.agent_available ? 'Der Leitstand hat das Gespräch gerade abgeschaltet.' : 'Es ist kein Sprachmodell eingerichtet.'}
+        </p>
+      ) : (
+        <Composer placeholder="Frage an euren Agenten" />
+      )}
+    </div>
+  )
+}
+
+function Composer({ placeholder }: { placeholder: string }) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const limit = session.value!.limits.message_chars
@@ -106,8 +207,8 @@ function Composer() {
       <textarea
         rows={2}
         value={text}
-        placeholder="Nachricht an euren Agenten"
-        aria-label="Nachricht an euren Agenten"
+        placeholder={placeholder}
+        aria-label={placeholder}
         onInput={(ev) => setText(ev.currentTarget.value)}
         onKeyDown={(ev) => {
           if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) {
@@ -246,24 +347,32 @@ function ToolsPanel() {
 
 export function SidePane() {
   const tab = prefs.value.sideTab
+  const unread = conversationUnread.value
   const tabs: [SideTab, string][] = [
     ['log', 'Protokoll'],
+    ['conversation', 'Gespräch'],
     ['notes', `Notizen${notes.value.length ? ` (${notes.value.length})` : ''}`],
     ['tools', 'Werkzeuge'],
   ]
   return (
-    <section class="pane side-pane" aria-label="Protokoll, Notizen und Werkzeuge">
+    <section class="pane side-pane" aria-label="Protokoll, Gespräch, Notizen und Werkzeuge">
       <div class="pane-head">
         <div class="tabs" role="tablist">
           {tabs.map(([id, label]) => (
             <button key={id} role="tab" class="tab" aria-selected={tab === id} onClick={() => updatePrefs({ sideTab: id })}>
               {label}
+              {id === 'conversation' && unread > 0 && tab !== id && (
+                <span class="tab-badge" aria-label={`${unread} neue Antworten`}>
+                  {unread}
+                </span>
+              )}
             </button>
           ))}
         </div>
       </div>
       <div class="pane-body">
         {tab === 'log' && <LogPanel />}
+        {tab === 'conversation' && <ConversationPanel />}
         {tab === 'notes' && <NotesPanel />}
         {tab === 'tools' && <ToolsPanel />}
       </div>

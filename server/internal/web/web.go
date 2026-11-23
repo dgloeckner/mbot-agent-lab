@@ -88,6 +88,7 @@ func (s *Server) Handler() http.Handler {
 	team("GET /t/{token}/prompts/{version}", s.getPrompt)
 	team("POST /t/{token}/prompt", s.deployPrompt)
 	team("POST /t/{token}/message", s.message)
+	team("POST /t/{token}/conversation/new", s.newConversation)
 	team("POST /t/{token}/start", s.start)
 	team("POST /t/{token}/stop", s.stop)
 	team("GET /t/{token}/events", s.events)

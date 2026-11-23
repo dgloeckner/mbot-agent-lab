@@ -72,12 +72,55 @@ func TestTeamTotals(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	want := Totals{Runs: 2, TokensIn: 66000, TokensOut: 1476, CostMicroEUR: 109800}
+	conv, _ := s.CreateConversation(ctx, "rot", 0, "m")
+	if err := s.AddLLMCall(ctx, conv, "p", "m", 4000, 100, time.Second, 500); err != nil {
+		t.Fatal(err)
+	}
+	want := Totals{Runs: 2, TokensIn: 70000, TokensOut: 1576, CostMicroEUR: 110300,
+		Conversation: ConversationTotals{Count: 1, TokensIn: 4000, TokensOut: 100, CostMicroEUR: 500}}
 	if tot, _ := s.TeamTotal(ctx, "rot"); tot != want {
 		t.Errorf("rot = %+v", tot)
 	}
 	all, err := s.TeamTotals(ctx)
 	if err != nil || all["rot"] != want || all["blau"].Runs != 1 || len(all) != 2 {
 		t.Errorf("all = %+v %v", all, err)
+	}
+}
+
+func TestLastRunAndSteps(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+	if _, err := s.LastRun(ctx, "rot"); err != ErrNotFound {
+		t.Fatalf("no runs: %v", err)
+	}
+	p, _ := s.SavePrompt(ctx, "rot", "Los.")
+	run, _ := s.CreateRun(ctx, "rot", p.ID, "m")
+	_, _ = s.AddMessage(ctx, run, 1, "system", "start", "Der Lauf beginnt.", nil)
+	_ = s.AddToolCall(ctx, run, 2, "drive", json.RawMessage(`{"cm":10}`), json.RawMessage(`{"ok":true}`), time.Second)
+	_, _ = s.AddMessage(ctx, run, 3, "robot:rot", "obstacle_near", "", json.RawMessage(`{"distance_cm":9}`))
+	_ = s.AddToolCall(ctx, run, 4, "finish", json.RawMessage(`{"report":"ok"}`), nil, 0)
+	if _, err := s.LastRun(ctx, "rot"); err != ErrNotFound {
+		t.Errorf("an open run is not the last run: %v", err)
+	}
+	_ = s.EndRun(ctx, run, "finish", "ok")
+	// Conversations and open runs do not count as the last run.
+	conv, _ := s.CreateConversation(ctx, "rot", p.ID, "m")
+	_ = s.EndRun(ctx, conv, "new", "")
+	_, _ = s.CreateRun(ctx, "rot", p.ID, "m")
+
+	last, err := s.LastRun(ctx, "rot")
+	if err != nil || last.ID != run || last.PromptVersion != 1 || last.Report != "ok" {
+		t.Fatalf("last run = %+v %v", last, err)
+	}
+	steps, err := s.RunSteps(ctx, run)
+	if err != nil || len(steps) != 4 {
+		t.Fatalf("steps = %+v %v", steps, err)
+	}
+	if steps[0].Source != "system" || steps[1].Tool != "drive" || string(steps[1].Args) != `{"cm":10}` ||
+		string(steps[2].Data) != `{"distance_cm":9}` || steps[3].Tool != "finish" || steps[3].Result != nil {
+		t.Errorf("steps = %+v", steps)
+	}
+	if runs, _ := s.Runs(ctx, "rot", 10); len(runs) != 2 {
+		t.Errorf("Runs lists %d rows, want the 2 runs without the conversation", len(runs))
 	}
 }

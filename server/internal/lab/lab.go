@@ -78,6 +78,8 @@ type Service struct {
 	labCode   string
 	allowed   map[string]bool // providers teams may choose besides the default
 	modelsGen atomic.Int64
+
+	conversationOff atomic.Bool
 }
 
 // Start loads the lab code and restores robot assignments from the database.
@@ -98,6 +100,9 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 	s.labCode = code
 	if err := s.loadAllowed(ctx); err != nil {
+		return err
+	}
+	if err := s.loadConversation(ctx); err != nil {
 		return err
 	}
 

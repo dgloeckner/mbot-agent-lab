@@ -72,8 +72,9 @@ func newTestServer(t *testing.T) *testLab {
 		t.Fatal(err)
 	}
 	models := llm.New(cfg.LLM, log)
-	budgets := config.Budgets{MaxStepsPerWakeup: 3, MaxRunMinutes: 5, MaxHistoryMessages: 40, MaxAgentMessagesPerMinute: 5}
-	agents := agent.NewManager(agent.Deps{Store: st, Robots: reg, Hub: hub, LLM: models, Tools: tools.NewRegistry(reg, st, hub, budgets), Budgets: budgets, Log: log, TeamProvider: svc.TeamProvider})
+	budgets := config.Budgets{MaxStepsPerWakeup: 3, MaxRunMinutes: 5, MaxHistoryMessages: 40, MaxAgentMessagesPerMinute: 5, MaxConversationMessagesPerMinute: 3}
+	agents := agent.NewManager(agent.Deps{Store: st, Robots: reg, Hub: hub, LLM: models, Tools: tools.NewRegistry(reg, st, hub, budgets), Budgets: budgets, Log: log,
+		TeamProvider: svc.TeamProvider, Conversations: svc.ConversationEnabled})
 	runCtx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
 	go agents.Run(runCtx)
@@ -223,5 +224,97 @@ func TestRunStartMessageStop(t *testing.T) {
 			t.Fatal("run did not stop")
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// conversationLog returns the team's conversation entries.
+func conversationLog(srv *testLab, team string) []live.LogEntry {
+	backlog, _, cancel := srv.lab.Hub.Subscribe(team, 0)
+	cancel()
+	var out []live.LogEntry
+	for _, e := range backlog {
+		if e.Channel == live.ChannelConversation {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// Without a run, a team message goes to the conversation and gets an answer
+// from the test model; it is rate limited, and the control room can switch
+// conversations off.
+func TestMessageWithoutRunStartsConversation(t *testing.T) {
+	srv := newTestServer(t)
+	code, e := do(t, srv, "POST", "/t/tok-rot/message", `{"text":"Was kannst du?"}`)
+	if code != http.StatusAccepted || e["channel"] != live.ChannelConversation {
+		t.Fatalf("message: %d %v", code, e)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		var answer string
+		for _, e := range conversationLog(srv, "rot") {
+			if e.Source == live.SourceAgent && e.Kind == "text" {
+				answer = e.Text
+			}
+		}
+		if answer != "" {
+			if !strings.Contains(answer, "kein Lauf") {
+				t.Errorf("answer = %q", answer)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("no answer in the conversation")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	for _, e := range conversationLog(srv, "rot") {
+		if e.Kind == "info" && strings.Contains(e.Text, "läuft gerade nicht") {
+			t.Error("message was dropped")
+		}
+	}
+	_, sess := do(t, srv, "GET", "/t/tok-rot/api/session", "")
+	ag := sess["agent"].(map[string]any)
+	if ag["conversation"] != true || ag["running"] != false || ag["conversation_id"] == nil {
+		t.Errorf("session agent = %v", ag)
+	}
+	if total := sess["total"].(map[string]any); total["runs"] != 0.0 || total["conversation"].(map[string]any)["count"] != 1.0 {
+		t.Errorf("session total = %v", total)
+	}
+
+	// Three messages per minute; the first one counts.
+	for i := 0; i < 2; i++ {
+		if code, _ := do(t, srv, "POST", "/t/tok-rot/message", `{"text":"Und?"}`); code != http.StatusAccepted {
+			t.Fatalf("message %d: %d", i+2, code)
+		}
+	}
+	if code, body := do(t, srv, "POST", "/t/tok-rot/message", `{"text":"Und?"}`); code != http.StatusTooManyRequests || !strings.Contains(body["error"].(string), "pro Minute") {
+		t.Errorf("fourth message: %d %v", code, body)
+	}
+	if code, _ := do(t, srv, "POST", "/t/tok-rot/conversation/new", ""); code != http.StatusNoContent {
+		t.Errorf("new conversation: %d", code)
+	}
+
+	c := adminClient(t, srv)
+	if code := adminDo(t, c, srv, "PUT", "/admin/api/conversation", `{"on":false}`); code != http.StatusNoContent {
+		t.Fatalf("switch off: %d", code)
+	}
+	if code, body := do(t, srv, "POST", "/t/tok-blau/message", `{"text":"Hallo?"}`); code != http.StatusConflict || !strings.Contains(body["error"].(string), "Leitstand") {
+		t.Errorf("switched off: %d %v", code, body)
+	}
+	if _, sess := do(t, srv, "GET", "/t/tok-blau/api/session", ""); sess["agent"].(map[string]any)["conversation"] != false {
+		t.Error("session still offers the conversation")
+	}
+	resp, err := c.Get(srv.URL + "/admin/api/state")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state struct {
+		Conversation bool `json:"conversation"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&state)
+	resp.Body.Close()
+	if state.Conversation {
+		t.Error("admin state still shows conversations on")
 	}
 }
