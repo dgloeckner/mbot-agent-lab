@@ -288,7 +288,7 @@
 
 .chip-robot {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 10px;
   padding: 8px 8px 8px 10px;
@@ -329,6 +329,36 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.chip-warn {
+  color: var(--warn, #b45309);
+  cursor: help;
+}
+
+.chip-tools {
+  display: flex;
+  gap: 4px;
+}
+
+.chip-tool {
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.chip-tool:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.chip-tool:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .chip-move,

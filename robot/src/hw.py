@@ -40,6 +40,22 @@ def hw_mac():
         return "unknown"
 
 
+def hw_info(fn):
+    """A device fact by vendor function name, e.g. "get_firmware_version"; "" if unknown."""
+    try:
+        return str(getattr(cyberpi, fn)())  # VERIFY: robot/tools/measure.py
+    except Exception:
+        return ""
+
+
+def hw_set_name(name):
+    cyberpi.set_name(name)  # VERIFY: shown at power-on
+
+
+def hw_restart():
+    cyberpi.restart()  # VERIFY: reboots and does not return
+
+
 def hw_motors(left, right):
     """Run both motors at the given speed (RPM, forward positive). Non-blocking."""
     mbot2.drive_speed(left, RIGHT_MOTOR_SIGN * right)  # VERIFY argument order and sign

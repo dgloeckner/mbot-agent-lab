@@ -295,3 +295,25 @@ func TestTeamChoosesReleasedModel(t *testing.T) {
 		t.Errorf("stored choice not cleared: %q", team.Provider)
 	}
 }
+
+func TestAdminRobotMaintenance(t *testing.T) {
+	srv := newTestServer(t)
+	c := adminClient(t, srv)
+	cases := []struct {
+		method, path, body string
+		want               int
+	}{
+		{"POST", "/admin/api/robots/mbot-9/restart", "", http.StatusNotFound},
+		// The test robots never connect: the command cannot reach them.
+		{"POST", "/admin/api/robots/mbot-1/restart", "", http.StatusServiceUnavailable},
+		{"PUT", "/admin/api/robots/mbot-1/device-name", `{"name":"mbot rot"}`, http.StatusServiceUnavailable},
+		{"PUT", "/admin/api/robots/mbot-1/device-name", `{"name":""}`, http.StatusBadRequest},
+		{"PUT", "/admin/api/robots/mbot-1/device-name", `{"name":"Grün"}`, http.StatusBadRequest},
+		{"PUT", "/admin/api/robots/mbot-1/device-name", `{"name":"einsehrsehrlangername1"}`, http.StatusBadRequest},
+	}
+	for _, tc := range cases {
+		if code := adminDo(t, c, srv, tc.method, tc.path, tc.body); code != tc.want {
+			t.Errorf("%s %s %s: %d, want %d", tc.method, tc.path, tc.body, code, tc.want)
+		}
+	}
+}

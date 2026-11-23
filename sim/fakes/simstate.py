@@ -8,3 +8,5 @@ sounds = []           # names / tones played
 buttons = {"a": False, "b": False}
 loudness = 0
 battery = 100
+device_name = "mbot"  # cyberpi.get_name / set_name
+restarts = 0          # cyberpi.restart calls

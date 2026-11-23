@@ -4,6 +4,7 @@ import time
 import unittest
 
 from helpers import load_robot, example, MemoryClient
+import simstate
 
 ARENA = {
     "walls": [[0, 0, 200, 0], [200, 0, 200, 200], [200, 200, 0, 200], [0, 200, 0, 0]],
@@ -46,6 +47,33 @@ class RobotTest(unittest.TestCase):
         hello = self.client.messages("hello")[0]
         self.assertEqual(set(hello), set(example("hello.json")))
         self.assertEqual(hello["v"], 1)
+
+    def test_hello_reports_the_device(self):
+        hello = self.client.messages("hello")[0]
+        self.assertEqual(hello["firmware"], "sim")
+        self.assertEqual(hello["name"], simstate.device_name)
+        self.assertEqual(hello["battery"], simstate.battery)
+
+    def test_restart_stops_reports_and_connects_again(self):
+        simstate.restarts = 0
+        self.client.deliver("lab/mbot-1/cmd", {"id": "c-1", "name": "drive", "args": {"cm": 50}})
+        self.run_until(lambda: self.robot.skill is not None)
+        old = self.client
+        old.deliver("lab/mbot-1/cmd", {"id": "r-1", "name": "restart"})
+        self.run_until(lambda: MemoryClient.instances[-1] is not old)
+        self.assertEqual(simstate.restarts, 1)
+        self.assertIsNone(self.robot.skill)
+        self.assertTrue(any(r["id"] == "r-1" and r["ok"] for r in old.messages("result")))
+        self.assertIn(("lab/mbot-1/status", "restarting", True), old.published)
+        new = MemoryClient.instances[-1]
+        self.assertIn(("lab/mbot-1/status", "online", True), new.published)
+        self.assertEqual(len(new.messages("hello")), 1)
+
+    def test_set_name_names_the_device(self):
+        self.client.deliver("lab/mbot-1/cmd", {"id": "n-1", "name": "set_name", "args": {"name": "mbot rot"}})
+        self.run_until(lambda: self.result("n-1"))
+        self.assertTrue(self.result("n-1")["ok"])
+        self.assertEqual(simstate.device_name, "mbot rot")
 
     def test_state_matches_protocol_example(self):
         self.run_until(lambda: self.client.messages("state"))

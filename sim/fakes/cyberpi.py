@@ -59,6 +59,23 @@ def get_mac_address():
     return "sim:" + (simstate.world.robot_id if simstate.world else "?")
 
 
+def get_firmware_version():
+    return "sim"
+
+
+def get_name():
+    return simstate.device_name
+
+
+def set_name(name):
+    simstate.device_name = name
+
+
+def restart():
+    # The real CyberPi reboots; the robot script then closes its connection.
+    simstate.restarts += 1
+
+
 def get_yaw():
     # Like the real CyberPi: counterclockwise positive (the world uses right = positive).
     return -simstate.world.yaw()

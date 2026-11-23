@@ -12,6 +12,8 @@ interface AdminRobot {
   accepted: boolean
   script: string
   mem_free: number
+  firmware: string
+  device: string // the CyberPi's own name
   team: string
   alias: string
   state: RobotState
@@ -165,15 +167,55 @@ function Login() {
   )
 }
 
-// robotInfo is the chip's tooltip: script version and free memory from hello.
+// robotInfo is the chip's tooltip: device facts from hello.
 function robotInfo(r: AdminRobot): string | undefined {
   if (!r.accepted) return undefined
-  const mem = r.mem_free >= 0 ? `, freier Speicher ${Math.round(r.mem_free / 1024)} KB` : ''
-  return `Skript ${r.script}${mem}`
+  const parts = [`Skript ${r.script}`]
+  if (r.firmware) parts.push(`Firmware ${r.firmware}`)
+  if (r.device) parts.push(`Gerätename ${r.device}`)
+  if (r.mem_free >= 0) parts.push(`freier Speicher ${Math.round(r.mem_free / 1024)} KB`)
+  return parts.join(', ')
+}
+
+// mostCommon returns the value most robots share, ignoring empty ones.
+function mostCommon(values: string[]): string {
+  const counts = new Map<string, number>()
+  for (const v of values) if (v) counts.set(v, (counts.get(v) ?? 0) + 1)
+  let best = ''
+  for (const [v, n] of counts) if (n > (counts.get(best) ?? 0)) best = v
+  return best
+}
+
+// versionWarning says when a robot runs another script or firmware than most
+// robots: after an update one robot is easily forgotten.
+function versionWarning(r: AdminRobot): string | undefined {
+  const others = (state.value?.robots ?? []).filter((x) => x.accepted)
+  if (!r.accepted || others.length < 2) return undefined
+  const script = mostCommon(others.map((x) => x.script))
+  const firmware = mostCommon(others.map((x) => x.firmware))
+  const diff = []
+  if (r.script !== script) diff.push(`Skript ${r.script} statt ${script}`)
+  if (r.firmware && firmware && r.firmware !== firmware) diff.push(`Firmware ${r.firmware} statt ${firmware}`)
+  return diff.length ? `Weicht von den anderen ab: ${diff.join(', ')}` : undefined
+}
+
+function restartRobot(r: AdminRobot) {
+  if (window.confirm(`${r.id} neu starten? Er hält an und verbindet sich nach einigen Sekunden wieder, im selben Team.`)) {
+    void act(call('POST', `/robots/${encodeURIComponent(r.id)}/restart`), `${r.id} startet neu`)
+  }
+}
+
+function nameDevice(r: AdminRobot) {
+  const name = window.prompt(`Gerätename für ${r.id} (zeigt der Roboter beim Einschalten):`, r.device || r.id)
+  if (name !== null && name.trim() !== '') {
+    void act(call('PUT', `/robots/${encodeURIComponent(r.id)}/device-name`, { name: name.trim() }), `${r.id} heißt jetzt ${name.trim()}`)
+  }
 }
 
 function RobotChip({ r, teams, inTeam }: { r: AdminRobot; teams: AdminTeam[]; inTeam: boolean }) {
   const status = !r.online ? 'offline' : !r.accepted ? 'falsche Version' : r.state.tilted ? 'umgekippt' : `${r.state.battery} %`
+  const warning = versionWarning(r)
+  const reachable = r.online && r.accepted
   return (
     <li
       class="chip-robot"
@@ -186,12 +228,27 @@ function RobotChip({ r, teams, inTeam }: { r: AdminRobot; teams: AdminTeam[]; in
     >
       <span class="robot-color" style={{ background: COLOR_HEX[r.color] ?? '#999' }} title={`Aufkleberfarbe: ${colorName(r.color)}`} />
       <span class="chip-main" title={robotInfo(r)}>
-        <strong>{inTeam && r.alias ? r.alias : r.id}</strong>
+        <strong>
+          {inTeam && r.alias ? r.alias : r.id}
+          {warning && (
+            <span class="chip-warn" title={warning} aria-label={warning}>
+              {' '}⚠
+            </span>
+          )}
+        </strong>
         <span>
           {inTeam && r.alias ? `${r.id}, ` : ''}
           {status}
           {r.online && r.accepted ? `, ${skillName(r.state.skill)}` : ''}
         </span>
+      </span>
+      <span class="chip-tools">
+        <button type="button" class="chip-tool" title="Gerätenamen setzen" aria-label={`Gerätename für ${r.id}`} disabled={!reachable} onClick={() => nameDevice(r)}>
+          Name
+        </button>
+        <button type="button" class="chip-tool" title="Skript neu starten" aria-label={`${r.id} neu starten`} disabled={!reachable} onClick={() => restartRobot(r)}>
+          ↻
+        </button>
       </span>
       <select
         class="chip-move"

@@ -422,6 +422,24 @@ func cleanTeamName(name string) (string, error) {
 	return name, nil
 }
 
+const maxDeviceName = 20
+
+var deviceNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 _-]*$`)
+
+// ValidDeviceName checks a name for the CyberPi itself (control room, set_name).
+// The robot shows it at power-on with its own font, so plain ASCII only.
+func ValidDeviceName(name string) error {
+	switch {
+	case name == "":
+		return userErr("Gib einen Gerätenamen an.")
+	case len(name) > maxDeviceName:
+		return userErr("Der Gerätename darf höchstens %d Zeichen haben.", maxDeviceName)
+	case !deviceNamePattern.MatchString(name):
+		return userErr("Gerätename: Buchstaben ohne Umlaute, Ziffern, Leerzeichen, - und _.")
+	}
+	return nil
+}
+
 func validAlias(alias string) error {
 	switch {
 	case alias == "":
