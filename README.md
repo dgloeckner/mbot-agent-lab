@@ -18,7 +18,7 @@ tools, understanding attacks such as prompt injection, and treating tokens as a 
  Lab PCs (browser) ──HTTPS/SSE──┐
                                 ▼
                     ┌──────────────────────────┐        OpenAI-compatible API
-                    │ labserver (one Go binary)│ ─────▶ (Mistral, Ollama, …)
+                    │ labserver (one Go binary)│ ─────▶ (Mistral, Ollama, …) or Claude
                     │  web · agents · tools    │
                     │  robots · store (SQLite) │
                     │  embedded MQTT broker    │
@@ -173,11 +173,19 @@ wake-up, so they do not burn tokens.
   results with `ok: false` and a German explanation, so the agent can correct itself.
 - **Budgets** in the config: steps per wake-up, tokens per run, minutes per run, messages to
   other agents per minute, messages kept in the context.
-- **Models** (`server/internal/llm`): any OpenAI-compatible endpoint (Mistral, Ollama, …) with
-  retries, a fallback provider and a cost estimate from the configured prices. `kind: fake` is a
-  scripted test model that explores with the real tools and needs no API key; the local
-  development config uses it by default. Set `default: mistral` and `MISTRAL_API_KEY` for a real
-  model.
+- **Models** (`server/internal/llm`): any OpenAI-compatible endpoint (Mistral, Ollama, …) or
+  Claude (`kind: anthropic`, official Anthropic Go SDK), with retries, a fallback provider and a
+  cost estimate from the configured prices (prompt-cache reads and writes priced separately).
+  `kind: fake` is a scripted test model that explores with the real tools and needs no API key;
+  the local development config uses it by default. Set `default: mistral` and `MISTRAL_API_KEY`,
+  or `default: claude` and `ANTHROPIC_API_KEY`, for a real model.
+- **Claude:** the key comes from a Claude Console organization. Claude Max, Ultra and Team plans
+  include monthly API credits for such an organization (claim them on claude.ai under Settings →
+  Billing); the subscription login itself is not an API credential. Claude's thinking blocks go
+  back unchanged with tool results; when trimmed history or changed notes invalidate them, the API
+  drops them (`drop_block`) instead of failing. Opus/Sonnet 5.5 use the server-side refusal
+  fallback; if a request is still declined, the client moves on to the configured fallback
+  provider.
 - **Log:** every run, message, tool call and model call is stored in SQLite for the comparison of
   report and protocol ("Lügendetektor").
 

@@ -11,7 +11,8 @@ server:
 
 llm:
   # "test" is a scripted model: it explores with the real tools and needs no
-  # API key. Set default to mistral (and MISTRAL_API_KEY) to use a real model.
+  # API key. Set default to mistral (and MISTRAL_API_KEY) or claude (and
+  # ANTHROPIC_API_KEY) to use a real model.
   default: test
   providers:
     test:
@@ -22,6 +23,13 @@ llm:
       model: mistral-small-latest
       price_in: 0.1     # EUR per million tokens, check current prices
       price_out: 0.3
+    claude:
+      kind: anthropic
+      api_key_env: ANTHROPIC_API_KEY
+      model: claude-opus-5-5
+      effort: low
+      price_in: 4       # USD list price per million tokens
+      price_out: 20
     ollama:
       base_url: http://localhost:11434/v1
       model: qwen3

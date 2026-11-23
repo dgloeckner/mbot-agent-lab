@@ -12,6 +12,8 @@ Full background and all decisions: `docs/handoff.md` (original handoff, German).
     the control room (`/admin`) assigns 1..N robots per team. No profiles (einzel/duo/…) for now.
   - Teams name their robots themselves (default: German color name); `all`/`alle` is reserved.
   - The heartbeat carries `team`, `owner`, `name`, `color`, `agent` (see `docs/protocol.md`).
+  - Claude is a second model provider (`kind: anthropic`) on the official Anthropic Go SDK, an
+    exception to "no SDK for the language model". Mistral stays the default.
 - Language: repo docs, code and comments in English. Lab material (`docs/lab/`) and student-facing
   UI text (web templates, robot display) in German. Example prompts in German and English, same
   file name under `docs/lab/prompts/de/` and `docs/lab/prompts/en/`.
@@ -28,8 +30,11 @@ Full background and all decisions: `docs/handoff.md` (original handoff, German).
   `store/migrations`), lab (joining, teams, assignments, robot names, lab code: the rules live
   here, web handlers stay thin), live (per-team log hub for SSE), web.
   agent (one actor per team: inbox, wake rules, context, budgets, runs), tools (registry with
-  model-facing German descriptions and JSON schemas), llm (OpenAI-compatible client, retries,
-  fallback, cost; `Fake` scripted test model), memory (history trimming, notes formatting).
+  model-facing German descriptions and JSON schemas), llm (OpenAI-compatible client, Claude via
+  the official Anthropic Go SDK, retries, fallback, cost; `Fake` scripted test model), memory
+  (history trimming, notes formatting). Messages stay in the OpenAI format; a provider keeps its
+  own form of an assistant turn in `Message.Native` (Claude's thinking blocks must be replayed
+  unchanged).
   Stubs: auth, mcp.
 - `robot/src/`: MicroPython modules, bundled in dependency order by `robot/tools/bundle.py` into
   one `main.py`. All modules share one namespace after bundling: no duplicate top-level names,
