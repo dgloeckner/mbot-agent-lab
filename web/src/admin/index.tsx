@@ -11,6 +11,7 @@ interface AdminRobot {
   online: boolean
   accepted: boolean
   script: string
+  mem_free: number
   team: string
   alias: string
   state: RobotState
@@ -164,6 +165,13 @@ function Login() {
   )
 }
 
+// robotInfo is the chip's tooltip: script version and free memory from hello.
+function robotInfo(r: AdminRobot): string | undefined {
+  if (!r.accepted) return undefined
+  const mem = r.mem_free >= 0 ? `, freier Speicher ${Math.round(r.mem_free / 1024)} KB` : ''
+  return `Skript ${r.script}${mem}`
+}
+
 function RobotChip({ r, teams, inTeam }: { r: AdminRobot; teams: AdminTeam[]; inTeam: boolean }) {
   const status = !r.online ? 'offline' : !r.accepted ? 'falsche Version' : r.state.tilted ? 'umgekippt' : `${r.state.battery} %`
   return (
@@ -177,7 +185,7 @@ function RobotChip({ r, teams, inTeam }: { r: AdminRobot; teams: AdminTeam[]; in
       }}
     >
       <span class="robot-color" style={{ background: COLOR_HEX[r.color] ?? '#999' }} title={`Aufkleberfarbe: ${colorName(r.color)}`} />
-      <span class="chip-main">
+      <span class="chip-main" title={robotInfo(r)}>
         <strong>{inTeam && r.alias ? r.alias : r.id}</strong>
         <span>
           {inTeam && r.alias ? `${r.id}, ` : ''}

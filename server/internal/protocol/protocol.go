@@ -128,6 +128,9 @@ type Hello struct {
 	V      int    `json:"v"`
 	Script string `json:"script"`
 	MAC    string `json:"mac"`
+	// MemFree is the robot's free heap in bytes right after connecting, -1
+	// where unknown (simulator). It shows how much room the script has left.
+	MemFree int `json:"mem_free"`
 }
 
 // Agent states reported to the robot in the heartbeat.
