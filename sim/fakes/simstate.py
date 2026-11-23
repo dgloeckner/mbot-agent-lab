@@ -3,6 +3,7 @@
 world = None          # sim.world.World, set by robot_proc before the robot script runs
 display = []          # last lines printed to the console
 leds = (0, 0, 0)      # last LED color
+led_trail = []        # LED colors since the trace last looked (capped)
 sounds = []           # names / tones played
 buttons = {"a": False, "b": False}
 loudness = 0

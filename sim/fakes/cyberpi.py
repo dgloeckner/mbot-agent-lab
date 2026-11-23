@@ -19,12 +19,19 @@ class _Controller:
         return simstate.buttons.get(name, False)
 
 
+def _set_leds(rgb):
+    if rgb != simstate.leds:
+        simstate.led_trail.append(rgb)
+        del simstate.led_trail[:-100]
+    simstate.leds = rgb
+
+
 class _Led:
     def on(self, r, g, b, id="all"):
-        simstate.leds = (r, g, b)
+        _set_leds((r, g, b))
 
     def off(self, id="all"):
-        simstate.leds = (0, 0, 0)
+        _set_leds((0, 0, 0))
 
 
 class _Console:
