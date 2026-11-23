@@ -129,6 +129,7 @@
 }
 
 .pool {
+  container-type: inline-size;
   padding: 16px;
   border: 1px dashed var(--line);
 }
@@ -195,8 +196,9 @@
 }
 
 .team-card {
-  display: grid;
-  grid-template-rows: auto 1fr auto auto auto;
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
   background: var(--surface);
   border: 1px solid var(--line);
   overflow: hidden;
@@ -274,6 +276,10 @@
   min-height: 72px;
 }
 
+.team-card .robot-list {
+  flex: 1;
+}
+
 .drop-hint {
   display: grid;
   place-items: center;
@@ -288,14 +294,25 @@
 
 .chip-robot {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  grid-template-areas:
+    'color main main'
+    '.     move tools';
   align-items: center;
-  gap: 10px;
-  padding: 8px 8px 8px 10px;
+  gap: 8px 10px;
+  padding: 9px 9px 9px 11px;
   border-radius: 9px;
   background: var(--surface-2);
   border: 1px solid var(--line);
   cursor: grab;
+}
+
+/* Wide cards (big screens, few teams) fit everything on one row. */
+@container (min-width: 460px) {
+  .chip-robot {
+    grid-template-columns: 14px minmax(0, 1fr) minmax(0, 150px) auto;
+    grid-template-areas: 'color main move tools';
+  }
 }
 
 .chip-robot[data-online='false'] {
@@ -307,6 +324,7 @@
 }
 
 .robot-color {
+  grid-area: color;
   width: 14px;
   height: 14px;
   border-radius: 4px;
@@ -314,6 +332,7 @@
 }
 
 .chip-main {
+  grid-area: main;
   display: grid;
   line-height: 1.25;
   min-width: 0;
@@ -321,6 +340,9 @@
 
 .chip-main strong {
   font-weight: 680;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chip-main span {
@@ -337,14 +359,17 @@
 }
 
 .chip-tools {
+  grid-area: tools;
   display: flex;
   gap: 4px;
 }
 
 .chip-tool {
   font: inherit;
-  font-size: 12px;
-  padding: 3px 6px;
+  font-size: 12.5px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--surface);
@@ -354,6 +379,7 @@
 
 .chip-tool:hover:not(:disabled) {
   color: var(--ink);
+  border-color: var(--faint);
 }
 
 .chip-tool:disabled {
@@ -361,56 +387,140 @@
   cursor: default;
 }
 
-.chip-move,
-.team-foot select {
+/* Flat select with a drawn chevron: the native one looks glossy in dark mode. */
+.field-select {
+  appearance: none;
   font: inherit;
   font-size: 13px;
-  padding: 4px 6px;
+  height: 28px;
+  min-width: 0;
+  padding: 0 26px 0 9px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: var(--surface);
+  background-color: var(--surface);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    right 13px center,
+    right 9px center;
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
   color: var(--ink);
-  max-width: 130px;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.field-select:hover {
+  border-color: var(--faint);
+}
+
+.chip-move {
+  grid-area: move;
+  width: 100%;
+}
+
+.team-add {
+  padding: 0 10px 12px;
+}
+
+.team-add .field-select {
+  width: 100%;
+  height: 32px;
+  border-style: dashed;
+  background-color: transparent;
+  color: var(--muted);
+}
+
+.team-add .field-select:hover,
+.team-add .field-select:focus-visible {
+  color: var(--ink);
+}
+
+.team-stats {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 5px 14px;
+  margin: 0;
+  padding: 12px 14px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.team-stats dt {
+  color: var(--faint);
+}
+
+.team-stats dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.usage {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 0;
+}
+
+.usage span {
+  white-space: nowrap;
+}
+
+.usage span + span::before {
+  content: '·';
+  padding: 0 6px;
+  color: var(--faint);
+}
+
+.agent-state[data-running='true'] {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.agent-state[data-running='true']::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+  vertical-align: 1px;
+}
+
+.model-id {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.stat-note {
+  display: block;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.stat-note.warn {
+  color: var(--warn);
 }
 
 .team-foot {
   display: flex;
-  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
-  gap: 8px 12px;
-  padding: 10px 12px;
+  gap: 16px;
+  padding: 10px 14px;
   border-top: 1px solid var(--line);
+  background: var(--surface-2);
 }
 
-.team-foot select {
-  max-width: 170px;
-}
-
-.team-foot .spacer {
-  flex: 1;
-}
-
-.team-agent {
-  padding: 8px 12px 2px;
-  font-size: 13.5px;
-  color: var(--muted);
-}
-
-.team-agent[data-running='true'] {
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.team-model {
-  padding: 0 12px;
-  font-size: 13.5px;
-  color: var(--muted);
-}
-
-.team-age {
-  padding: 0 12px 10px;
-  font-size: 12px;
-  color: var(--faint);
+.team-foot .danger {
+  margin-right: auto;
+  order: -1;
 }
 
 .teams-empty {
