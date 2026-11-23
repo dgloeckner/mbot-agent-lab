@@ -1,5 +1,5 @@
-import { agent, busy, conn, copyTeamLink, deployed, identifyRobot, prefs, renameRobot, renameTeam, robots, session, startRun, stopAll, updatePrefs } from '../state'
-import { COLOR_HEX, colorName, formatCost, formatNumber, skillName } from '../format'
+import { agent, busy, chooseModel, conn, copyTeamLink, deployed, identifyRobot, prefs, renameRobot, renameTeam, robots, session, startRun, stopAll, totals, updatePrefs } from '../state'
+import { COLOR_HEX, colorName, formatPrices, formatUsage, skillName } from '../format'
 import type { Robot } from '../types'
 import { AutoIcon, LinkIcon, MoonIcon, PlayIcon, StopIcon, SunIcon } from './icons'
 import { InlineEdit } from './InlineEdit'
@@ -58,6 +58,33 @@ function RobotCard({ r }: { r: Robot }) {
   )
 }
 
+/** The language model of the team's next run; a choice if the control room released several. */
+function ModelPick() {
+  const { selected, options } = session.value!.models
+  const a = agent.value
+  const current = options.find((o) => o.provider === selected)
+  const pending = a.running && a.provider && a.provider !== selected
+  return (
+    <p class="model-pick">
+      {options.length > 1 ? (
+        <label title="Gilt ab dem nächsten Lauf. Die Preise zeigen, was eine Million Token kostet.">
+          <span>Modell</span>
+          <select value={selected} onChange={(e) => chooseModel(e.currentTarget.value)}>
+            {options.map((o) => (
+              <option key={o.provider} value={o.provider}>
+                {o.model} ({formatPrices(o.price_in, o.price_out)})
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <span title={current ? formatPrices(current.price_in, current.price_out) : undefined}>Modell {current?.model ?? selected}</span>
+      )}
+      {pending && <span class="model-pending">ab dem nächsten Lauf, jetzt noch {a.model}</span>}
+    </p>
+  )
+}
+
 export function TeamBand() {
   const s = session.value!
   const theme = prefs.value.theme
@@ -79,10 +106,16 @@ export function TeamBand() {
           {a.running ? `Agent ${AGENT_LABEL[a.state]}` : 'Kein Lauf'}
           {a.calls > 0 && (
             <span class="run-usage" title={`Modell ${a.model ?? ''}, ${a.calls} Aufrufe`}>
-              {formatNumber(a.tokens_in + a.tokens_out)} Token, {formatCost(a.cost_micro_eur)}
+              {a.running ? 'dieser Lauf' : 'letzter Lauf'}: {formatUsage(a.tokens_in + a.tokens_out, a.cost_micro_eur)}
+            </span>
+          )}
+          {totals.value.runs > 1 && (
+            <span class="run-usage" title={`Alle ${totals.value.runs} Läufe eures Teams`}>
+              gesamt: {formatUsage(totals.value.tokens_in + totals.value.tokens_out, totals.value.cost_micro_eur)}
             </span>
           )}
         </p>
+        <ModelPick />
       </div>
 
       <div class="band-robots">

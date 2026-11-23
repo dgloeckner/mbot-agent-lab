@@ -88,6 +88,9 @@ const (
 	ProviderFake      = "fake"
 )
 
+// FakeModel is the model name of a fake provider that names none.
+const FakeModel = "testmodell"
+
 // Budgets limit what a single agent may consume.
 type Budgets struct {
 	MaxStepsPerWakeup         int `yaml:"max_steps_per_wakeup"`
@@ -182,8 +185,11 @@ func (c *Config) applyDefaults() {
 	for name, p := range c.LLM.Providers {
 		if p.Kind == "" {
 			p.Kind = ProviderOpenAI
-			c.LLM.Providers[name] = p
 		}
+		if p.Kind == ProviderFake && p.Model == "" {
+			p.Model = FakeModel
+		}
+		c.LLM.Providers[name] = p
 	}
 }
 

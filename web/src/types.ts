@@ -65,6 +65,7 @@ export interface AgentStatus {
   state: AgentState
   running: boolean
   run_id?: number
+  provider?: string
   model?: string
   started_at?: string
   tokens_in: number
@@ -73,11 +74,36 @@ export interface AgentStatus {
   calls: number
 }
 
+/** Sum of all runs of a team. */
+export interface Totals {
+  runs: number
+  tokens_in: number
+  tokens_out: number
+  cost_micro_eur: number
+}
+
+/** A language model the team may choose (server/internal/lab/models.go). */
+export interface ModelOption {
+  provider: string
+  model: string
+  price_in: number // per million input tokens
+  price_out: number // per million output tokens
+  default: boolean
+  allowed: boolean
+}
+
+export interface TeamModels {
+  selected: string // provider of the team's next run
+  options: ModelOption[]
+}
+
 export interface Session {
   team: Team
   robots: Robot[]
   agent: AgentStatus
+  total: Totals
   agent_available: boolean
+  models: TeamModels
   prompt: PromptVersion | null
   versions: PromptVersion[]
   notes: Note[]

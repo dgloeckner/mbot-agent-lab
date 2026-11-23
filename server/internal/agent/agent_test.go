@@ -314,3 +314,41 @@ func TestSayBetweenAgentsCannotFakeTheTeam(t *testing.T) {
 		}
 	}
 }
+
+func TestRunUsesTeamProvider(t *testing.T) {
+	f := newFixture(t, config.Budgets{})
+	other := &script{next: func(int, llm.Request) llm.Message { return toolCall("c1", "finish", `{"report":"ok"}`) }}
+	f.m.LLM.Use("o", "other-model", other)
+	f.m.TeamProvider = func(_ context.Context, team string) string {
+		if team == "rot" {
+			return "o"
+		}
+		return "gone" // not configured: the default provider
+	}
+	f.model.next = func(int, llm.Request) llm.Message { return toolCall("c1", "finish", `{"report":"ok"}`) }
+	f.deploy(t, "rot", "Los.")
+	f.deploy(t, "blau", "Los.")
+
+	if err := f.m.Start(context.Background(), "rot"); err != nil {
+		t.Fatal(err)
+	}
+	if st := f.m.Status("rot"); st.Provider != "o" || st.Model != "other-model" {
+		t.Errorf("status = %+v", st)
+	}
+	waitFor(t, "rot to finish", func() bool { return !f.m.Status("rot").Running })
+	if len(other.calls()) != 1 || len(f.model.calls()) != 0 {
+		t.Fatalf("calls: chosen %d, default %d", len(other.calls()), len(f.model.calls()))
+	}
+	runs, _ := f.st.Runs(context.Background(), "rot", 1)
+	if runs[0].Model != "other-model" {
+		t.Errorf("run model = %q", runs[0].Model)
+	}
+
+	if err := f.m.Start(context.Background(), "blau"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "blau to finish", func() bool { return !f.m.Status("blau").Running })
+	if st := f.m.Status("blau"); st.Provider != "s" || st.Model != "scripted" || len(f.model.calls()) != 1 {
+		t.Errorf("blau status = %+v, default calls %d", st, len(f.model.calls()))
+	}
+}

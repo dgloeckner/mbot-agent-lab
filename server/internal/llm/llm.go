@@ -160,7 +160,7 @@ func New(cfg config.LLM, log *slog.Logger) *Client {
 		case config.ProviderFake:
 			prov = Fake{}
 			if model == "" {
-				model = "testmodell"
+				model = config.FakeModel
 			}
 		case config.ProviderAnthropic:
 			prov = NewAnthropic(p.BaseURL, p.APIKey, p.Model, p.Effort)
@@ -180,13 +180,33 @@ func (c *Client) Use(name, model string, p Provider) {
 // Available reports whether any provider is configured.
 func (c *Client) Available() bool { return len(c.providers) > 0 }
 
-// DefaultModel names the model new runs use.
-func (c *Client) DefaultModel() string { return c.providers[c.def].model }
+// Default names the default provider.
+func (c *Client) Default() string { return c.def }
+
+// Resolve returns provider if it is configured, else the default provider.
+func (c *Client) Resolve(provider string) string {
+	if _, ok := c.providers[provider]; ok {
+		return provider
+	}
+	return c.def
+}
+
+// Model names the model of a provider ("" or unknown: the default one).
+func (c *Client) Model(provider string) string { return c.providers[c.Resolve(provider)].model }
+
+// DefaultModel names the model of the default provider.
+func (c *Client) DefaultModel() string { return c.Model("") }
 
 // Chat runs a request on the default provider, with retries and fallback.
-// At most MaxParallelCalls requests run at once; every team has one agent
-// with at most one call in flight, so waiting callers are served in turn.
 func (c *Client) Chat(ctx context.Context, req Request) (Response, Call, error) {
+	return c.ChatWith(ctx, "", req)
+}
+
+// ChatWith runs a request on provider ("" or unknown: the default one), with
+// retries and then the fallback provider. At most MaxParallelCalls requests
+// run at once; every team has one agent with at most one call in flight, so
+// waiting callers are served in turn.
+func (c *Client) ChatWith(ctx context.Context, provider string, req Request) (Response, Call, error) {
 	select {
 	case c.sem <- struct{}{}:
 	case <-ctx.Done():
@@ -194,8 +214,9 @@ func (c *Client) Chat(ctx context.Context, req Request) (Response, Call, error) 
 	}
 	defer func() { <-c.sem }()
 
-	names := []string{c.def}
-	if c.fallback != "" && c.fallback != c.def {
+	first := c.Resolve(provider)
+	names := []string{first}
+	if c.fallback != "" && c.fallback != first {
 		names = append(names, c.fallback)
 	}
 	var lastErr error

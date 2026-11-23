@@ -117,6 +117,7 @@ func run(configPath string, log *slog.Logger) error {
 		Store: db, Robots: reg, Hub: hub, LLM: models,
 		Tools:   tools.NewRegistry(reg, db, hub, cfg.Budgets),
 		Budgets: cfg.Budgets, Log: log,
+		TeamProvider: labSvc.TeamProvider,
 	})
 	go agents.Run(ctx)
 	labSvc.OnTeamEvent = func(teamID, kind, text string) {

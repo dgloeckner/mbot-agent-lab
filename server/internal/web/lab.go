@@ -90,6 +90,21 @@ func (s *Server) renameRobot(w http.ResponseWriter, r *http.Request, team store.
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// setModel records the model the team's next runs use.
+func (s *Server) setModel(w http.ResponseWriter, r *http.Request, team store.Team) {
+	var req struct {
+		Provider string `json:"provider"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.Lab.SetTeamModel(r.Context(), team.ID, req.Provider); err != nil {
+		s.labError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // identifyRobot makes one of the team's robots blink and beep.
 func (s *Server) identifyRobot(w http.ResponseWriter, r *http.Request, team store.Team) {
 	id := r.PathValue("robot")

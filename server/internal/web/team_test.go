@@ -43,6 +43,10 @@ func newTestServer(t *testing.T) *testLab {
 	cfg := &config.Config{
 		Server: config.Server{AdminPassword: "pw", LabCode: "TEST"},
 		Robots: []config.Robot{{ID: "mbot-1", Color: "red"}, {ID: "mbot-2", Color: "blue"}, {ID: "mbot-3", Color: "green"}},
+		LLM: config.LLM{Default: "fake", MaxParallelCalls: 2, Providers: map[string]config.Provider{
+			"fake":  {Kind: config.ProviderFake, Model: config.FakeModel},
+			"teuer": {Kind: config.ProviderFake, Model: "teuer-modell", PriceIn: 4, PriceOut: 20},
+		}},
 	}
 	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "lab.db"))
 	if err != nil {
@@ -67,9 +71,9 @@ func newTestServer(t *testing.T) *testLab {
 	if err := svc.AssignRobot(ctx, "mbot-2", "blau"); err != nil {
 		t.Fatal(err)
 	}
-	models := llm.New(config.LLM{Default: "fake", MaxParallelCalls: 2, Providers: map[string]config.Provider{"fake": {Kind: config.ProviderFake}}}, log)
+	models := llm.New(cfg.LLM, log)
 	budgets := config.Budgets{MaxStepsPerWakeup: 3, MaxRunMinutes: 5, MaxHistoryMessages: 40, MaxAgentMessagesPerMinute: 5}
-	agents := agent.NewManager(agent.Deps{Store: st, Robots: reg, Hub: hub, LLM: models, Tools: tools.NewRegistry(reg, st, hub, budgets), Budgets: budgets, Log: log})
+	agents := agent.NewManager(agent.Deps{Store: st, Robots: reg, Hub: hub, LLM: models, Tools: tools.NewRegistry(reg, st, hub, budgets), Budgets: budgets, Log: log, TeamProvider: svc.TeamProvider})
 	runCtx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
 	go agents.Run(runCtx)
@@ -179,6 +183,10 @@ func TestEventsStream(t *testing.T) {
 		return ""
 	}
 	next("event: robots")
+	next("event: totals")
+	if data := next("event: models"); data == "" {
+		t.Fatal("no models event")
+	}
 	do(t, srv, "POST", "/t/tok-rot/message", `{"text":"Hallo"}`)
 	for {
 		if data := next("data: "); strings.Contains(data, `"text":"Hallo"`) {

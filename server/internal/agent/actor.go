@@ -33,6 +33,7 @@ type control struct {
 type run struct {
 	id            int64
 	promptVersion int
+	provider      string // model provider of the whole run
 	started       time.Time
 	deadline      time.Time
 	history       []llm.Message
@@ -178,15 +179,20 @@ func (a *actor) startRun(ctx context.Context) (*run, error) {
 	if err != nil {
 		return nil, &StartError{"Deployt zuerst einen Prompt, dann kann euer Agent loslegen."}
 	}
-	model := a.m.LLM.DefaultModel()
+	provider := ""
+	if a.m.TeamProvider != nil {
+		provider = a.m.TeamProvider(ctx, a.team)
+	}
+	provider = a.m.LLM.Resolve(provider)
+	model := a.m.LLM.Model(provider)
 	id, err := a.m.Store.CreateRun(ctx, a.team, p.ID, model)
 	if err != nil {
 		return nil, err
 	}
 	now := time.Now()
-	r := &run{id: id, promptVersion: p.Version, started: now, deadline: now.Add(time.Duration(a.m.Budgets.MaxRunMinutes) * time.Minute)}
+	r := &run{id: id, promptVersion: p.Version, provider: provider, started: now, deadline: now.Add(time.Duration(a.m.Budgets.MaxRunMinutes) * time.Minute)}
 	a.updateStatus(func(s *Status) {
-		*s = Status{State: StateWaiting, Running: true, RunID: id, Model: model, StartedAt: now}
+		*s = Status{State: StateWaiting, Running: true, RunID: id, Provider: provider, Model: model, StartedAt: now}
 	})
 	a.log(live.SourceSystem, "run_start", "", map[string]any{"run": id, "version": p.Version, "model": model})
 	a.m.Log.Info("run started", "team", a.team, "run", id, "prompt", p.Version, "model", model)
@@ -245,7 +251,7 @@ func (a *actor) process(parent context.Context, r *run, pending []Message) []Mes
 			return nil
 		}
 		env.Agents = names(a.m.runningAgents(ctx, a.team))
-		resp, call, err := a.m.LLM.Chat(ctx, llm.Request{Messages: messages, Tools: a.m.Tools.Definitions(env)})
+		resp, call, err := a.m.LLM.ChatWith(ctx, r.provider, llm.Request{Messages: messages, Tools: a.m.Tools.Definitions(env)})
 		if err != nil {
 			if !errors.Is(err, context.Canceled) {
 				a.m.Log.Error("model call failed", "team", a.team, "err", err)

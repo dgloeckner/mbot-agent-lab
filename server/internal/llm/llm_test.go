@@ -96,6 +96,29 @@ func TestFallbackAfterPermanentError(t *testing.T) {
 	}
 }
 
+func TestChatWithPicksProvider(t *testing.T) {
+	c := newClient("a", "b")
+	a, b, x := &flaky{}, &flaky{}, &flaky{fails: 99, status: 500}
+	c.Use("a", "ma", a)
+	c.Use("b", "mb", b)
+	c.Use("x", "mx", x)
+
+	if _, call, err := c.ChatWith(context.Background(), "b", Request{}); err != nil || call.Provider != "b" || call.Model != "mb" {
+		t.Fatalf("chosen provider: call %+v err %v", call, err)
+	}
+	// An unknown provider means the default one.
+	if _, call, _ := c.ChatWith(context.Background(), "gone", Request{}); call.Provider != "a" || c.Model("gone") != "ma" {
+		t.Fatalf("unknown provider: call %+v", call)
+	}
+	// A failing chosen provider still falls back.
+	if _, call, err := c.ChatWith(context.Background(), "x", Request{}); err != nil || call.Provider != "b" || x.calls.Load() != 3 {
+		t.Fatalf("fallback: call %+v err %v, x called %d times", call, err, x.calls.Load())
+	}
+	if c.Resolve("x") != "x" || c.Resolve("") != "a" || c.Model("x") != "mx" {
+		t.Error("Resolve/Model")
+	}
+}
+
 func TestFakeExploresAndFinishes(t *testing.T) {
 	tools := []Tool{
 		{Name: "read_sensors", Parameters: json.RawMessage(`{"type":"object","properties":{"robot":{"type":"string","enum":["Scout","Träger"]}}}`)},
