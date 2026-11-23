@@ -55,3 +55,29 @@ func TestRunLifecycle(t *testing.T) {
 		t.Errorf("open run not closed: %+v", runs[0])
 	}
 }
+
+func TestTeamTotals(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+	if tot, err := s.TeamTotal(ctx, "rot"); err != nil || tot != (Totals{}) {
+		t.Fatalf("no runs: %+v %v", tot, err)
+	}
+	for _, c := range []struct {
+		team    string
+		in, out int
+		cost    int64
+	}{{"rot", 11000, 440, 37900}, {"rot", 55000, 1036, 71900}, {"blau", 100, 10, 1}} {
+		run, _ := s.CreateRun(ctx, c.team, 0, "m")
+		if err := s.AddLLMCall(ctx, run, "p", "m", c.in, c.out, time.Second, c.cost); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := Totals{Runs: 2, TokensIn: 66000, TokensOut: 1476, CostMicroEUR: 109800}
+	if tot, _ := s.TeamTotal(ctx, "rot"); tot != want {
+		t.Errorf("rot = %+v", tot)
+	}
+	all, err := s.TeamTotals(ctx)
+	if err != nil || all["rot"] != want || all["blau"].Runs != 1 || len(all) != 2 {
+		t.Errorf("all = %+v %v", all, err)
+	}
+}

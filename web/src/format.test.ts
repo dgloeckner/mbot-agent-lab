@@ -1,5 +1,5 @@
 import { describe as group, expect, it } from 'vitest'
-import { describe, estimateTokens, formatCost, formatPrices, logGroup, onColor, relativeTime } from './format'
+import { describe, estimateTokens, formatCost, formatPrices, formatUsage, logGroup, onColor, relativeTime } from './format'
 
 group('describe', () => {
   it('words robot events in German', () => {
@@ -46,6 +46,7 @@ it('formats model prices', () => {
   expect(formatPrices(0.1, 0.5)).toBe('0,1 / 0,5 € pro Mio. Token')
   expect(formatPrices(4, 20)).toBe('4 / 20 € pro Mio. Token')
   expect(formatPrices(0, 0)).toBe('ohne Kosten')
+  expect(formatUsage(67_476, 109_800)).toBe('67.476 Token, 10,98 ct')
 })
 
 it('words goal tools', () => {

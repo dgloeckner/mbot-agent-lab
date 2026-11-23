@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"time"
 )
@@ -19,6 +20,43 @@ type Run struct {
 	TokensOut     int       `json:"tokens_out"`
 	CostMicroEUR  int64     `json:"cost_micro_eur"`
 	Report        string    `json:"report,omitempty"`
+}
+
+// Totals sums the runs of a team.
+type Totals struct {
+	Runs         int   `json:"runs"`
+	TokensIn     int   `json:"tokens_in"`
+	TokensOut    int   `json:"tokens_out"`
+	CostMicroEUR int64 `json:"cost_micro_eur"`
+}
+
+const totalsQuery = `SELECT team_id, COUNT(*), COALESCE(SUM(tokens_in), 0), COALESCE(SUM(tokens_out), 0), COALESCE(SUM(cost_microeur), 0) FROM runs`
+
+// TeamTotals sums all runs per team, the running ones included.
+func (s *Store) TeamTotals(ctx context.Context) (map[string]Totals, error) {
+	rows, err := s.DB.QueryContext(ctx, totalsQuery+` GROUP BY team_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]Totals{}
+	for rows.Next() {
+		var team string
+		var t Totals
+		if err := rows.Scan(&team, &t.Runs, &t.TokensIn, &t.TokensOut, &t.CostMicroEUR); err != nil {
+			return nil, err
+		}
+		out[team] = t
+	}
+	return out, rows.Err()
+}
+
+// TeamTotal sums all runs of one team, the running one included.
+func (s *Store) TeamTotal(ctx context.Context, team string) (Totals, error) {
+	var t Totals
+	var id sql.NullString
+	err := s.DB.QueryRowContext(ctx, totalsQuery+` WHERE team_id = ?`, team).Scan(&id, &t.Runs, &t.TokensIn, &t.TokensOut, &t.CostMicroEUR)
+	return t, err
 }
 
 // CreateRun starts a run with the given prompt.

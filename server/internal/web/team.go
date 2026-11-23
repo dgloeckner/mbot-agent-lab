@@ -67,10 +67,16 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request, team store.Team
 		s.serverError(w, err)
 		return
 	}
+	total, err := s.Store.TeamTotal(ctx, team.ID)
+	if err != nil {
+		s.serverError(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"team":            map[string]string{"id": team.ID, "name": team.Name, "color": team.Color},
 		"robots":          s.teamRobots(team.ID),
 		"agent":           s.Agents.Status(team.ID),
+		"total":           total,
 		"agent_available": s.Agents.Available(),
 		"models":          s.Lab.ModelsFor(team),
 		"prompt":          prompt,
@@ -310,8 +316,9 @@ const (
 	ssePingInterval   = 15 * time.Second
 )
 
-// events streams robot snapshots ("robots"), the agent status ("agent"), the
-// model choice ("models") and log entries ("log") to the team page. Last-Event-ID lets a reconnecting browser catch up on the log.
+// events streams robot snapshots ("robots"), the agent status ("agent") with
+// the team's totals over all runs ("totals"), the model choice ("models") and
+// log entries ("log") to the team page. Last-Event-ID lets a reconnecting browser catch up on the log.
 func (s *Server) events(w http.ResponseWriter, r *http.Request, team store.Team) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -353,7 +360,16 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, team store.Team)
 			return nil
 		}
 		lastAgent = b
-		_, err := fmt.Fprintf(w, "event: agent\ndata: %s\n\n", b)
+		if _, err := fmt.Fprintf(w, "event: agent\ndata: %s\n\n", b); err != nil {
+			return err
+		}
+		// The totals only change with the agent status: look them up then.
+		total, err := s.Store.TeamTotal(r.Context(), team.ID)
+		if err != nil {
+			return nil
+		}
+		t, _ := json.Marshal(total)
+		_, err = fmt.Fprintf(w, "event: totals\ndata: %s\n\n", t)
 		return err
 	}
 	sendRobots := func() error {

@@ -3,7 +3,7 @@
 import { computed, effect, signal } from '@preact/signals'
 import { api, ApiError, connectEvents, type ConnState } from './api'
 import { LocalStore, browserKV, shouldAutoSnapshot, type Prefs, type Snapshot } from './storage'
-import type { AgentStatus, LogEntry, Note, PromptVersion, Robot, Session } from './types'
+import type { AgentStatus, LogEntry, Note, PromptVersion, Robot, Session, Totals } from './types'
 
 const kv = browserKV()
 let local: LocalStore
@@ -12,6 +12,8 @@ export const session = signal<Session | null>(null)
 export const loadError = signal<string | null>(null)
 export const robots = signal<Robot[]>([])
 export const agent = signal<AgentStatus>({ state: 'waiting', running: false, tokens_in: 0, tokens_out: 0, cost_micro_eur: 0, calls: 0 })
+/** All runs of the team, the current one included. */
+export const totals = signal<Totals>({ runs: 0, tokens_in: 0, tokens_out: 0, cost_micro_eur: 0 })
 export const log = signal<LogEntry[]>([])
 export const conn = signal<ConnState>('connecting')
 export const notes = signal<Note[]>([])
@@ -79,6 +81,7 @@ export async function init() {
   session.value = s
   robots.value = s.robots
   agent.value = s.agent
+  totals.value = s.total
   notes.value = s.notes
   versions.value = s.versions
   deployed.value = s.prompt
@@ -100,6 +103,7 @@ export async function init() {
     status: (st) => (conn.value = st),
     robots: (r) => (robots.value = r),
     agent: (a) => (agent.value = a),
+    totals: (t) => (totals.value = t),
     models: (m) => {
       if (session.value) session.value = { ...session.value, models: m }
     },

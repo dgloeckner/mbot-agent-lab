@@ -133,7 +133,8 @@ All vendor API calls live in `robot/src/hw.py` and are marked `VERIFY` until che
   robots live (online, battery, what they do) and every team with its robots and open browsers.
   Robots are assigned by drag and drop or from a list; a team can have any number of robots, and
   every robot has at most one team. Teams can be renamed or deleted, team links copied, the lab
-  code replaced, and all robots stopped at once.
+  code replaced, and all robots stopped at once. Each team card shows the tokens and cost of the
+  current or last run and the total over all its runs.
 - **Robot names:** a newly assigned robot is called after its sticker color (`rot`, `blau`, …).
   Teams rename their robots on the team page; these names are what the agent uses for the `robot`
   parameter. The robot's display shows its name and team, and its LEDs show the team color.
@@ -160,6 +161,8 @@ robot's LEDs show, and the color band pulses in the robot's rhythm while the age
 - **Notes** the agent sees every round, and the **tool catalog** with one-click insertion.
 - **Robots:** live state per robot, rename by clicking the name, and "Finden" to make a robot
   blink and beep. The team name can be changed by clicking it; the link button copies the team link.
+- **Usage:** tokens and cost of the current or last run, and the total over all runs once there
+  is more than one.
 - **Model:** the model of the next run with its price per million tokens, as a choice when the
   control room released more than one.
 - **Browser storage** (`localStorage`, per team): the unsaved draft, up to 80 draft snapshots and

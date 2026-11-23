@@ -1,8 +1,8 @@
 import { render } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
 import { signal } from '@preact/signals'
-import { COLOR_HEX, colorName, formatCost, formatNumber, formatPrices, onColor, relativeTime, skillName } from '../format'
-import type { AgentStatus, ModelOption, RobotState } from '../types'
+import { COLOR_HEX, colorName, formatPrices, formatUsage, onColor, relativeTime, skillName } from '../format'
+import type { AgentStatus, ModelOption, RobotState, Totals } from '../types'
 import './admin.css'
 
 interface AdminRobot {
@@ -24,7 +24,8 @@ interface AdminTeam {
   connected: number
   created_at: string
   provider: string // model provider of the team's next run
-  agent: AgentStatus
+  agent: AgentStatus // current or last run
+  total: Totals // all runs
 }
 
 interface AdminState {
@@ -308,8 +309,15 @@ function TeamCard({ t, robots, teams }: { t: AdminTeam; robots: AdminRobot[]; te
       </footer>
       <p class="team-agent" data-running={t.agent.running}>
         {t.agent.running ? `Agent ${AGENT_LABEL[t.agent.state]}` : 'Kein Lauf'}
-        {t.agent.calls > 0 && `, ${formatNumber(t.agent.tokens_in + t.agent.tokens_out)} Token, ${formatCost(t.agent.cost_micro_eur)}`}
+        {t.agent.calls > 0 &&
+          `, ${t.agent.running ? 'dieser' : 'letzter'} Lauf: ${formatUsage(t.agent.tokens_in + t.agent.tokens_out, t.agent.cost_micro_eur)}`}
       </p>
+      {t.total.runs > 0 && (
+        <p class="team-model">
+          Gesamt: {formatUsage(t.total.tokens_in + t.total.tokens_out, t.total.cost_micro_eur)} in{' '}
+          {t.total.runs === 1 ? '1 Lauf' : `${t.total.runs} Läufen`}
+        </p>
+      )}
       <p class="team-model">
         Modell {modelName(t.provider)}
         {t.agent.running && t.agent.provider && t.agent.provider !== t.provider && ` (Lauf noch mit ${t.agent.model})`}

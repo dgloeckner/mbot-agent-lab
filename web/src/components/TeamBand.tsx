@@ -1,5 +1,5 @@
-import { agent, busy, chooseModel, conn, copyTeamLink, deployed, identifyRobot, prefs, renameRobot, renameTeam, robots, session, startRun, stopAll, updatePrefs } from '../state'
-import { COLOR_HEX, colorName, formatCost, formatNumber, formatPrices, skillName } from '../format'
+import { agent, busy, chooseModel, conn, copyTeamLink, deployed, identifyRobot, prefs, renameRobot, renameTeam, robots, session, startRun, stopAll, totals, updatePrefs } from '../state'
+import { COLOR_HEX, colorName, formatPrices, formatUsage, skillName } from '../format'
 import type { Robot } from '../types'
 import { AutoIcon, LinkIcon, MoonIcon, PlayIcon, StopIcon, SunIcon } from './icons'
 import { InlineEdit } from './InlineEdit'
@@ -106,7 +106,12 @@ export function TeamBand() {
           {a.running ? `Agent ${AGENT_LABEL[a.state]}` : 'Kein Lauf'}
           {a.calls > 0 && (
             <span class="run-usage" title={`Modell ${a.model ?? ''}, ${a.calls} Aufrufe`}>
-              {formatNumber(a.tokens_in + a.tokens_out)} Token, {formatCost(a.cost_micro_eur)}
+              {a.running ? 'dieser Lauf' : 'letzter Lauf'}: {formatUsage(a.tokens_in + a.tokens_out, a.cost_micro_eur)}
+            </span>
+          )}
+          {totals.value.runs > 1 && (
+            <span class="run-usage" title={`Alle ${totals.value.runs} Läufe eures Teams`}>
+              gesamt: {formatUsage(totals.value.tokens_in + totals.value.tokens_out, totals.value.cost_micro_eur)}
             </span>
           )}
         </p>

@@ -13,6 +13,7 @@ import (
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/lab"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/live"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/protocol"
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/store"
 )
 
 func (s *Server) adminRoutes(mux *http.ServeMux) {
@@ -51,7 +52,8 @@ type AdminTeam struct {
 	Connected int          `json:"connected"`
 	CreatedAt time.Time    `json:"created_at"`
 	Provider  string       `json:"provider"` // model provider of the team's next run
-	Agent     agent.Status `json:"agent"`
+	Agent     agent.Status `json:"agent"`    // current or last run
+	Total     store.Totals `json:"total"`    // all runs of the team
 }
 
 type adminState struct {
@@ -66,11 +68,15 @@ func (s *Server) buildAdminState(ctx context.Context) (adminState, error) {
 	if err != nil {
 		return adminState{}, err
 	}
+	totals, err := s.Store.TeamTotals(ctx)
+	if err != nil {
+		return adminState{}, err
+	}
 	st := adminState{LabCode: s.Lab.LabCode(), Models: s.Lab.Models(), Teams: []AdminTeam{}, Robots: []AdminRobot{}}
 	for _, t := range teams {
 		st.Teams = append(st.Teams, AdminTeam{
 			ID: t.ID, Name: t.Name, Color: t.Color, Link: "/t/" + t.Token,
-			Connected: s.Hub.Connected(t.ID), CreatedAt: t.CreatedAt, Provider: s.Lab.Provider(t), Agent: s.Agents.Status(t.ID),
+			Connected: s.Hub.Connected(t.ID), CreatedAt: t.CreatedAt, Provider: s.Lab.Provider(t), Agent: s.Agents.Status(t.ID), Total: totals[t.ID],
 		})
 	}
 	for _, rb := range s.Robots.Snapshot() {

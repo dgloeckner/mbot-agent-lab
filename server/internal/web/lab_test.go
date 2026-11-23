@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/cookiejar"
 	"strings"
@@ -224,6 +225,31 @@ func TestTeamChoosesReleasedModel(t *testing.T) {
 		t.Errorf("start: %d %v", code, st)
 	}
 	do(t, srv, "POST", "/t/tok-rot/stop", "")
+
+	// Session and control room count the run in the team's totals.
+	_, sess := do(t, srv, "GET", "/t/tok-rot/api/session", "")
+	if total := sess["total"].(map[string]any); total["runs"] != 1.0 {
+		t.Errorf("session total = %v", total)
+	}
+	resp, err := c.Get(srv.URL + "/admin/api/state")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state struct {
+		Teams []struct {
+			ID    string `json:"id"`
+			Total struct {
+				Runs int `json:"runs"`
+			} `json:"total"`
+		} `json:"teams"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&state)
+	resp.Body.Close()
+	for _, tm := range state.Teams {
+		if want := map[string]int{"rot": 1, "blau": 0}[tm.ID]; tm.Total.Runs != want {
+			t.Errorf("admin total of %s = %d runs, want %d", tm.ID, tm.Total.Runs, want)
+		}
+	}
 
 	// Revoking the release sends the team back to the default.
 	if code := adminDo(t, c, srv, "PUT", "/admin/api/models", `{"allowed":[]}`); code != http.StatusNoContent {

@@ -108,6 +108,9 @@ export function formatCost(microEUR: number): string {
   return `${cents.toLocaleString('de-DE', { maximumFractionDigits: 2 })} ct`
 }
 
+/** "56.036 Token, 7,19 ct" */
+export const formatUsage = (tokens: number, microEUR: number) => `${formatNumber(tokens)} Token, ${formatCost(microEUR)}`
+
 /** Model prices per million tokens, e.g. "0,1 / 0,5 € pro Mio. Token". */
 export function formatPrices(priceIn: number, priceOut: number): string {
   if (!priceIn && !priceOut) return 'ohne Kosten'

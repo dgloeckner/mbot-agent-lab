@@ -1,6 +1,6 @@
 // Team API client. The secret team token is the second path segment.
 
-import type { AgentStatus, LogEntry, Note, PromptVersion, Robot, Session, TeamModels } from './types'
+import type { AgentStatus, LogEntry, Note, PromptVersion, Robot, Session, TeamModels, Totals } from './types'
 
 export const token = decodeURIComponent(location.pathname.split('/')[2] ?? '')
 const base = `/t/${encodeURIComponent(token)}`
@@ -51,6 +51,7 @@ export function connectEvents(on: {
   robots: (r: Robot[]) => void
   agent: (a: AgentStatus) => void
   models: (m: TeamModels) => void
+  totals: (t: Totals) => void
   log: (e: LogEntry) => void
   status: (s: ConnState) => void
 }): () => void {
@@ -68,6 +69,7 @@ export function connectEvents(on: {
     })
     es.addEventListener('robots', (ev) => on.robots(JSON.parse((ev as MessageEvent).data)))
     es.addEventListener('agent', (ev) => on.agent(JSON.parse((ev as MessageEvent).data)))
+    es.addEventListener('totals', (ev) => on.totals(JSON.parse((ev as MessageEvent).data)))
     es.addEventListener('models', (ev) => on.models(JSON.parse((ev as MessageEvent).data)))
     es.addEventListener('log', (ev) => on.log(JSON.parse((ev as MessageEvent).data)))
   }

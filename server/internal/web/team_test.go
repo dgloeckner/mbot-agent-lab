@@ -183,6 +183,7 @@ func TestEventsStream(t *testing.T) {
 		return ""
 	}
 	next("event: robots")
+	next("event: totals")
 	if data := next("event: models"); data == "" {
 		t.Fatal("no models event")
 	}
