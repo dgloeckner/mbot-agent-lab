@@ -462,6 +462,7 @@ class RetraceSkill(Motion):
         self.empty = not log
         self.turned = 0
         self.segments = 0
+        self.driven = 0
         self.sub = None
         self.started = 0
 
@@ -496,6 +497,7 @@ class RetraceSkill(Motion):
         if kind == "turn":
             self.turned += value
         else:
+            self.driven += abs(value)
             rest = round(self.log[-1][1] - value, 1)
             if abs(rest) < 1:
                 self.log.pop()
@@ -510,7 +512,8 @@ class RetraceSkill(Motion):
         turned = _norm(round(self.turned))
         if self.log and turned:
             self.log.append(("turn", turned))
-        return ok, reason, {"segments": self.segments, "distance_cm": s["distance_cm"]}
+        return ok, reason, {"segments": self.segments, "driven_cm": round(self.driven, 1),
+                            "distance_cm": s["distance_cm"]}
 
     def step(self, s, now):
         if ticks_diff(now, self.started) > SK_MAX_MS:

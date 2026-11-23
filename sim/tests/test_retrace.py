@@ -43,6 +43,8 @@ class RetraceTest(unittest.TestCase):
         self.assertTrue(res["ok"], res)
         self.assertEqual(res["reason"], "done", res)
         self.assertEqual(res["data"]["segments"], 3, res)
+        # driven_cm is the way back (60 + 50 cm), not the distance ahead.
+        self.assertAlmostEqual(res["data"]["driven_cm"], 110, delta=4)
         x, y, heading = pose()
         self.assertLess(math.hypot(x - start[0], y - start[1]), POS_TOLERANCE_CM, (x, y))
         self.assertLess(heading_diff(heading, start[2] + 180), HEADING_TOLERANCE_DEG, heading)
@@ -50,7 +52,8 @@ class RetraceTest(unittest.TestCase):
 
     def test_empty_log(self):
         res = self.run_.run("retrace_path", {})
-        self.assertEqual((res["ok"], res["reason"], res["data"]["segments"]), (True, "empty", 0), res)
+        self.assertEqual((res["ok"], res["reason"], res["data"]["segments"], res["data"]["driven_cm"]),
+                         (True, "empty", 0, 0), res)
         self.assertEqual(self.run_.robot.trip_log, [])
 
     def test_a_later_move_is_logged_from_scratch(self):
@@ -76,12 +79,15 @@ class RetraceTest(unittest.TestCase):
         self.assertLess(y, 100, "it got onto the first leg")
         self.assertAlmostEqual(log[0][1], y - start[1], delta=4)
         self.assertGreater(abs(log[1][1]), 170, log)
+        self.assertAlmostEqual(res["data"]["driven_cm"], 50 + 60 - log[0][1], delta=4)
 
         # The box is gone: a new retrace_path continues home.
         simstate.world.walls.pop()
         r.settle()  # the distance median still remembers the box
+        rest = log[0][1]
         res = r.run("retrace_path", {})
         self.assertEqual(res["reason"], "done", res)
+        self.assertAlmostEqual(res["data"]["driven_cm"], rest, delta=4, msg="only this call's drives")
         x, y, _ = pose()
         self.assertLess(math.hypot(x - start[0], y - start[1]), POS_TOLERANCE_CM, (x, y))
         self.assertEqual(r.robot.trip_log, [])

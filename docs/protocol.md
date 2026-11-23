@@ -104,7 +104,7 @@ Sent immediately on change, otherwise two to five times per second.
 | `scan` | `from_deg?` (-90), `to_deg?` (90), `step_deg?` (15), `face?` (`best`/`start`) | `profile` (`[[deg, cm], …]`, `cm` null if no reading), `best_deg`, `best_cm`, `turned_deg`, `distance_cm` |
 | `follow_line_until` | `max_cm`, `stop_on_color?`, `stop_at_crossing?` (true), `speed?` (30) | `driven_cm`, `color`, `distance_cm`, trace |
 | `calibrate_colors` | `cm?` (38) | `refs`: per probe six `[r, g, b]` for white, black, red, yellow, green, blue; `driven_cm` |
-| `retrace_path` | none | `segments`, `distance_cm` (see [Trip log](#trip-log)) |
+| `retrace_path` | none | `segments`, `driven_cm` (straight drives only, not turns), `distance_cm` (see [Trip log](#trip-log)) |
 | `stop` | none | none |
 | `set_leds` | `color` or `pattern` | none |
 | `show_text` | `text` | none |
@@ -159,7 +159,8 @@ back through earlier runs; a robot that is offline then keeps its log.
   So the logged turns come out negated and the robot ends at the start, facing the way it came.
 - Drives go straight and turns go through the same turn skill as `turn`. Lines are not
   followed; turns at the end of a log with no drive before them do not move the robot.
-- The retrace's own moves are not logged. `segments` counts the log entries worked off.
+- The retrace's own moves are not logged. `segments` counts the log entries worked off,
+  `driven_cm` the cm this call drove (turns not counted).
 - `done` (or `empty` when there was nothing to do) leaves the log empty: the robot's pose is the
   new beginning. An abort (`obstacle`, `stopped`, `tilted`, `timeout`, …) leaves the way still to
   go in the log plus a turn for the extra rotation, so the log again describes the way from the
