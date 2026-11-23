@@ -6,7 +6,7 @@ from config import ROBOT_ID, WIFI_SSID, WIFI_PASSWORD, BROKER_HOST, BROKER_PORT,
 from hw import hw_motors_stop, hw_mac, hw_play
 from sense import Sense
 from ui import Ui
-from events import Events
+from events import Events, EV_HUSH_MOTION_MS, EV_HUSH_SOUND_MS
 from net import Link
 from skills import MOTION_SKILLS, make_motion_skill
 from calib import CalibrateColorsSkill
@@ -105,6 +105,7 @@ class Robot:
             self.reply(cmd_id, True, "done")
         elif name == "play_sound":
             hw_play(str(args.get("name", "hello")))
+            self.events.hush(ticks_ms(), EV_HUSH_SOUND_MS)
             self.reply(cmd_id, True, "done")
         elif name == "identify":
             self.ui.identify()
@@ -249,6 +250,8 @@ class Robot:
         self.check_watchdog(now)
 
         # 4. Events.
+        if self.skill is not None or ticks_diff(self.ui.identify_until, now) > 0:
+            self.events.hush(now, EV_HUSH_MOTION_MS)
         self.events.update(self.s, now)
         while self.events.queue:
             kind, data = self.events.queue.pop(0)

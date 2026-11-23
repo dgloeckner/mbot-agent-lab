@@ -54,6 +54,10 @@ Every robot has its own prefix `lab/<robot_id>/`, e.g. `lab/mbot-1/`.
 Values for `kind`: `obstacle_near`, `obstacle_clear`, `color_changed`, `tilted`, `button_a`,
 `button_b`, `clap`, `battery_low`, `skill_done`, `skill_aborted`.
 
+`clap` (`data.loudness`, 0..100) is a short peak well above the background level. The robot
+does not listen while its motors run or it beeps for `identify`, until 0.5 s after that, nor
+for 2 s after `play_sound`: the microphone sits next to motors and speaker.
+
 ### `state`
 
 ```json

@@ -1,5 +1,6 @@
 """Behaviour tests of the real bundled robot script against fakes."""
 
+import random
 import time
 import unittest
 
@@ -157,6 +158,63 @@ class RobotTest(unittest.TestCase):
         self.client.deliver("lab/mbot-1/hb", {"team": "t2", "owner": "Blau", "name": "blau", "color": "blue", "agent": "waiting"})
         self.robot.iterate()
         self.assertEqual(self.result("r-1")["reason"], "reassigned")
+
+
+class ClapTest(unittest.TestCase):
+    """The microphone sits next to motors and speaker: only real claps count."""
+
+    def setUp(self):
+        import simstate
+        self.sim = simstate
+        self.rng = random.Random(7)
+        self.ns = load_robot(ARENA)
+        self.robot = self.ns["Robot"]()
+        self.robot.iterate()
+        self.client = MemoryClient.instances[-1]
+        self.quiet(10)
+
+    def tearDown(self):
+        self.sim.loudness = 0
+
+    def hb(self):
+        self.client.deliver("lab/mbot-1/hb", {"team": "t1", "owner": "Rot", "name": "Scout", "color": "red", "agent": "acting"})
+
+    def listen(self, levels):
+        """Iterate once per loudness level; return the number of new claps."""
+        before = len(self.claps())
+        for x in levels:
+            self.sim.loudness = x
+            self.hb()
+            self.robot.iterate()
+            time.sleep(0.01)
+        return len(self.claps()) - before
+
+    def claps(self):
+        return [e for e in self.client.messages("event") if e["kind"] == "clap"]
+
+    def quiet(self, n):
+        return self.listen([self.rng.randint(5, 25) for _ in range(n)])
+
+    def loud(self, n):
+        return self.listen([self.rng.randint(72, 95) for _ in range(n)])
+
+    def test_single_clap_in_a_quiet_room(self):
+        self.assertEqual(self.listen([92]) + self.quiet(20), 1)
+        self.assertEqual(self.claps()[0]["data"], {"loudness": 92})
+
+    def test_motor_noise_is_no_clap(self):
+        self.client.deliver("lab/mbot-1/cmd", {"id": "m-1", "name": "drive", "args": {"cm": 100, "speed": 5}})
+        self.assertEqual(self.loud(40), 0)
+        self.client.deliver("lab/mbot-1/cmd", {"id": "m-2", "name": "stop"})
+        self.assertEqual(self.loud(5) + self.quiet(20), 0)
+
+    def test_own_sound_is_no_clap(self):
+        self.client.deliver("lab/mbot-1/cmd", {"id": "s-1", "name": "play_sound", "args": {"name": "yeah"}})
+        self.assertEqual(self.loud(40) + self.quiet(10), 0)
+
+    def test_steady_noise_is_no_clap(self):
+        ramp = [10 + i * 3 + self.rng.randint(-5, 5) for i in range(25)]  # chatter swells to ~85
+        self.assertEqual(self.listen(ramp) + self.loud(60), 0)
 
 
 if __name__ == "__main__":
