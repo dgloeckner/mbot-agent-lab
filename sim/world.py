@@ -1,4 +1,12 @@
-"""2D world for the simulator: walls, colored fields, lines and the robot pose.
+"""2D world for the simulator: walls, the floor drawing and the robot pose.
+
+The floor is a drawing on a white base: rectangular "fields" at the bottom,
+then "bands" (strips of tape: from, to, width, color, layer) on top, higher
+layers over lower ones. Legacy "lines" (black polylines with round joints) sit
+on the top layer. The world knows centimetres only, never what a drawing means.
+
+The quad RGB sensor has four probes (L2, L1, R1, R2). Each sees a small spot,
+not a point, so at edges its RGB value mixes both sides.
 
 With noise enabled (spec "noise": true or a random.Random passed in), the
 sensors misbehave like real ones: ultrasonic dropouts (0) and ghost echoes,
@@ -13,17 +21,34 @@ since the previous call, using wall-clock time.
 
 import json
 import math
+import pathlib
 import random
 import time
 
-WHEEL_DIAMETER_CM = 6.5
+# Robot geometry: assumptions until measured on the real robot (sim/mbot2.json).
+GEOMETRY = json.loads((pathlib.Path(__file__).resolve().parent / "mbot2.json").read_text())
+WHEEL_DIAMETER_CM = GEOMETRY["wheel_diameter_cm"]
 CM_PER_WHEEL_DEG = math.pi * WHEEL_DIAMETER_CM / 360
-TRACK_CM = 12.0            # distance between the wheels
-ROBOT_RADIUS_CM = 8.0
-SENSOR_FRONT_CM = 7.0      # ultrasonic sensor ahead of the centre
-GROUND_FRONT_CM = 5.0      # quad RGB sensor ahead of the centre
-LINE_OFFSETS_CM = (-1.8, -0.6, 0.6, 1.8)  # L2, L1, R1, R2
+TRACK_CM = GEOMETRY["track_cm"]                    # distance between the wheels
+ROBOT_RADIUS_CM = GEOMETRY["robot_radius_cm"]
+SENSOR_FRONT_CM = GEOMETRY["ultrasonic_front_cm"]  # ultrasonic sensor ahead of the axle
+GROUND_FRONT_CM = GEOMETRY["probe_front_cm"]       # quad RGB sensor bar ahead of the axle ("o")
+PROBES = ("L2", "L1", "R1", "R2")
+PROBE_LATERAL_CM = tuple(GEOMETRY["probe_lateral_cm"][p] for p in PROBES)
+LINE_OFFSETS_CM = PROBE_LATERAL_CM
+PROBE_SPOT_CM = GEOMETRY["probe_spot_cm"]
+PROBE_JITTER_CM = 0.2    # the bar is fixed; only the edge blur wobbles
+PROBE_SAMPLE_S = 0.004   # one RGB measurement serves the three channel reads
 MAX_RANGE_CM = 300
+
+# What each surface reflects under the sensor's fill light (0..255). "blue" is
+# the light blue tape of the line field.
+SURFACE_RGB = {
+    "white": (235, 235, 228), "black": (28, 28, 30), "red": (205, 60, 55),
+    "yellow": (228, 192, 48), "green": (70, 160, 72), "blue": (82, 166, 218),
+    "cyan": (60, 200, 205), "purple": (140, 80, 190),
+}
+RGB_NOISE = 5.0          # standard deviation per channel
 
 
 class World:
@@ -36,6 +61,13 @@ class World:
         self.fields = spec.get("fields", [])
         self.lines = spec.get("lines", [])
         self.floor = spec.get("floor", "white")
+        self.bands = _bands(spec)
+        self.probe_cache = {}
+        # Color cast and brightness of this robot's sensor, fixed per robot.
+        self.tint = (1.0, 1.0, 1.0)
+        if self.rng:
+            gain = self.rng.uniform(0.85, 1.05)
+            self.tint = tuple(gain * self.rng.uniform(0.92, 1.08) for _ in range(3))
         start = spec.get("start", {"x": 0, "y": 0, "heading": 0})
         self.x, self.y, self.heading = float(start["x"]), float(start["y"]), float(start.get("heading", 0))
         self.pitch = 0.0
@@ -153,30 +185,87 @@ class World:
     def _jitter(self, x, y, amount=1.2):
         """Sensor spot wobble: readings at edges flicker between both sides.
 
-        The color reading flickers more (1.2 cm) than the line sensors, which
-        sit in a fixed bar and only see the line's edge blur (0.4 cm).
+        The legacy single color reading flickers more (1.2 cm) than the probes,
+        which sit in a fixed bar and only see the edge blur.
         """
         if self.rng:
             return x + self.rng.uniform(-amount, amount), y + self.rng.uniform(-amount, amount)
         return x, y
 
-    def ground_color(self):
-        self.update()
-        x, y = self._jitter(*self._ahead(GROUND_FRONT_CM))
-        if any(self._on_line(x, y, line) for line in self.lines):
-            return "black"
+    def surface(self, x, y):
+        """Color name of the floor drawing at a point."""
+        for b in self.bands:
+            if _in_band(x, y, b):
+                return b["color"]
         for f in reversed(self.fields):
             fx, fy, fw, fh = f["rect"]
             if fx <= x <= fx + fw and fy <= y <= fy + fh:
                 return f["color"]
         return self.floor
 
+    def probe_point(self, probe):
+        """Centre of a probe's spot in world coordinates."""
+        return self._ahead(GROUND_FRONT_CM, PROBE_LATERAL_CM[_probe_index(probe)])
+
+    def _spot_rgb(self, probe):
+        """Mean surface RGB over the probe's spot, without sensor effects."""
+        x, y = self._jitter(*self.probe_point(probe), amount=PROBE_JITTER_CM)
+        r = PROBE_SPOT_CM
+        pts = ((x, y), (x + r, y), (x - r, y), (x, y + r), (x, y - r))
+        acc = [0.0, 0.0, 0.0]
+        for px, py in pts:
+            rgb = SURFACE_RGB.get(self.surface(px, py), SURFACE_RGB["white"])
+            for i in range(3):
+                acc[i] += rgb[i]
+        return [v / len(pts) for v in acc]
+
+    def _noisy(self, values):
+        if not self.rng:
+            return [int(round(v)) for v in values]
+        return [int(max(0, min(255, round(v + self.rng.gauss(0, RGB_NOISE))))) for v in values]
+
+    def probe_rgb(self, probe):
+        """(r, g, b) 0..255 as the probe reports it: spot mix, color cast, noise.
+
+        The robot reads red, green and blue in three calls; they come from one
+        measurement, so a reading is reused for a few milliseconds.
+        """
+        self.update()
+        cached = self.probe_cache.get(probe)
+        if cached and self.t - cached[0] < PROBE_SAMPLE_S:
+            return cached[1]
+        mixed = self._spot_rgb(probe)
+        rgb = tuple(self._noisy([min(255, v * t) for v, t in zip(mixed, self.tint)]))
+        self.probe_cache[probe] = (self.t, rgb)
+        return rgb
+
+    def probe_gray(self, probe):
+        """Reflection 0..100 (fill light on minus off), from the spot mix."""
+        self.update()
+        mixed = self._spot_rgb(probe)
+        gray = sum(mixed) / 3 / 255 * 100
+        if self.rng:
+            gray += self.rng.gauss(0, 1.5)
+        return int(max(0, min(100, round(gray))))
+
+    def probe_name(self, probe):
+        """The sensor's built-in color name: nearest nominal color, white-balanced."""
+        self.update()
+        rgb = self._noisy(self._spot_rgb(probe))
+        return min(SURFACE_RGB, key=lambda n: sum((a - b) ** 2 for a, b in zip(rgb, SURFACE_RGB[n])))
+
+    def ground_color(self):
+        """Legacy single reading: the surface under the sensor bar's centre."""
+        self.update()
+        return self.surface(*self._jitter(*self._ahead(GROUND_FRONT_CM)))
+
     def line_bits(self):
+        """Probes over black, one bit each: L2 is bit 3, R2 bit 0 (1 = black)."""
         self.update()
         bits = 0
         for i, off in enumerate(LINE_OFFSETS_CM):
-            x, y = self._jitter(*self._ahead(GROUND_FRONT_CM, off), amount=0.4)
-            if any(self._on_line(x, y, line) for line in self.lines):
+            x, y = self._jitter(*self._ahead(GROUND_FRONT_CM, off), amount=PROBE_JITTER_CM)
+            if self.surface(x, y) == "black":
                 bits |= 1 << (3 - i)
         return bits
 
@@ -187,31 +276,61 @@ class World:
         r = math.radians(self.heading)
         rx, ry = math.cos(r), -math.sin(r)  # the robot's right in world coordinates
         best, lateral = 4.0, None
-        for line in self.lines:
-            pts = line["points"]
-            for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
-                px, py = _closest_point(cx, cy, x1, y1, x2, y2)
-                d = math.hypot(px - cx, py - cy)
-                if d < best:
-                    best, lateral = d, (px - cx) * rx + (py - cy) * ry
+        for b in self.bands:
+            if b["color"] != "black":
+                continue
+            px, py = _closest_point(cx, cy, b["x1"], b["y1"], b["x2"], b["y2"])
+            d = math.hypot(px - cx, py - cy)
+            if d < best:
+                best, lateral = d, (px - cx) * rx + (py - cy) * ry
         if lateral is None:
             return 0
         if self.rng:
             lateral += self.rng.gauss(0, 0.3)
         return int(max(-100, min(100, lateral / 2.5 * 100)))
 
-    @staticmethod
-    def _on_line(x, y, line):
-        pts = line["points"]
-        half = line.get("width", 2) / 2
-        for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
-            if _point_segment_dist(x, y, (x1, y1, x2, y2)) <= half:
-                return True
-        return False
-
     def snapshot(self):
         return {"x": round(self.x, 1), "y": round(self.y, 1), "heading": round(self.heading),
                 "left_rpm": self.left_rpm, "right_rpm": self.right_rpm}
+
+
+def _bands(spec):
+    """All bands, top layer first. Legacy lines become round-capped black bands."""
+    out = []
+    for i, b in enumerate(spec.get("bands", [])):
+        (x1, y1), (x2, y2) = b["from"], b["to"]
+        out.append({"x1": x1, "y1": y1, "x2": x2, "y2": y2, "half": b.get("width", 1.9) / 2,
+                    "color": b["color"], "layer": b.get("layer", 0), "round": False, "i": i})
+    top = max([b["layer"] for b in out] + [0]) + 1
+    for line in spec.get("lines", []):
+        pts = line["points"]
+        for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
+            out.append({"x1": x1, "y1": y1, "x2": x2, "y2": y2, "half": line.get("width", 2) / 2,
+                        "color": line.get("color", "black"), "layer": top, "round": True, "i": len(out)})
+    # Higher layers first; within a layer, later bands lie on top.
+    out.sort(key=lambda b: (-b["layer"], -b["i"]))
+    return out
+
+
+def _in_band(x, y, b):
+    """Is the point on the band? Tape has square ends; legacy lines round ones."""
+    if b["round"]:
+        return _point_segment_dist(x, y, (b["x1"], b["y1"], b["x2"], b["y2"])) <= b["half"]
+    dx, dy = b["x2"] - b["x1"], b["y2"] - b["y1"]
+    length2 = dx * dx + dy * dy
+    if length2 == 0:
+        return False
+    t = ((x - b["x1"]) * dx + (y - b["y1"]) * dy) / length2
+    if t < 0 or t > 1:
+        return False
+    return abs((x - b["x1"]) * dy - (y - b["y1"]) * dx) / math.sqrt(length2) <= b["half"]
+
+
+def _probe_index(probe):
+    """Probe by name ("L2".."R2") or by the vendor's number (4 = L2 .. 1 = R2)."""
+    if isinstance(probe, int):
+        return 4 - probe
+    return PROBES.index(probe)
 
 
 def _wrap180(a):

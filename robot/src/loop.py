@@ -9,6 +9,7 @@ from ui import Ui
 from events import Events
 from net import Link
 from skills import MOTION_SKILLS, make_motion_skill
+from calib import CalibrateColorsSkill
 from reflexes import RF_WATCHDOG_MS, reflex_abort_reason, stop_distance
 
 SCRIPT_VERSION = "0.1.0"
@@ -92,7 +93,7 @@ class Robot:
             self.end_skill("stopped")
             hw_motors_stop()
             self.reply(cmd_id, True, "done")
-        elif name in MOTION_SKILLS:
+        elif name in MOTION_SKILLS or name == "calibrate_colors":
             self.start_motion(cmd_id, name, args)
         elif name == "set_leds":
             self.ui.color = args.get("color") or self.ui.color
@@ -120,7 +121,10 @@ class Robot:
             self.reply(cmd_id, False, "tilted")
             return
         try:
-            skill = make_motion_skill(name, args)
+            if name == "calibrate_colors":
+                skill = CalibrateColorsSkill(args, self.sense)
+            else:
+                skill = make_motion_skill(name, args)
         except NotImplementedError:
             self.reply(cmd_id, False, "error", error="not implemented: %s" % name)
             return
@@ -160,8 +164,8 @@ class Robot:
 
     def publish_state(self, now):
         s = self.s
-        key = (self.skill.name if self.skill else "idle", s["distance_cm"] // 3, s["color"],
-               s["line"], s["tilted"])
+        key = (self.skill.name if self.skill else "idle", s["distance_cm"] // 3, s["floor"],
+               s["color"], s["line"], s["tilted"])
         due = ticks_diff(now, self.last_state_at) >= STATE_PERIOD_MS
         changed = key != self.last_state and ticks_diff(now, self.last_state_at) >= STATE_MIN_MS
         if not (due or changed):
@@ -169,7 +173,7 @@ class Robot:
         self.last_state = key
         self.last_state_at = now
         self.link.publish("state", {
-            "skill": key[0], "distance_cm": s["distance_cm"], "color": s["color"],
+            "skill": key[0], "distance_cm": s["distance_cm"], "floor": s["floor"], "color": s["color"],
             "line": s["line"], "yaw": s["yaw"], "battery": s["battery"],
             "tilted": s["tilted"], "seq": self.next_seq(), "t_ms": now,
         }, True)

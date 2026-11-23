@@ -73,21 +73,21 @@ def hw_distance_cm():
     return mbuild.ultrasonic2.get(1)  # VERIFY: index argument, max value when nothing seen
 
 
-def hw_ground_color():
-    # VERIFY: channel name and return values ("white", "red", ...).
-    return mbuild.quad_rgb_sensor.get_color_sta("L1", 1)
+# Quad RGB sensor: four probes L2, L1, R1, R2 from left to right; L1 and R1 sit
+# in the middle. API checked against the vendor docs on 2026-11-22 (probes by
+# name or number 4..1, every call takes index=1); VERIFY on the robot.
+PROBES = ("L2", "L1", "R1", "R2")
 
 
-def hw_line_state():
-    """Return 'none', 'left', 'center', 'right' or 'all' from the line bitmask."""
-    bits = mbuild.quad_rgb_sensor.get_line_sta("all", 1)  # VERIFY: bitmask L2 L1 R1 R2
-    if bits == 0:
-        return "none"
-    if bits == 15:
-        return "all"
-    if bits & 0b0110:
-        return "center"
-    return "left" if bits & 0b1000 else "right"
+def hw_probe_rgb(ch):
+    """(r, g, b) 0..255 of one probe."""
+    q = mbuild.quad_rgb_sensor
+    return q.get_red(ch, 1), q.get_green(ch, 1), q.get_blue(ch, 1)
+
+
+def hw_probe_name(ch):
+    """The sensor's built-in color name for one probe ("white", "red", ...)."""
+    return mbuild.quad_rgb_sensor.get_color_sta(ch, 1)
 
 
 def hw_line_offset():

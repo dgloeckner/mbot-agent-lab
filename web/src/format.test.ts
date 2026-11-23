@@ -47,6 +47,8 @@ it('words goal tools', () => {
   expect(describe(scan)).toBe('scan() → fertig, 90° gedreht, Abstand 188 cm, am freiesten bei 90° (190 cm)')
   const clear = { ...scan, data: { name: 'turn_until_clear', args: { direction: 'right' }, result: { ok: true, reason: 'clear', turned_deg: 75, distance_cm: 46 } } }
   expect(describe(clear)).toBe('turn_until_clear(direction: right) → Weg frei, 75° gedreht, Abstand 46 cm')
-  const trip = { ...scan, data: { name: 'drive', args: { cm: 90 }, result: { ok: true, reason: 'done', driven_cm: 90, colors_seen: ['white', 'red', 'white'] } } }
-  expect(describe(trip)).toBe('drive(cm: 90) → fertig, 90 cm gefahren, unterwegs: weiß → rot → weiß')
+  const trip = { ...scan, data: { name: 'drive', args: { cm: 30 }, result: { ok: true, reason: 'done', driven_cm: 30, floor: [[0, 'wkkw'], [2.1, 'rkkr'], [4, 'wkkw']] } } }
+  expect(describe(trip)).toBe('drive(cm: 30) → fertig, 30 cm gefahren, Bodenspur wkkw rkkr wkkw')
+  const cut = { ...trip, data: { ...trip.data, result: { ...trip.data.result, floor_truncated: true } } }
+  expect(describe(cut)).toContain('(abgeschnitten)')
 })

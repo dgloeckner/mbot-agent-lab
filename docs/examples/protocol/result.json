@@ -1,1 +1,1 @@
-{"id":"c-8f3a","ok":true,"reason":"wall","data":{"driven_cm":42,"distance_cm":11,"color":"white"}}
+{"id":"c-8f3a","ok":true,"reason":"wall","data":{"driven_cm":42,"distance_cm":11,"color":"white","floor":[[0,"wwww"],[12.1,"rrrr"],[14,"wwww"]],"min_distance_cm":11}}

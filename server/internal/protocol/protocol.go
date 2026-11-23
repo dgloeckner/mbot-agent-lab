@@ -112,6 +112,7 @@ type Event struct {
 type State struct {
 	Skill      string `json:"skill"`
 	DistanceCM int    `json:"distance_cm"`
+	Floor      string `json:"floor"` // pattern under the probes L2 L1 R1 R2, e.g. "wkkw"
 	Color      string `json:"color"`
 	Line       string `json:"line"`
 	Yaw        int    `json:"yaw"`
