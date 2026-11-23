@@ -57,8 +57,12 @@ Values for `kind`: `obstacle_near`, `obstacle_clear`, `color_changed`, `tilted`,
 ### `state`
 
 ```json
-{"skill":"idle","distance_cm":34,"color":"white","line":"none","yaw":-2,"battery":81,"tilted":false,"seq":118,"t_ms":123460}
+{"skill":"idle","distance_cm":34,"floor":"wkkw","color":"white","line":"center","yaw":-2,"battery":81,"tilted":false,"seq":118,"t_ms":123460}
 ```
+
+`floor` is the current floor pattern (see [Floor trace](#floor-trace)). `color` is the floor color
+both outer probes agree on, `line` where black is under the probes (`none`, `left`, `center`,
+`right`, `all`).
 
 Sent immediately on change, otherwise two to five times per second.
 
@@ -89,12 +93,13 @@ Sent immediately on change, otherwise two to five times per second.
 
 | Name | Arguments | `data` in the result |
 | --- | --- | --- |
-| `drive` | `cm`, `speed?` | `driven_cm`, `distance_cm`, `color`, trip |
-| `turn` | `deg`, positive is right | `turned_deg`, `distance_cm` |
-| `drive_until` | `max_cm`, `stop_below_cm?`, `stop_on_color?`, `speed?` | `driven_cm`, `distance_cm`, `color`, trip |
-| `turn_until_clear` | `direction` (`left`/`right`), `min_cm?` (40), `min_deg?` (20), `max_deg?` (360) | `turned_deg`, `distance_cm` |
+| `drive` | `cm`, `speed?` | `driven_cm`, `distance_cm`, `color`, trace |
+| `turn` | `deg`, positive is right | `turned_deg`, `distance_cm`, trace |
+| `drive_until` | `max_cm`, `stop_below_cm?`, `stop_on_color?`, `speed?` | `driven_cm`, `distance_cm`, `color`, trace |
+| `turn_until_clear` | `direction` (`left`/`right`), `min_cm?` (40), `min_deg?` (20), `max_deg?` (360) | `turned_deg`, `distance_cm`, trace |
 | `scan` | `from_deg?` (-90), `to_deg?` (90), `step_deg?` (15), `face?` (`best`/`start`) | `profile` (`[[deg, cm], …]`, `cm` null if no reading), `best_deg`, `best_cm`, `turned_deg`, `distance_cm` |
-| `follow_line_until` | `max_cm`, `stop_on_color?`, `stop_at_crossing?` (true), `speed?` (30) | `driven_cm`, `color`, `distance_cm`, `colors_seen`, `min_distance_cm` |
+| `follow_line_until` | `max_cm`, `stop_on_color?`, `stop_at_crossing?` (true), `speed?` (30) | `driven_cm`, `color`, `distance_cm`, trace |
+| `calibrate_colors` | `cm?` (38) | `refs`: per probe six `[r, g, b]` for white, black, red, yellow, green, blue; `driven_cm` |
 | `retrace_path` | none | `segments` |
 | `stop` | none | none |
 | `set_leds` | `color` or `pattern` | none |
@@ -117,14 +122,47 @@ Sent immediately on change, otherwise two to five times per second.
 - **Values for `reason`:** `done`, `wall`, `color`, `max_cm`, `timeout`, `stopped`, `obstacle`,
   `busy`, `tilted`, `reassigned`, `error`, and for the goal skills `clear` and `max_deg`
   (`turn_until_clear`), `crossing` and `line_lost` (`follow_line_until`).
-- **Trip data:** motion skills that drive report what happened on the way: `colors_seen` (floor
-  colors in order, the last 8), `min_distance_cm` and `lines_crossed`.
+- **Trace:** every motion skill except `scan` reports `floor` (and `floor_truncated` when cut
+  off) and `min_distance_cm`, also when it ends with `stopped`, `obstacle` or another abort.
+- **`stop_on_color`:** `white`, `black`, `red`, `yellow`, `green`, `blue` or `any` (anything but
+  white). It triggers when one of the four probes sees the color.
 - **Filtered sensors:** every decision on the robot uses filtered readings (`robot/src/sense.py`):
-  distance as the median of the last 5 valid readings (dropouts below 2 cm ignored), floor color
-  and line by majority vote (5 of 7, 2 of 3), tilt with hysteresis (on above 45°, off below 30°)
+  distance as the median of the last 5 valid readings (dropouts below 2 cm ignored), the floor
+  pattern only after 3 equal readings in a row, tilt with hysteresis (on above 45°, off below 30°)
   and a minimum duration. Stop conditions must hold for several loop iterations. `state` and
   `event` carry the same filtered values. The emergency stop distance grows with speed
   (6 cm + 0.05 cm per RPM).
+- **`calibrate_colors`** is maintenance for the control room, not an agent tool. The robot stands
+  right before the reference strip and drives across it; it finds the black field itself, so the
+  start position needs no precision. The references apply at once and are lost on restart until
+  the server resends them (planned: a `config` message, field handoff G7).
+
+## Floor trace
+
+The quad RGB sensor has four probes, from left to right `L2`, `L1`, `R1`, `R2`. The robot
+classifies each into a letter: `w` white, `k` black, `r` red, `y` yellow, `g` green, `b` blue,
+`?` unclear. The four letters are the floor pattern, e.g. `rkkr`: a red stripe under a black line.
+
+- With references from `calibrate_colors` the robot classifies RGB values per probe: nearest
+  reference by hue and brightness, `?` if none is near enough. A neutral gray between white and
+  black (the edge of a line under the probe's spot) counts as the nearer of the two. Without
+  references it uses the sensor's built-in color names.
+- A pattern counts after 3 equal readings in a row; shorter flicker never shows up.
+- `floor` in a result is a list of `[position, pattern]`. An entry starts where its pattern
+  began. Position counts from the start of the motion: cm when driving, degrees (positive right)
+  when turning, one decimal. An entry lasts until the next begins.
+- At most 20 entries; then `floor_truncated: true` and the motion goes on.
+- The robot never interprets patterns. What a stripe means is up to the agent and its prompt
+  (see `docs/field.md`).
+
+```json
+{"id":"c-41","ok":true,"reason":"done","data":{"driven_cm":30.0,"distance_cm":300,"color":"white",
+ "floor":[[0,"wkkw"],[2.1,"rkkr"],[4.0,"wkkw"],[6.1,"gkkg"],[8.0,"wkkw"],[12.1,"gkkg"],
+          [14.0,"wkkw"],[16.1,"ykky"],[18.0,"wkkw"],[24.1,"kkkk"],[26.0,"wkkw"]],"min_distance_cm":300}}
+```
+
+## Connection rules
+
 - **Time:** the robot has no clock. `t_ms` counts milliseconds since boot; the server stamps the
   arrival time.
 - **Size:** compact JSON, every message below 512 bytes.

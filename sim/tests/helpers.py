@@ -2,7 +2,9 @@
 
 import json
 import pathlib
+import random
 import sys
+import time
 import types
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -89,3 +91,48 @@ def load_robot(world_spec, robot_id="mbot-1", noise=None):
 
 def example(name):
     return json.loads((EXAMPLES / name).read_text())
+
+
+class SkillRun:
+    """Runs the real robot script against a world and returns command results."""
+
+    def __init__(self, spec, seed=1):
+        self.ns = load_robot(spec, noise=random.Random(seed) if seed is not None else None)
+        self.robot = self.ns["Robot"]()
+        self.robot.iterate()
+        self.client = MemoryClient.instances[-1]
+        self.n = 0
+
+    def hb(self):
+        self.client.deliver("lab/mbot-1/hb", {"team": "t1", "owner": "Test", "name": "Scout", "color": "blue", "agent": "acting"})
+
+    def settle(self, n=6):
+        """Let the filters catch up, e.g. after moving the robot by hand."""
+        for _ in range(n):
+            self.robot.iterate()
+            time.sleep(0.005)
+
+    def place(self, x, y, heading):
+        """Put the robot somewhere else, as a teacher would."""
+        world = simstate.world
+        world.update()
+        world.x, world.y, world.heading = float(x), float(y), float(heading)
+        self.settle()
+
+    def run(self, name, args, timeout=25):
+        self.n += 1
+        cid = "g-%d" % self.n
+        self.hb()
+        self.client.deliver("lab/mbot-1/cmd", {"id": cid, "name": name, "args": args})
+        deadline = time.monotonic() + timeout
+        last_hb = time.monotonic()
+        while time.monotonic() < deadline:
+            self.robot.iterate()
+            for r in self.client.messages("result"):
+                if r["id"] == cid:
+                    return r
+            if time.monotonic() - last_hb > 0.5:
+                self.hb()
+                last_hb = time.monotonic()
+            time.sleep(0.01)
+        raise AssertionError("%s did not finish within %ss" % (name, timeout))

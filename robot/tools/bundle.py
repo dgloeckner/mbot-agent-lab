@@ -23,7 +23,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "src"
 
 # Dependency order: every module only uses names from modules above it.
-MODULES = ["compat", "hw", "sense", "ui", "events", "net", "skills", "reflexes", "loop", "main"]
+MODULES = ["compat", "hw", "sense", "ui", "events", "net", "skills", "calib", "reflexes", "loop", "main"]
 
 
 def top_level_names(tree):
@@ -55,6 +55,21 @@ def strip_local_imports(source, local):
     return "\n".join(kept).strip() + "\n", tree
 
 
+def strip_docstrings(source):
+    """Remove docstrings of the module, classes and functions (not a sole statement)."""
+    tree = ast.parse(source)
+    drop = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef)):
+            continue
+        body = node.body
+        if len(body) > 1 and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
+                and isinstance(body[0].value.value, str):
+            drop.update(range(body[0].lineno, body[0].end_lineno + 1))
+    lines = source.splitlines()
+    return "\n".join(line for i, line in enumerate(lines, start=1) if i not in drop) + "\n"
+
+
 def strip_comments(source):
     """Remove comments and blank lines; the device does not need them.
 
@@ -74,6 +89,25 @@ def strip_comments(source):
     return "\n".join(out) + "\n"
 
 
+def compact_indent(source):
+    """One space per indentation level instead of four; the device does not care.
+
+    Lines inside multi-line strings are left alone. Continuation lines inside
+    brackets may lose alignment, which Python ignores.
+    """
+    protected = set()
+    for tok in tokenize.generate_tokens(io.StringIO(source).readline):
+        if tok.type == tokenize.STRING and tok.start[0] != tok.end[0]:
+            protected.update(range(tok.start[0] + 1, tok.end[0] + 1))
+    out = []
+    for i, line in enumerate(source.splitlines(), start=1):
+        if i not in protected:
+            body = line.lstrip(" ")
+            line = " " * ((len(line) - len(body)) // 4) + body
+        out.append(line)
+    return "\n".join(out) + "\n"
+
+
 def bundle(config_path=None, strip=True):
     local = set(MODULES)
     parts = []
@@ -87,7 +121,7 @@ def bundle(config_path=None, strip=True):
     for name, path in sources:
         text, tree = strip_local_imports(path.read_text(encoding="utf-8"), local)
         if strip:
-            text = strip_comments(text)
+            text = compact_indent(strip_comments(strip_docstrings(text)))
         for n in top_level_names(tree):
             if n in seen:
                 raise SystemExit("bundle: name %r defined in both %s and %s" % (n, seen[n], name))

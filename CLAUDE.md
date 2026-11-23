@@ -1,7 +1,8 @@
 # CLAUDE.md
 
 mBot2 Agent Lab: teams of teenagers prompt AI agents that drive real Makeblock mBot2 robots.
-Full background and all decisions: `docs/handoff.md` (original handoff, German).
+Full background and all decisions: `docs/handoff.md` (original handoff, German). The line field
+with colored stripes: `docs/field.md` (field handoff, German, with approved deviations on top).
 
 ## Ground rules
 
@@ -14,6 +15,13 @@ Full background and all decisions: `docs/handoff.md` (original handoff, German).
   - The heartbeat carries `team`, `owner`, `name`, `color`, `agent` (see `docs/protocol.md`).
   - Claude is a second model provider (`kind: anthropic`) on the official Anthropic Go SDK, an
     exception to "no SDK for the language model". Mistral stays the default.
+  - Field handoff: `turn` stays positive-right; all turns via encoders (gyro only for tilt);
+    `driven_cm` stays, `crossing` becomes `junction`; line following on L1/R1 gray values; own
+    RGB classification per probe; calibration values via a new MQTT `config` message.
+- Grid freedom: robot script, server and web UI know nothing about the line grid (no junction
+  coordinates, pitch or color code). Tools report floor letters and never interpret them. Field
+  geometry lives only in `sim/grid.py`, the world files and `sim/tests`; reading rules live in
+  `docs/lab/` and example prompts.
 - Language: repo docs, code and comments in English. Lab material (`docs/lab/`) and student-facing
   UI text (web templates, robot display) in German. Example prompts in German and English, same
   file name under `docs/lab/prompts/de/` and `docs/lab/prompts/en/`.
@@ -41,6 +49,7 @@ Full background and all decisions: `docs/handoff.md` (original handoff, German).
   import local names with `from module import name`. Only `hw.py` touches vendor modules.
   Only `sense.py` turns raw readings into the filtered snapshot every decision uses; never decide
   on a single raw reading (sensors flicker). New modules go into `MODULES` in `bundle.py`.
+  The bundler strips comments and docstrings; the size budget is tight, so keep code lean.
 - `web/`: team page (Preact + signals, CodeMirror 6, Vite). `vite build` writes to
   `server/internal/web/dist/app`, which the server embeds; `dist/README.md` keeps the embed
   compiling without a build. No CDN assets: lab PCs sit behind a corporate proxy. Keep the
@@ -48,8 +57,11 @@ Full background and all decisions: `docs/handoff.md` (original handoff, German).
   and use `markdownLanguage` instead of `markdown()` (which drags in HTML/CSS/JS parsers).
   Browser storage is only for drafts, draft snapshots and UI prefs (`web/src/storage.ts`).
 - `sim/`: fakes for `cyberpi`, `mbot2`, `mbuild`, `umqtt.simple` in `sim/fakes/`; 2D world in
-  `sim/world.py` with optional sensor noise (seeded `random.Random`); tests in `sim/tests/` run the
-  real bundle in-process. Robot behaviour that depends on sensors is tested with noise on.
+  `sim/world.py` with optional sensor noise (seeded `random.Random`); the floor is a drawing of
+  tape bands seen by four probes. Assumed robot geometry in `sim/mbot2.json` (replace with
+  measurements). `sim/grid.py` generates `sim/worlds/gitter.json` and `docs/lab/feld/bauplan.svg`;
+  never edit those by hand. Tests in `sim/tests/` run the real bundle in-process. Robot behaviour
+  that depends on sensors is tested with noise on.
 
 ## Robot script constraints
 
@@ -69,6 +81,7 @@ the user chose Nx over Make). Run `npm install` once.
   dev secrets set in `server/project.json`).
 - `npx nx run sim:run --robots=2 --world=sim/worlds/labyrinth.json`: simulated robots.
 - `npx nx run robot:bundle [--config=robot/config.py]`: build `robot/dist/main.py`.
+- `npx nx run sim:grid`: regenerate the line field world and build plan after changing `sim/grid.py`.
 - `go test -race ./...` in `server/` before touching agent, robots or tools: they are concurrent.
 - New inputs a task depends on (e.g. shared example files) must be listed in its `inputs`, or the
   Nx cache returns stale results.

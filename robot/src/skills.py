@@ -7,10 +7,14 @@
 #
 # start(s) and step(s, now) get the filtered sensor snapshot from sense.py.
 # step() returns None while running, or a tuple (ok, reason, data) when done.
+#
+# Every motion except scan reports its floor trace ("floor"): what the four
+# probes saw on the way. The robot reports it and never interprets it.
 
 from compat import ticks_ms, ticks_diff
 from hw import (hw_motors, hw_motors_stop, hw_wheels_reset, hw_wheels_deg,
                 hw_yaw, hw_yaw_reset, CM_PER_WHEEL_DEG)
+from sense import Steady, SN_FLOOR_STEADY, SN_FROM_NAME
 
 SK_DEFAULT_SPEED = 40      # RPM
 SK_MAX_SPEED = 80          # RPM, hard limit
@@ -28,7 +32,7 @@ SK_CONFIRM = 2             # loop iterations a stop condition must hold
 SK_CLEAR_CONFIRM = 3       # same for "the way ahead is clear"
 SK_LOST_CONFIRM = 8        # same for "the line is gone": long enough to bridge tape gaps
                            # and to let the color vote settle where a line ends in a field
-SK_TRIP_COLORS = 8         # colors_seen keeps the last this many
+SK_FLOOR_MAX = 20          # floor trace entries per motion; more sets floor_truncated
 
 
 def _clamp(v, lo, hi):
@@ -61,33 +65,53 @@ class Confirm:
         return self.count >= self.n
 
 
-class Trip:
-    """What happened during a motion skill, reported with the result."""
+def _color_arg(args, key):
+    """A floor color argument: a color name or "any" (anything but white)."""
+    color = args.get(key)
+    if color is not None and color != "any" and color not in SN_FROM_NAME:
+        raise ValueError("unknown color: %s" % color)
+    return color
 
-    def __init__(self):
-        self.colors = []
-        self.min_cm = None
-        self.lines = 0
-        self.on_line = False
 
-    def update(self, s):
-        c = s["color"]
-        if c and (not self.colors or self.colors[-1] != c):
-            self.colors.append(c)
-            if len(self.colors) > SK_TRIP_COLORS:
-                self.colors.pop(0)
-        d = s["distance_cm"]
-        if self.min_cm is None or d < self.min_cm:
-            self.min_cm = d
-        on = s["line"] != "none"
-        if on and not self.on_line:
-            self.lines += 1
-        self.on_line = on
+def _sees_color(floor, color):
+    """Does one of the probes see the color?"""
+    if color == "any":
+        for c in floor:
+            if c not in "w?":
+                return True
+        return False
+    return SN_FROM_NAME[color] in floor
+
+
+class Trace:
+    """The floor trace of one motion and the closest obstacle on the way.
+
+    An entry [position, pattern] starts where a new floor pattern began, once
+    it held SN_FLOOR_STEADY readings. Position counts from the start of the
+    motion: cm when driving, degrees (positive right) when turning.
+    """
+
+    def __init__(self, s):
+        self.steady = Steady(SN_FLOOR_STEADY)
+        self.steady.update(s["floor"], 0)
+        self.entries = [[0, s["floor"]]]
+        self.truncated = False
+        self.min_cm = s["distance_cm"]
+
+    def update(self, s, pos):
+        if self.steady.update(s["floor_raw"], pos):
+            if len(self.entries) < SK_FLOOR_MAX:
+                self.entries.append([round(self.steady.tag, 1), self.steady.value])
+            else:
+                self.truncated = True
+        if s["distance_cm"] < self.min_cm:
+            self.min_cm = s["distance_cm"]
 
     def data(self, out):
-        out["colors_seen"] = self.colors
+        out["floor"] = self.entries
+        if self.truncated:
+            out["floor_truncated"] = True
         out["min_distance_cm"] = self.min_cm
-        out["lines_crossed"] = self.lines
         return out
 
 
@@ -129,7 +153,7 @@ class DriveSkill:
             self.name = "drive_until"
             cm = _num(args, "max_cm")
             self.stop_below = _num(args, "stop_below_cm")
-            self.stop_color = args.get("stop_on_color")
+            self.stop_color = _color_arg(args, "stop_on_color")
         else:
             cm = _num(args, "cm")
             self.stop_below = None
@@ -142,10 +166,11 @@ class DriveSkill:
         self.speed = _clamp(abs(_num(args, "speed", SK_DEFAULT_SPEED)), 5, SK_MAX_SPEED)
         self.started = 0
         self.driven = 0
-        self.trip = Trip()
+        self.trace = None
         self.wall = Confirm(SK_CONFIRM)
 
     def start(self, s):
+        self.trace = Trace(s)
         hw_wheels_reset()
         self.started = ticks_ms()
         v = self.direction * self.speed
@@ -157,16 +182,16 @@ class DriveSkill:
     def _end(self, ok, reason, s):
         hw_motors_stop()
         data = {"driven_cm": round(self.driven, 1), "distance_cm": s["distance_cm"], "color": s["color"]}
-        return ok, reason, self.trip.data(data)
+        return ok, reason, self.trace.data(data)
 
     def step(self, s, now):
         self.driven = abs(_driven_cm())
-        self.trip.update(s)
+        self.trace.update(s, self.driven)
         if self.driven >= self.target:
             return self._end(True, "max_cm" if self.until else "done", s)
         if self.stop_below is not None and self.forward and self.wall.check(s["distance_cm"] < self.stop_below):
             return self._end(True, "wall", s)
-        if self.stop_color is not None and s["color"] == self.stop_color:
+        if self.stop_color is not None and _sees_color(s["floor"], self.stop_color):
             return self._end(True, "color", s)
         if ticks_diff(now, self.started) > SK_MAX_MS:
             return self._end(False, "timeout", s)
@@ -189,8 +214,10 @@ class TurnSkill:
         self.target = _clamp(deg, -SK_MAX_DEG, SK_MAX_DEG)
         self.started = 0
         self.heading = None
+        self.trace = None
 
     def start(self, s):
+        self.trace = Trace(s)
         self.heading = Heading()
         self.started = ticks_ms()
         _rotate(1 if self.target > 0 else -1, SK_TURN_SPEED)
@@ -200,10 +227,11 @@ class TurnSkill:
 
     def _end(self, ok, reason, s):
         hw_motors_stop()
-        return ok, reason, {"turned_deg": round(self.heading.value), "distance_cm": s["distance_cm"]}
+        return ok, reason, self.trace.data({"turned_deg": round(self.heading.value), "distance_cm": s["distance_cm"]})
 
     def step(self, s, now):
         turned = self.heading.update()
+        self.trace.update(s, turned)
         if abs(turned) >= abs(self.target) - SK_TURN_TOLERANCE_DEG:
             return self._end(True, "done", s)
         if ticks_diff(now, self.started) > SK_MAX_MS:
@@ -234,9 +262,11 @@ class TurnUntilClearSkill:
         self.max_deg = _clamp(_num(args, "max_deg", 360), 10, SK_MAX_DEG)
         self.clear = Confirm(SK_CLEAR_CONFIRM)
         self.heading = None
+        self.trace = None
         self.started = 0
 
     def start(self, s):
+        self.trace = Trace(s)
         self.heading = Heading()
         self.started = ticks_ms()
         _rotate(self.direction, SK_TURN_SPEED)
@@ -246,10 +276,11 @@ class TurnUntilClearSkill:
 
     def _end(self, ok, reason, s):
         hw_motors_stop()
-        return ok, reason, {"turned_deg": round(self.heading.value), "distance_cm": s["distance_cm"]}
+        return ok, reason, self.trace.data({"turned_deg": round(self.heading.value), "distance_cm": s["distance_cm"]})
 
     def step(self, s, now):
-        turned = abs(self.heading.update())
+        self.trace.update(s, self.heading.update())
+        turned = abs(self.heading.value)
         if turned >= self.min_deg and self.clear.check(s["distance_cm"] >= self.min_cm):
             return self._end(True, "clear", s)
         if turned >= self.max_deg:
@@ -368,17 +399,18 @@ class FollowLineSkill:
         if cm is None:
             raise ValueError("max_cm missing")
         self.target = _clamp(abs(cm), 1, SK_MAX_CM)
-        self.stop_color = args.get("stop_on_color")
+        self.stop_color = _color_arg(args, "stop_on_color")
         self.stop_crossing = bool(args.get("stop_at_crossing", True))
         self.speed = _clamp(abs(_num(args, "speed", SK_LINE_SPEED)), 10, SK_LINE_MAX_SPEED)
         self.lost = Confirm(SK_LOST_CONFIRM)
         self.crossing = Confirm(SK_CONFIRM)
-        self.trip = Trip()
+        self.trace = None
         self.driven = 0
         self.started = 0
         self.offset = 0
 
     def start(self, s):
+        self.trace = Trace(s)
         hw_wheels_reset()
         self.started = ticks_ms()
         hw_motors(self.speed, self.speed)
@@ -389,14 +421,12 @@ class FollowLineSkill:
     def _end(self, ok, reason, s):
         hw_motors_stop()
         data = {"driven_cm": round(self.driven, 1), "color": s["color"], "distance_cm": s["distance_cm"]}
-        data = self.trip.data(data)
-        del data["lines_crossed"]  # meaningless while following a line
-        return ok, reason, data
+        return ok, reason, self.trace.data(data)
 
     def step(self, s, now):
         self.driven = abs(_driven_cm())
-        self.trip.update(s)
-        if self.stop_color is not None and s["color"] == self.stop_color:
+        self.trace.update(s, self.driven)
+        if self.stop_color is not None and _sees_color(s["floor"], self.stop_color):
             return self._end(True, "color", s)
         if self.driven >= self.target:
             return self._end(True, "max_cm", s)

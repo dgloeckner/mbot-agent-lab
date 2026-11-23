@@ -18,14 +18,14 @@ takes a color only, no pattern.
 
 | Group | Tool | Parameters | Result |
 | --- | --- | --- | --- |
-| Move | `drive` | `cm`, `speed?` | `driven_cm`, `reason`, `colors_seen`, `min_distance_cm`, `lines_crossed` |
-| Move | `turn` | `degrees`, positive is right | `turned_deg`, `reason`, `distance_cm` |
-| Move | `drive_until` | `max_cm`, `stop_below_cm?`, `stop_on_color?` | `driven_cm`, `reason`, `distance_cm`, `color`, `colors_seen`, `min_distance_cm`, `lines_crossed` |
-| Move | `turn_until_clear` | `direction`, `min_cm?`, `min_deg?`, `max_deg?` | `turned_deg`, `reason` (`clear`, `max_deg`), `distance_cm` |
-| Move | `follow_line_until` | `max_cm`, `stop_on_color?`, `stop_at_crossing?` | `driven_cm`, `reason` (`color`, `crossing`, `line_lost`, `max_cm`), `color`, `colors_seen` |
+| Move | `drive` | `cm`, `speed?` | `driven_cm`, `reason`, `floor`, `min_distance_cm` |
+| Move | `turn` | `degrees`, positive is right | `turned_deg`, `reason`, `distance_cm`, `floor` |
+| Move | `drive_until` | `max_cm`, `stop_below_cm?`, `stop_on_color?` | `driven_cm`, `reason`, `distance_cm`, `color`, `floor`, `min_distance_cm` |
+| Move | `turn_until_clear` | `direction`, `min_cm?`, `min_deg?`, `max_deg?` | `turned_deg`, `reason` (`clear`, `max_deg`), `distance_cm`, `floor` |
+| Move | `follow_line_until` | `max_cm`, `stop_on_color?`, `stop_at_crossing?` | `driven_cm`, `reason` (`color`, `crossing`, `line_lost`, `max_cm`), `color`, `floor` |
 | Move | `retrace_path` | none | `segments`, `reason` |
 | Move | `stop` | none | `ok` |
-| Sense | `read_sensors` | none | `distance_cm`, `color`, `line`, `yaw`, `battery`, `tilted` |
+| Sense | `read_sensors` | none | `distance_cm`, `floor` (current pattern), `color`, `line`, `yaw`, `battery`, `tilted` |
 | Sense | `scan` | `from_deg?`, `to_deg?`, `step_deg?`, `face?` | `profile` `[[deg, cm], …]`, `best_deg`, `best_cm`, `turned_deg` |
 | Sense | `wait_for` | `event`, `timeout_s` | `event`, `data` or `reason:"timeout"` |
 | Sense | `list_robots` | none | name, online, battery, color per robot |
@@ -45,6 +45,10 @@ takes a color only, no pattern.
 
 - **Structured results with a reason:** every motion tool returns `reason`. The agent's ability
   to decide depends on it.
+- **Floor trace instead of a scan tool:** every motion tool except `scan` returns `floor`, what
+  the four floor probes saw on the way (format in `docs/protocol.md`). Tools report colors as
+  letters and never interpret them; what a stripe means lives in the team's prompt and notes. No
+  tool, skill or protocol field is named after a grid, junction or coordinate (`docs/field.md`).
 - **Robot parameter only when needed:** if the team has exactly one robot, tools have no `robot`
   parameter. With several robots (the control room can give a team any number), `robot` is an
   enum of the team's robot names, and `stop` additionally accepts `"alle"`.
