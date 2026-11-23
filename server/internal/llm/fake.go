@@ -59,11 +59,19 @@ func (f Fake) Chat(ctx context.Context, req Request) (Response, error) {
 			if _, ok := has[tool]; !ok {
 				msg.Content = text + " (Das Werkzeug " + tool + " fehlt mir gerade.)"
 			} else {
-				if robot := firstRobot(has[tool]); robot != "" {
-					args["robot"] = robot
+				// With several robots, every robot does the same in one
+				// answer; the runtime moves them at the same time.
+				robots := teamRobots(has[tool])
+				if len(robots) == 0 {
+					robots = []string{""}
 				}
-				raw, _ := json.Marshal(args)
-				msg.ToolCalls = []ToolCall{{ID: fmt.Sprintf("f%08d", len(req.Messages)), Type: "function", Function: FunctionCall{Name: tool, Arguments: string(raw)}}}
+				for i, robot := range robots {
+					if robot != "" {
+						args["robot"] = robot
+					}
+					raw, _ := json.Marshal(args)
+					msg.ToolCalls = append(msg.ToolCalls, ToolCall{ID: fmt.Sprintf("f%06d%02d", len(req.Messages), i), Type: "function", Function: FunctionCall{Name: tool, Arguments: string(raw)}})
+				}
 			}
 		}
 		in := 0
@@ -177,16 +185,20 @@ func clampText(s string, n int) string {
 	return string(r)
 }
 
-// firstRobot returns the first allowed value of a tool's "robot" parameter.
-func firstRobot(t Tool) string {
+// teamRobots returns the robot names a tool's "robot" parameter allows,
+// without "alle".
+func teamRobots(t Tool) []string {
 	var schema struct {
 		Properties map[string]struct {
 			Enum []string `json:"enum"`
 		} `json:"properties"`
 	}
 	_ = json.Unmarshal(t.Parameters, &schema)
-	if p, ok := schema.Properties["robot"]; ok && len(p.Enum) > 0 {
-		return p.Enum[0]
+	var out []string
+	for _, name := range schema.Properties["robot"].Enum {
+		if name != "alle" {
+			out = append(out, name)
+		}
 	}
-	return ""
+	return out
 }

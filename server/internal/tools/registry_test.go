@@ -291,3 +291,41 @@ func TestGoalToolsPassArguments(t *testing.T) {
 		t.Errorf("missing direction must fail: %v", got)
 	}
 }
+
+func TestScope(t *testing.T) {
+	r, _, _ := setup(t, map[string]string{"mbot-1": "Scout", "mbot-2": "Träger"})
+	env := &Env{TeamID: "rot"}
+	scout := r.Scope(env, "drive", `{"cm":10,"robot":"scout"}`)
+	traeger := r.Scope(env, "turn", `{"degrees":90,"robot":"Träger"}`)
+	all := r.Scope(env, "stop", `{"robot":"alle"}`)
+	shared := r.Scope(env, "wait_for", `{"event":"clap","timeout_s":5}`)
+	if len(scout.Robots) != 1 || scout.Robots[0] != "mbot-1" || len(all.Robots) != 2 || !shared.Shared {
+		t.Fatalf("scopes: %+v %+v %+v", scout, all, shared)
+	}
+	for _, bad := range []Scope{
+		r.Scope(env, "drive", `{"cm":10,"robot":"fremd"}`), // another team's robot
+		r.Scope(env, "drive", `{"cm":10}`),                 // no robot named
+		r.Scope(env, "fly", `{}`),
+		r.Scope(env, "drive", `kein json`),
+	} {
+		if bad.Shared || len(bad.Robots) > 0 || bad.Overlaps(shared) || bad.Overlaps(scout) {
+			t.Errorf("a failing call must overlap nothing: %+v", bad)
+		}
+	}
+	cases := []struct {
+		a, b Scope
+		want bool
+	}{
+		{scout, traeger, false},
+		{scout, scout, true},
+		{scout, all, true},
+		{traeger, all, true},
+		{scout, shared, true},
+		{shared, shared, true},
+	}
+	for _, c := range cases {
+		if c.a.Overlaps(c.b) != c.want || c.b.Overlaps(c.a) != c.want {
+			t.Errorf("%+v overlaps %+v: want %v", c.a, c.b, c.want)
+		}
+	}
+}

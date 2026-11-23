@@ -102,6 +102,8 @@ type Manager struct {
 	mu     sync.Mutex
 	actors map[string]*actor
 	talks  map[string][]time.Time // team -> recent conversation messages
+
+	runLength time.Duration // overrides Budgets.MaxRunMinutes in tests
 }
 
 // NewManager creates the runtime. Call Run before use.

@@ -26,6 +26,14 @@ Regeln der Plattform:
 - Schreib kurz. Wenn du gerade nichts tun musst, antworte ohne Werkzeug. Du wirst geweckt, sobald etwas Neues passiert.
 - Wenn die Aufgabe erledigt ist, rufe finish mit einem ehrlichen Bericht auf.`
 
+// multiRobotRules tell a team with several robots how the tool calls of one
+// answer run (see actor.runTools).
+const multiRobotRules = `
+- Rufst du in einer Antwort Werkzeuge für verschiedene Roboter auf, laufen sie gleichzeitig. So bewegen sich mehrere Roboter auf einmal.
+- Aufrufe für denselben Roboter laufen nacheinander, in deiner Reihenfolge.
+- Werkzeuge ohne robot (zum Beispiel wait_for, say, finish) warten, bis alle Aufrufe davor fertig sind.
+- Die Ergebnisse bekommst du, wenn alle Aufrufe der Antwort fertig sind.`
+
 // inboxLine is one message as the model sees it. JSON escaping keeps a
 // message from faking another sender with line breaks or labels.
 type inboxLine struct {
@@ -121,7 +129,7 @@ func (a *actor) buildContext(ctx context.Context, r *run) ([]llm.Message, error)
 		}
 		robotsLine = "Deine Roboter: " + strings.Join(ns, ", ") + "."
 		if len(rs) > 1 {
-			robotsLine += " Bei Bewegungs-Werkzeugen sagst du mit robot, welcher gemeint ist."
+			robotsLine += " Bei Bewegungs-Werkzeugen sagst du mit robot, welcher gemeint ist." + multiRobotRules
 		}
 	} else {
 		robotsLine = "Deinem Team ist gerade kein Roboter zugeteilt."

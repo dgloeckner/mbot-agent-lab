@@ -169,6 +169,59 @@ func (r *Registry) call(ctx context.Context, env *Env, name, rawArgs string) any
 	return t.run(ctx, c)
 }
 
+// Scope is what one call acts on. The agent runtime runs the calls of one
+// model response at the same time when their scopes do not overlap.
+type Scope struct {
+	Robots []string // IDs of the robots the call acts on
+	Shared bool     // the call acts on no robot: it keeps its place among all calls
+}
+
+// Overlaps reports whether two calls must keep their order. A call that will
+// fail its checks (no robots, not shared) overlaps nothing: it only returns
+// an error.
+func (s Scope) Overlaps(o Scope) bool {
+	if (!s.Shared && len(s.Robots) == 0) || (!o.Shared && len(o.Robots) == 0) {
+		return false
+	}
+	if s.Shared || o.Shared {
+		return true
+	}
+	for _, a := range s.Robots {
+		for _, b := range o.Robots {
+			if a == b {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// Scope resolves which robots a call would act on, with the same rules as
+// Call. A call that would fail gets the zero Scope.
+func (r *Registry) Scope(env *Env, name, rawArgs string) Scope {
+	t, ok := r.tools[name]
+	if !ok {
+		return Scope{}
+	}
+	if t.robot == robotNone {
+		return Scope{Shared: true}
+	}
+	args := map[string]any{}
+	if strings.TrimSpace(rawArgs) != "" && json.Unmarshal([]byte(rawArgs), &args) != nil {
+		return Scope{}
+	}
+	c := &call{r: r, env: env, args: args, team: r.Robots.TeamRobots(env.TeamID)}
+	targets, err := c.resolveRobots(t.robot == robotAll)
+	if err != nil {
+		return Scope{}
+	}
+	s := Scope{}
+	for _, rb := range targets {
+		s.Robots = append(s.Robots, rb.ID)
+	}
+	return s
+}
+
 func (c *call) resolveRobots(allowAll bool) ([]robots.Robot, error) {
 	switch {
 	case len(c.team) == 0:

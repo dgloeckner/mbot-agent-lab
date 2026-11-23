@@ -25,7 +25,29 @@ import (
 type robotBus struct {
 	mu      sync.Mutex
 	handler func(string, []byte)
-	cmds    []string // names of the commands sent
+	cmds    []string // robot:command of every command sent
+
+	gate bool     // hold the results of all commands but stop until release
+	held []func() // replies of held commands
+	who  []string // robot:command of every held command
+}
+
+// holding returns robot:command of the commands that wait for release.
+func (b *robotBus) holding() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]string(nil), b.who[len(b.who)-len(b.held):]...)
+}
+
+// release answers all held commands.
+func (b *robotBus) release() {
+	b.mu.Lock()
+	held := b.held
+	b.held = nil
+	b.mu.Unlock()
+	for _, f := range held {
+		f()
+	}
 }
 
 func (b *robotBus) sent() []string {
@@ -51,7 +73,13 @@ func (b *robotBus) Publish(topic string, payload []byte, _ bool, _ byte) error {
 	res, _ := json.Marshal(protocol.Result{ID: cmd.ID, OK: true, Reason: protocol.ReasonDone, Data: json.RawMessage(`{"driven_cm":20}`)})
 	b.mu.Lock()
 	h := b.handler
-	b.cmds = append(b.cmds, cmd.Name)
+	b.cmds = append(b.cmds, id+":"+cmd.Name)
+	if b.gate && cmd.Name != "stop" {
+		b.held = append(b.held, func() { h(protocol.Topic(id, protocol.TopicResult), res) })
+		b.who = append(b.who, id+":"+cmd.Name)
+		b.mu.Unlock()
+		return nil
+	}
 	b.mu.Unlock()
 	go h(protocol.Topic(id, protocol.TopicResult), res)
 	return nil
@@ -359,4 +387,166 @@ func TestRunUsesTeamProvider(t *testing.T) {
 	if st := f.m.Status("blau"); st.Provider != "s" || st.Model != "scripted" || len(f.model.calls()) != 1 {
 		t.Errorf("blau status = %+v, default calls %d", st, len(f.model.calls()))
 	}
+}
+
+// twoRobots gives team Rot a second robot, Blitz, and holds robot results.
+func twoRobots(t *testing.T, f *fixture) {
+	t.Helper()
+	if err := f.m.Robots.Assign("mbot-2", robots.Owner{TeamID: "rot", TeamName: "Rot", Alias: "Blitz"}); err != nil {
+		t.Fatal(err)
+	}
+	f.bus.mu.Lock()
+	f.bus.gate = true
+	f.bus.mu.Unlock()
+}
+
+// calls is one model answer with several tool calls.
+func calls(cs ...[3]string) llm.Message {
+	m := llm.Message{Role: llm.RoleAssistant}
+	for _, c := range cs {
+		m.ToolCalls = append(m.ToolCalls, llm.ToolCall{ID: c[0], Type: "function", Function: llm.FunctionCall{Name: c[1], Arguments: c[2]}})
+	}
+	return m
+}
+
+func sameSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	seen := map[string]int{}
+	for _, x := range a {
+		seen[x]++
+	}
+	for _, x := range b {
+		seen[x]--
+	}
+	for _, n := range seen {
+		if n != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func TestToolCallsForDifferentRobotsRunTogether(t *testing.T) {
+	f := newFixture(t, config.Budgets{})
+	twoRobots(t, f)
+	f.deploy(t, "rot", "Beide fahren los.")
+	var results []llm.Message
+	f.model.next = func(n int, req llm.Request) llm.Message {
+		switch n {
+		case 1:
+			if !strings.Contains(req.Messages[0].Content, "laufen sie gleichzeitig") {
+				t.Error("system message misses the rule for parallel calls")
+			}
+			return calls(
+				[3]string{"a", "drive", `{"cm":20,"robot":"Scout"}`},
+				[3]string{"b", "turn", `{"degrees":90,"robot":"Blitz"}`},
+				[3]string{"c", "drive", `{"cm":10,"robot":"Scout"}`},
+				[3]string{"d", "tell_team", `{"text":"Beide stehen."}`},
+			)
+		case 2:
+			results = req.Messages[len(req.Messages)-4:]
+			return toolCall("e", "finish", `{"report":"ok"}`)
+		}
+		return llm.Message{Role: llm.RoleAssistant, Content: "?"}
+	}
+	if err := f.m.Start(context.Background(), "rot"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Both robots move at once; Scout's second drive waits for its first.
+	waitFor(t, "both robots moving", func() bool { return sameSet(f.bus.holding(), []string{"mbot-1:drive", "mbot-2:turn"}) })
+	time.Sleep(50 * time.Millisecond)
+	if got := f.bus.holding(); len(got) != 2 {
+		t.Fatalf("held = %v: a call for a busy robot started early", got)
+	}
+	f.bus.release()
+	waitFor(t, "Scout's second drive", func() bool { return sameSet(f.bus.holding(), []string{"mbot-1:drive"}) })
+	f.bus.release()
+	waitFor(t, "run to end", func() bool { return !f.m.Status("rot").Running })
+
+	// The model gets the results in its own call order.
+	var ids []string
+	for _, m := range results {
+		ids = append(ids, m.ToolCallID)
+	}
+	if strings.Join(ids, ",") != "a,b,c,d" {
+		t.Errorf("tool results in order %v, want a,b,c,d", ids)
+	}
+	if !strings.Contains(results[1].Content, `"robot":"Blitz"`) {
+		t.Errorf("turn result: %s", results[1].Content)
+	}
+	runs, _ := f.st.Runs(context.Background(), "rot", 1)
+	if runs[0].EndReason != "finish" {
+		t.Errorf("end reason = %q", runs[0].EndReason)
+	}
+}
+
+func TestStopCancelsParallelToolCalls(t *testing.T) {
+	f := newFixture(t, config.Budgets{})
+	twoRobots(t, f)
+	f.deploy(t, "rot", "Beide fahren los.")
+	f.model.next = func(n int, _ llm.Request) llm.Message {
+		return calls(
+			[3]string{"a", "drive", `{"cm":200,"robot":"Scout"}`},
+			[3]string{"b", "drive", `{"cm":200,"robot":"Blitz"}`},
+			[3]string{"c", "finish", `{"report":"nie"}`},
+		)
+	}
+	if err := f.m.Start(context.Background(), "rot"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "both robots moving", func() bool { return len(f.bus.holding()) == 2 })
+	before := len(f.bus.sent())
+	f.m.Stop("rot", "Team")
+	waitFor(t, "stopped", func() bool { return !f.m.Status("rot").Running })
+	waitFor(t, "stop sent to both robots", func() bool {
+		var stops []string
+		for _, c := range f.bus.sent()[before:] {
+			if strings.HasSuffix(c, ":stop") {
+				stops = append(stops, c)
+			}
+		}
+		return sameSet(stops, []string{"mbot-1:stop", "mbot-2:stop"})
+	})
+	runs, _ := f.st.Runs(context.Background(), "rot", 1)
+	if runs[0].EndReason != "stop" || runs[0].Report != "" {
+		t.Errorf("run = %+v: finish must not run after a stop", runs[0])
+	}
+	if n := len(f.model.calls()); n != 1 {
+		t.Errorf("model called %d times after stop", n)
+	}
+}
+
+func TestTimeLimitCancelsToolCalls(t *testing.T) {
+	f := newFixture(t, config.Budgets{})
+	twoRobots(t, f)
+	f.deploy(t, "rot", "Fahr lange.")
+	f.model.next = func(int, llm.Request) llm.Message {
+		return calls(
+			[3]string{"a", "drive", `{"cm":200,"robot":"Scout"}`},
+			[3]string{"b", "drive", `{"cm":200,"robot":"Blitz"}`},
+		)
+	}
+	f.m.runLength = 300 * time.Millisecond
+	if err := f.m.Start(context.Background(), "rot"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "both robots moving", func() bool { return len(f.bus.holding()) == 2 })
+	before := len(f.bus.sent())
+	waitFor(t, "run to end", func() bool { return !f.m.Status("rot").Running })
+	runs, _ := f.st.Runs(context.Background(), "rot", 1)
+	if runs[0].EndReason != "time_limit" {
+		t.Errorf("end reason = %q", runs[0].EndReason)
+	}
+	waitFor(t, "stop sent to both robots", func() bool {
+		var stops []string
+		for _, c := range f.bus.sent()[before:] {
+			if strings.HasSuffix(c, ":stop") {
+				stops = append(stops, c)
+			}
+		}
+		return sameSet(stops, []string{"mbot-1:stop", "mbot-2:stop"})
+	})
 }

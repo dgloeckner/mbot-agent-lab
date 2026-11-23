@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/live"
@@ -42,7 +43,7 @@ type run struct {
 	lastMsgID     int64
 	tokensIn      int
 	tokensOut     int
-	finished      bool
+	finished      atomic.Bool // set by the finish tool, which may run beside others
 	report        string
 	limitReached  string // time_limit or token_limit when a budget ended the run
 }
@@ -180,7 +181,7 @@ func (a *actor) loop(ctx context.Context) {
 		}
 		if cur != nil && wakes(pending) {
 			pending = a.process(ctx, cur, pending)
-			if cur.finished || cur.limitReached != "" {
+			if cur.finished.Load() || cur.limitReached != "" {
 				reason := "finish"
 				if cur.limitReached != "" {
 					reason = cur.limitReached
@@ -216,7 +217,11 @@ func (a *actor) startRun(ctx context.Context) (*run, error) {
 		return nil, err
 	}
 	now := time.Now()
-	r := &run{id: id, promptVersion: p.Version, provider: provider, started: now, deadline: now.Add(time.Duration(a.m.Budgets.MaxRunMinutes) * time.Minute)}
+	length := time.Duration(a.m.Budgets.MaxRunMinutes) * time.Minute
+	if a.m.runLength > 0 {
+		length = a.m.runLength
+	}
+	r := &run{id: id, promptVersion: p.Version, provider: provider, started: now, deadline: now.Add(length)}
 	a.updateStatus(func(s *Status) {
 		*s = Status{State: StateWaiting, Running: true, RunID: id, Provider: provider, Model: model, StartedAt: now}
 	})
@@ -230,7 +235,7 @@ func (a *actor) endRun(r *run, reason, by string) {
 	if err := a.m.Store.EndRun(ctx, r.id, reason, r.report); err != nil {
 		a.m.Log.Error("end run", "run", r.id, "err", err)
 	}
-	if reason == "stop" || reason == "restart" || reason == "team_deleted" || reason == "server_stop" {
+	if reason == "stop" || reason == "restart" || reason == "team_deleted" || reason == "server_stop" || reason == "time_limit" {
 		// Leave no robot driving on a stopped run. Tools were cancelled already.
 		for _, rb := range a.m.Robots.TeamRobots(a.team) {
 			go func() { _, _ = a.m.Robots.Send(ctx, rb.ID, "stop", nil, 2*time.Second) }()
@@ -245,7 +250,8 @@ func (a *actor) endRun(r *run, reason, by string) {
 // done, a limit is reached or the run is stopped. It returns the messages
 // that arrived but were not used (none, normally).
 func (a *actor) process(parent context.Context, r *run, pending []Message) []Message {
-	ctx, cancel := context.WithCancel(parent)
+	// The deadline cuts a model call or running tools at the run's time limit.
+	ctx, cancel := context.WithDeadline(parent, r.deadline)
 	a.mu.Lock()
 	a.cancel = cancel
 	a.mu.Unlock()
@@ -279,6 +285,10 @@ func (a *actor) process(parent context.Context, r *run, pending []Message) []Mes
 		env.Agents = names(a.m.runningAgents(ctx, a.team))
 		resp, call, err := a.m.LLM.ChatWith(ctx, r.provider, llm.Request{Messages: messages, Tools: a.m.Tools.Definitions(env)})
 		if err != nil {
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				r.limitReached = "time_limit"
+				return nil
+			}
 			if !errors.Is(err, context.Canceled) {
 				a.m.Log.Error("model call failed", "team", a.team, "err", err)
 				a.system("Das Sprachmodell antwortet gerade nicht. Schickt eurem Agenten gleich noch einmal eine Nachricht.")
@@ -304,24 +314,12 @@ func (a *actor) process(parent context.Context, r *run, pending []Message) []Mes
 		}
 
 		a.setState(StateActing)
-		for i, tc := range msg.ToolCalls {
-			if ctx.Err() != nil || r.finished {
-				a.closeToolCalls(r, msg.ToolCalls[i:], "Nicht ausgeführt: der Lauf ist beendet.")
-				break
-			}
-			start := time.Now()
-			result := a.m.Tools.Call(ctx, env, tc.Function.Name, tc.Function.Arguments)
-			d := time.Since(start)
-			r.history = append(r.history, llm.Message{Role: llm.RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: string(result)})
-			r.seq++
-			if err := a.m.Store.AddToolCall(context.Background(), r.id, r.seq, tc.Function.Name, json.RawMessage(validJSON(tc.Function.Arguments)), result, d); err != nil {
-				a.m.Log.Error("store tool call", "err", err)
-			}
-			a.log(live.SourceAgent, "tool", "", map[string]any{
-				"name": tc.Function.Name, "args": json.RawMessage(validJSON(tc.Function.Arguments)), "result": result, "ms": d.Milliseconds(),
-			})
+		a.runTools(ctx, r, env, msg.ToolCalls)
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			r.limitReached = "time_limit"
+			return nil
 		}
-		if r.finished || ctx.Err() != nil {
+		if r.finished.Load() || ctx.Err() != nil {
 			return nil
 		}
 		// Messages that arrived during the tools go into the next model call.
@@ -340,6 +338,65 @@ func (a *actor) drainTalk() []Message {
 			out = append(out, m)
 		default:
 			return out
+		}
+	}
+}
+
+// runTools runs the tool calls of one model response. Calls for different
+// robots run at the same time, so several robots can move at once. A call
+// waits for every earlier call that acts on one of its robots; a call that
+// acts on no robot (finish, wait_for, say, ...) waits for all earlier calls
+// and holds up all later ones. Each call is logged when it ends; the history
+// and the store get the results in call order, as the model sent them.
+func (a *actor) runTools(ctx context.Context, r *run, env *tools.Env, calls []llm.ToolCall) {
+	type outcome struct {
+		ran    bool
+		result json.RawMessage
+		d      time.Duration
+	}
+	out := make([]outcome, len(calls))
+	done := make([]chan struct{}, len(calls))
+	scopes := make([]tools.Scope, len(calls))
+	var wg sync.WaitGroup
+	for i, tc := range calls {
+		scopes[i] = a.m.Tools.Scope(env, tc.Function.Name, tc.Function.Arguments)
+		done[i] = make(chan struct{})
+		var after []chan struct{}
+		for j := range i {
+			if scopes[i].Overlaps(scopes[j]) {
+				after = append(after, done[j])
+			}
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer close(done[i])
+			for _, ch := range after {
+				<-ch // a cancelled call ends quickly, so this needs no select
+			}
+			if ctx.Err() != nil || r.finished.Load() {
+				return
+			}
+			start := time.Now()
+			result := a.m.Tools.Call(ctx, env, tc.Function.Name, tc.Function.Arguments)
+			d := time.Since(start)
+			out[i] = outcome{ran: true, result: result, d: d}
+			a.log(live.SourceAgent, "tool", "", map[string]any{
+				"name": tc.Function.Name, "args": json.RawMessage(validJSON(tc.Function.Arguments)), "result": result, "ms": d.Milliseconds(),
+			})
+		}()
+	}
+	wg.Wait()
+
+	for i, tc := range calls {
+		if !out[i].ran {
+			a.closeToolCalls(r, calls[i:i+1], "Nicht ausgeführt: der Lauf ist beendet.")
+			continue
+		}
+		r.history = append(r.history, llm.Message{Role: llm.RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: string(out[i].result)})
+		r.seq++
+		if err := a.m.Store.AddToolCall(context.Background(), r.id, r.seq, tc.Function.Name, json.RawMessage(validJSON(tc.Function.Arguments)), out[i].result, out[i].d); err != nil {
+			a.m.Log.Error("store tool call", "err", err)
 		}
 	}
 }
@@ -391,7 +448,8 @@ func (a *actor) env(ctx context.Context, r *run) *tools.Env {
 	team, _ := a.m.Store.Team(ctx, a.team)
 	env := &tools.Env{TeamID: a.team, TeamName: team.Name, RunID: r.id}
 	env.Finish = func(report string) {
-		r.finished, r.report = true, report
+		r.report = report
+		r.finished.Store(true)
 	}
 	env.Say = func(to, text string) []string {
 		return a.m.say(a.team, team.Name, to, text)
