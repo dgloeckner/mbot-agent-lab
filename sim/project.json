@@ -19,6 +19,31 @@
         "command": "python3 -m unittest discover -s sim/tests -t sim/tests"
       }
     },
+    "e2e": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "dependsOn": [
+        {
+          "projects": [
+            "server"
+          ],
+          "target": "build"
+        }
+      ],
+      "inputs": [
+        "default",
+        "{workspaceRoot}/robot/src/**/*",
+        "{workspaceRoot}/robot/tools/**/*",
+        "{workspaceRoot}/deploy/local/lab.yaml",
+        {
+          "dependentTasksOutputFiles": "**/*",
+          "transitive": true
+        }
+      ],
+      "options": {
+        "command": "python3 -m unittest discover -v -s sim/e2e -t sim/e2e"
+      }
+    },
     "run": {
       "executor": "nx:run-commands",
       "continuous": true,

@@ -91,6 +91,7 @@ tests what changed compared to `main`.
 | `npm run dev` | `server:dev` and `web:dev` together |
 | `npx nx run web:dev` | team page with hot reload on :5173, API calls go to the Go server |
 | `npx nx run-many -t lint test` | gofmt, go vet, TypeScript, Go tests, web tests, robot and simulator tests |
+| `npx nx run sim:e2e` | smoke test: built server + one simulated robot + scripted model, no API key |
 | `npx nx run robot:bundle [--config=robot/config.py]` | build `robot/dist/main.py` |
 | `npx nx run server:build` / `server:build-linux` | build the server into `bin/` |
 | `HOST=user@vm npx nx run server:deploy` | build for linux/amd64, copy to the VM, restart |
