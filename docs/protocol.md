@@ -144,7 +144,9 @@ Sent immediately on change, otherwise two to five times per second.
 The robot logs every finished or aborted motion skill as a segment, `drive` with signed cm or
 `turn` with signed degrees (positive right). The log is the way from where it began to the
 current pose. `drive_arc` goes in as its chord: a turn by half the heading change, a drive of the
-chord length (from `driven_cm` and `turned_deg`), the other half turn; zero entries are left out. It is cleared by `clear_log`, on owner change and on restart.
+chord length (from `driven_cm` and `turned_deg`), the other half turn; zero entries are left out. It is cleared by `clear_log`, on owner change and on restart. The server sends
+`clear_log` to a team's robots when the team's agent starts a run, so `retrace_path` never drives
+back through earlier runs; a robot that is offline then keeps its log.
 
 `retrace_path` works the log off from the end:
 
