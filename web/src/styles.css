@@ -188,7 +188,9 @@ kbd {
   position: relative;
   isolation: isolate;
   display: grid;
-  grid-template-columns: minmax(180px, auto) minmax(0, 1fr) auto;
+  /* The team column may grow to its usage line, but never at the cost of the robot card:
+     the robot column keeps at least the card's width, and the usage line wraps instead. */
+  grid-template-columns: minmax(200px, max-content) minmax(min-content, 1fr) auto;
   gap: 28px;
   align-items: center;
   padding: 14px 20px 14px 24px;
@@ -227,8 +229,9 @@ kbd {
 
 .agent-state {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 2px 8px;
   margin-top: 6px;
   font-size: 14px;
   opacity: 0.92;
@@ -258,6 +261,7 @@ kbd {
   padding-left: 10px;
   border-left: 1px solid color-mix(in oklab, currentColor 40%, transparent);
   opacity: 0.85;
+  white-space: nowrap;
 }
 
 .band-robots {
@@ -1393,6 +1397,19 @@ kbd {
 }
 
 /* ---------- small screens ---------- */
+
+/* Team, one robot card and the actions no longer fit side by side:
+   the robot gets a row of its own, as with several robots. */
+@media (max-width: 1240px) {
+  .band {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .band-robots {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
 
 @media (max-width: 960px) {
   .band {
