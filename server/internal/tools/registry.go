@@ -311,7 +311,8 @@ func robotState(rb robots.Robot) map[string]any {
 	s := rb.State
 	return map[string]any{
 		"robot": rb.Alias, "online": rb.Online && rb.Accepted, "distance_cm": s.DistanceCM, "floor": s.Floor, "color": s.Color,
-		"line": s.Line, "yaw": s.Yaw, "battery": s.Battery, "tilted": s.Tilted, "skill": s.Skill,
+		"line": s.Line, "yaw": s.Yaw, "battery": s.Battery, "tilted": s.Tilted, "pitch": s.Pitch, "roll": s.Roll,
+		"light": s.Light, "loudness": s.Loudness, "skill": s.Skill,
 	}
 }
 
@@ -354,7 +355,8 @@ var floorColors = []string{"white", "black", "red", "yellow", "green", "blue", "
 const floorHelp = "floor ist die Bodenspur: eine Liste aus [Position, Muster]. Die Position zählt ab Beginn der Bewegung, in cm beim Fahren, in Grad beim Drehen. Das Muster sind vier Buchstaben für die vier Bodensonden von links nach rechts: w weiß, k schwarz, r rot, y gelb, g grün, b blau, ? unklar. Ein Eintrag gilt bis zum nächsten. Höchstens 20 Einträge; steht floor_truncated true dabei, fahre kürzere Strecken."
 
 var ledColors = []string{"red", "green", "blue", "yellow", "purple", "cyan", "white", "orange", "off"}
-var robotEvents = []string{"obstacle_near", "obstacle_clear", "color_changed", "tilted", "button_a", "button_b", "clap", "battery_low"}
+var robotEvents = []string{"obstacle_near", "obstacle_clear", "color_changed", "tilted", "button_a", "button_b", "joystick",
+	"lifted", "bumped", "shake", "clap", "light_up", "light_down", "battery_low"}
 
 const maxNotes = 20
 
@@ -495,7 +497,7 @@ func builtins() []*tool {
 			},
 		},
 		{
-			name: "read_sensors", desc: "Liest den aktuellen Zustand: distance_cm (Abstand nach vorn), floor (Muster unter den vier Bodensonden von links nach rechts, Buchstaben wie bei drive), color (Boden), line, yaw (Richtung in Grad), battery, tilted, skill.",
+			name: "read_sensors", desc: "Liest den aktuellen Zustand im Stand: distance_cm (Abstand nach vorn), floor (Muster unter den vier Bodensonden von links nach rechts, Buchstaben wie bei drive), color (Boden), line, yaw (Richtung in Grad), pitch und roll (Neigung in Grad), light (Helligkeit 0 bis 100), loudness (Lautstärke 0 bis 100), battery (Akku in Prozent), tilted, skill.",
 			robot: robotOne,
 			run: func(_ context.Context, c *call) any {
 				st := robotState(c.robots[0])
@@ -515,7 +517,7 @@ func builtins() []*tool {
 		},
 		{
 			name: "wait_for",
-			desc: "Wartet, bis einer eurer Roboter das Ereignis event meldet, höchstens timeout_s Sekunden. Ergebnis: event, robot, data oder reason timeout.",
+			desc: "Wartet, bis einer eurer Roboter das Ereignis event meldet, höchstens timeout_s Sekunden. Ereignisse: obstacle_near und obstacle_clear (etwas vorn kommt nah oder geht weg), color_changed (Bodenfarbe), button_a und button_b (Taste gedrückt), joystick (bewegt oder gedrückt, data.dir: up, down, left, right, middle), lifted (hochgehoben), bumped (Stoß), tilted (länger schief, data.pitch und data.roll), shake (geschüttelt), clap (kurzer lauter Ton), light_up und light_down (Helligkeit springt, data.light und data.base), battery_low. Jedes Ereignis kommt höchstens alle halbe Sekunde. Ergebnis: event, robot, data oder reason timeout.",
 			props: static(map[string]any{
 				"event":     map[string]any{"type": "string", "enum": robotEvents},
 				"timeout_s": map[string]any{"type": "number", "minimum": 1, "maximum": 60},

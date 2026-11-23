@@ -185,7 +185,8 @@ class Robot:
         self.link.publish("state", {
             "skill": key[0], "distance_cm": s["distance_cm"], "floor": s["floor"], "color": s["color"],
             "line": s["line"], "yaw": s["yaw"], "battery": s["battery"],
-            "tilted": s["tilted"], "seq": self.next_seq(), "t_ms": now,
+            "tilted": s["tilted"], "pitch": s["pitch"], "roll": s["roll"], "light": s["light"],
+            "loudness": s["loudness"], "seq": self.next_seq(), "t_ms": now,
         }, True)
 
     # ---- connection ---------------------------------------------------------
@@ -258,7 +259,7 @@ class Robot:
         self.check_watchdog(now)
 
         # 4. Events.
-        self.events.update(self.s, now)
+        self.events.update(self.s, now, self.skill is not None)
         while self.events.queue:
             kind, data = self.events.queue.pop(0)
             msg = {"kind": kind, "seq": self.next_seq(), "t_ms": now}

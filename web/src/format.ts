@@ -118,6 +118,8 @@ export function formatPrices(priceIn: number, priceOut: number): string {
   return `${f(priceIn)} / ${f(priceOut)} € pro Mio. Token`
 }
 
+const JOYSTICK: Record<string, string> = { up: 'nach vorn', down: 'nach hinten', left: 'nach links', right: 'nach rechts', middle: 'gedrückt' }
+
 /** One line of text for a log entry. */
 export function describe(e: LogEntry): string {
   const d = (e.data ?? {}) as Record<string, any>
@@ -129,13 +131,25 @@ export function describe(e: LogEntry): string {
     case 'color_changed':
       return `Boden ist jetzt ${colorName(String(d.color))}`
     case 'tilted':
-      return 'Umgekippt oder hochgehoben'
+      return d.pitch !== undefined ? `Schief (vorn/hinten ${d.pitch}°, seitlich ${d.roll}°)` : 'Schief oder umgekippt'
     case 'button_a':
       return 'Knopf A gedrückt'
     case 'button_b':
       return 'Knopf B gedrückt'
+    case 'joystick':
+      return `Joystick ${JOYSTICK[String(d.dir)] ?? d.dir}`
+    case 'lifted':
+      return 'Hochgehoben'
+    case 'bumped':
+      return 'Stoß gespürt'
+    case 'shake':
+      return 'Geschüttelt'
     case 'clap':
       return 'Klatschen gehört'
+    case 'light_up':
+      return `Heller geworden (${d.base} → ${d.light})`
+    case 'light_down':
+      return `Dunkler geworden (${d.base} → ${d.light})`
     case 'battery_low':
       return `Akku schwach (${d.battery} %)`
     case 'skill_done':

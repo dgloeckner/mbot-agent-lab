@@ -97,5 +97,25 @@ def get_battery():
     return simstate.battery
 
 
+def _noise(sigma):
+    rng = simstate.world.rng if simstate.world else None
+    return rng.gauss(0, sigma) if rng else 0
+
+
 def get_loudness(mode="maximum"):
-    return simstate.loudness
+    return max(0, min(100, simstate.loudness + abs(_noise(1.5))))
+
+
+def get_bri():
+    return max(0, min(100, int(round(simstate.light + _noise(1.0)))))
+
+
+def get_acc(axis):
+    # Running motors shake the robot a little.
+    w = simstate.world
+    moving = w is not None and (w.left_rpm or w.right_rpm)
+    return simstate.acc[axis] + _noise(0.8 if moving else 0.2)
+
+
+def is_shake():
+    return simstate.shake

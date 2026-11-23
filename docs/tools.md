@@ -33,9 +33,9 @@ animations (`led.play`, the ultrasonic sensor's emotion effects), cloud speech
 | Move | `follow_line_until` | `max_cm`, `stop_on_color?`, `stop_at_crossing?` | `driven_cm`, `reason` (`color`, `crossing`, `line_lost`, `max_cm`), `color`, `floor` |
 | Move | `retrace_path` | none | `segments`, `reason` (`done`, `empty`, `obstacle`, `stopped`, `timeout`), `distance_cm` |
 | Move | `stop` | none | `ok` |
-| Sense | `read_sensors` | none | `distance_cm`, `floor` (current pattern), `color`, `line`, `yaw`, `battery`, `tilted` |
+| Sense | `read_sensors` | none | `distance_cm`, `floor` (current pattern), `color`, `line`, `yaw`, `pitch`, `roll`, `light`, `loudness`, `battery`, `tilted` |
 | Sense | `scan` | `from_deg?`, `to_deg?`, `step_deg?`, `face?` | `profile` `[[deg, cm], …]`, `best_deg`, `best_cm`, `turned_deg` |
-| Sense | `wait_for` | `event`, `timeout_s` | `event`, `data` or `reason:"timeout"` |
+| Sense | `wait_for` | `event` (list in `docs/protocol.md`), `timeout_s` | `event`, `data` or `reason:"timeout"` |
 | Sense | `list_robots` | none | name, online, battery, color per robot |
 | Express | `set_leds` | `color` or `pattern` | `ok` |
 | Express | `show_text` | `text`, at most 60 characters | `ok` |
