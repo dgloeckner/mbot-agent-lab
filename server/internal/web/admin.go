@@ -26,6 +26,7 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 	admin("POST /admin/api/assign", s.adminAssign)
 	admin("POST /admin/api/lab-code", s.adminNewLabCode)
 	admin("PUT /admin/api/teams/{id}", s.adminRenameTeam)
+	admin("PUT /admin/api/teams/{id}/color", s.adminTeamColor)
 	admin("DELETE /admin/api/teams/{id}", s.adminDeleteTeam)
 	admin("POST /admin/api/stop-all", s.adminStopAll)
 	admin("PUT /admin/api/models", s.adminSetModels)
@@ -187,6 +188,20 @@ func (s *Server) adminRenameTeam(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.Lab.RenameTeam(r.Context(), r.PathValue("id"), req.Name); err != nil {
+		s.labError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) adminTeamColor(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Color string `json:"color"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.Lab.SetTeamColor(r.Context(), r.PathValue("id"), req.Color); err != nil {
 		s.labError(w, err)
 		return
 	}

@@ -97,6 +97,11 @@ func (s *Store) RenameTeam(ctx context.Context, id, name string) error {
 	return err
 }
 
+// SetTeamColor changes a team's color.
+func (s *Store) SetTeamColor(ctx context.Context, id, color string) error {
+	return s.affectOne(ctx, `UPDATE teams SET color = ? WHERE id = ?`, color, id)
+}
+
 // SetTeamProvider stores the model provider a team chose ("" = lab default).
 func (s *Store) SetTeamProvider(ctx context.Context, id, provider string) error {
 	return s.affectOne(ctx, `UPDATE teams SET provider = ? WHERE id = ?`, provider, id)

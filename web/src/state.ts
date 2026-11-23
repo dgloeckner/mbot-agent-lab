@@ -115,6 +115,9 @@ export async function init() {
       if (e.kind === 'team_renamed' && session.value && typeof e.data?.name === 'string') {
         session.value = { ...session.value, team: { ...session.value.team, name: e.data.name } }
       }
+      if (e.kind === 'team_color' && session.value && typeof e.data?.color === 'string') {
+        session.value = { ...session.value, team: { ...session.value.team, color: e.data.color } }
+      }
     },
   })
 }

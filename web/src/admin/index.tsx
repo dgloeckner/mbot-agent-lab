@@ -226,6 +226,9 @@ function DropZone(props: { team: string; class: string; children: preact.Compone
   )
 }
 
+// Same palette and order as lab.TeamColors on the server.
+const TEAM_COLORS = ['blue', 'green', 'orange', 'purple', 'red', 'cyan', 'yellow']
+
 function TeamCard({ t, robots, teams }: { t: AdminTeam; robots: AdminRobot[]; teams: AdminTeam[] }) {
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(t.name)
@@ -251,10 +254,30 @@ function TeamCard({ t, robots, teams }: { t: AdminTeam; robots: AdminRobot[]; te
         ) : (
           <h2>{t.name}</h2>
         )}
-        <span class="presence" title="Offene Teamseiten">
-          {t.connected === 0 ? 'nicht verbunden' : t.connected === 1 ? '1 Browser' : `${t.connected} Browser`}
-        </span>
+        {!editing && (
+          <span class="presence" title="Offene Teamseiten">
+            {t.connected === 0 ? 'nicht verbunden' : t.connected === 1 ? '1 Browser' : `${t.connected} Browser`}
+          </span>
+        )}
       </header>
+      {editing && (
+        <div class="team-colors" role="radiogroup" aria-label={`Teamfarbe von ${t.name}`}>
+          <span>Teamfarbe</span>
+          {TEAM_COLORS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              role="radio"
+              aria-checked={c === t.color}
+              aria-label={colorName(c)}
+              title={colorName(c)}
+              class="team-swatch"
+              style={{ background: COLOR_HEX[c] }}
+              onClick={() => c !== t.color && act(call('PUT', `/teams/${t.id}/color`, { color: c }), `Teamfarbe ${colorName(c)}`)}
+            />
+          ))}
+        </div>
+      )}
       <ul class="robot-list">
         {mine.length === 0 ? (
           <li class="drop-hint">Roboter hierher ziehen oder unten auswählen</li>
@@ -294,7 +317,7 @@ function TeamCard({ t, robots, teams }: { t: AdminTeam; robots: AdminRobot[]; te
           Link kopieren
         </button>
         <button class="btn-link" onClick={() => (setName(t.name), setEditing(!editing))}>
-          {editing ? 'Abbrechen' : 'Umbenennen'}
+          {editing ? 'Fertig' : 'Bearbeiten'}
         </button>
         <button
           class="btn-link danger"

@@ -105,6 +105,22 @@ class RobotTest(unittest.TestCase):
         self.assertEqual(self.result("c-8")["reason"], "stopped")
         self.assertEqual(self.robot.ui.conn, "getrennt")
 
+    def test_set_leds_survives_heartbeats_until_team_changes(self):
+        import simstate
+        green, red = (0, 255, 0), (255, 0, 0)
+        self.run_until(lambda: simstate.leds == red)  # team color from the heartbeat
+        self.client.deliver("lab/mbot-1/cmd", {"id": "l1", "name": "set_leds", "args": {"color": "green"}})
+        self.run_until(lambda: self.result("l1") is not None)
+        end = time.monotonic() + 1.5  # several heartbeats with team color red
+        while time.monotonic() < end:
+            self.robot.iterate()
+            self.hb()
+            time.sleep(0.02)
+        self.assertEqual(simstate.leds, green)
+        # A new team gets its own color again.
+        self.client.deliver("lab/mbot-1/hb", {"team": "t2", "owner": "Team Blau", "name": "Scout", "color": "blue", "agent": "waiting"})
+        self.run_until(lambda: simstate.leds == (0, 0, 255))
+
     def test_unknown_command(self):
         self.client.deliver("lab/mbot-1/cmd", {"id": "c-9", "name": "self_destruct"})
         self.run_until(lambda: self.result("c-9"))

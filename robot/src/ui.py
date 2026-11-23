@@ -15,6 +15,7 @@ class Ui:
         self.conn = "startet"
         self.text = ""
         self.color = "white"
+        self.led = None  # agent's set_leds color; loop clears it when the team changes
         self.agent = "waiting"
         self.identify_until = 0
         self.dirty = True
@@ -69,6 +70,6 @@ class Ui:
             # Triangle wave between 10 and 100 % brightness, period 1 s.
             phase = now % 1000
             level = phase if phase < 500 else 1000 - phase
-            hw_leds(self.color, 10 + level * 90 // 500)
+            hw_leds(self.led or self.color, 10 + level * 90 // 500)
         else:
-            hw_leds(self.color)
+            hw_leds(self.led or self.color)

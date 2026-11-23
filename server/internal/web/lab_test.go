@@ -165,6 +165,38 @@ func TestTeamRenamesRobotsAndItself(t *testing.T) {
 	}
 }
 
+func TestAdminChangesTeamColor(t *testing.T) {
+	srv := newTestServer(t)
+	c := adminClient(t, srv)
+	if code := adminDo(t, c, srv, "PUT", "/admin/api/teams/rot/color", `{"color":"purple"}`); code != http.StatusNoContent {
+		t.Fatalf("set color: %d", code)
+	}
+	_, rot := do(t, srv, "GET", "/t/tok-rot/api/session", "")
+	if got := rot["team"].(map[string]any)["color"]; got != "purple" {
+		t.Errorf("team color = %v, want purple", got)
+	}
+	for _, rb := range srv.reg.Snapshot() {
+		if rb.ID == "mbot-1" && rb.TeamColor != "purple" {
+			t.Errorf("robot LEDs not updated: %+v", rb)
+		}
+	}
+	// Two teams may share a color.
+	if code := adminDo(t, c, srv, "PUT", "/admin/api/teams/blau/color", `{"color":"purple"}`); code != http.StatusNoContent {
+		t.Errorf("shared color: %d", code)
+	}
+	for _, bad := range []string{`"pink"`, `""`, `"white"`} {
+		if code := adminDo(t, c, srv, "PUT", "/admin/api/teams/rot/color", `{"color":`+bad+`}`); code != http.StatusBadRequest {
+			t.Errorf("color %s: %d", bad, code)
+		}
+	}
+	if code := adminDo(t, c, srv, "PUT", "/admin/api/teams/gibtsnicht/color", `{"color":"red"}`); code != http.StatusNotFound {
+		t.Errorf("unknown team: %d", code)
+	}
+	if code, _ := do(t, srv, "PUT", "/admin/api/teams/rot/color", `{"color":"red"}`); code != http.StatusUnauthorized {
+		t.Errorf("without login: %d", code)
+	}
+}
+
 func TestDeletedTeamLosesLinkAndRobots(t *testing.T) {
 	srv := newTestServer(t)
 	c := adminClient(t, srv)
