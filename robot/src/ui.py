@@ -1,7 +1,8 @@
 # Display and LEDs. Student-facing text on the robot is German.
+# Nothing here may block the main loop: no sounds, no vendor animations.
 
 from compat import ticks_ms, ticks_diff
-from hw import hw_leds, hw_show_lines, hw_beep
+from hw import hw_leds, hw_show_lines
 
 UI_DISPLAY_MIN_MS = 200
 UI_LED_PERIOD_MS = 100
@@ -18,6 +19,7 @@ class Ui:
         self.led = None  # agent's set_leds color; loop clears it when the team changes
         self.agent = "waiting"
         self.identify_until = 0
+        self.finding = False  # identify is running: blink and say so on the display
         self.dirty = True
         self.last_display = 0
         self.last_led = 0
@@ -45,6 +47,10 @@ class Ui:
         self.identify_until = ticks_ms() + ms
 
     def tick(self, now):
+        finding = ticks_diff(self.identify_until, now) > 0
+        if finding != self.finding:
+            self.finding = finding
+            self.dirty = True
         if self.dirty and ticks_diff(now, self.last_display) >= UI_DISPLAY_MIN_MS:
             self.dirty = False
             self.last_display = now
@@ -52,16 +58,13 @@ class Ui:
                 "%s (%s)" % (self.name, self.robot_id) if self.name else self.robot_id,
                 self.owner or "frei",
                 self.conn,
-                self.text,
+                "Hier bin ich!" if finding else self.text,
             ])
         if ticks_diff(now, self.last_led) < UI_LED_PERIOD_MS:
             return
         self.last_led = now
-        if ticks_diff(self.identify_until, now) > 0:
-            on = (now // 250) % 2 == 0
-            hw_leds("white" if on else "off")
-            if on and (now // 250) % 4 == 0:
-                hw_beep()
+        if finding:
+            hw_leds("white" if (now // 250) % 2 == 0 else "off")
         elif self.conn != "verbunden":
             hw_leds("orange", 30)
         elif not self.owner:

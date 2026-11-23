@@ -43,9 +43,7 @@ class _Console:
 
 
 class _Audio:
-    def play(self, name):
-        simstate.sounds.append(name)
-
+    # No play(): the built-in sounds block the main loop (docs/tools.md).
     def play_tone(self, freq, t):
         simstate.sounds.append(freq)
 

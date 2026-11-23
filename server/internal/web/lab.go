@@ -105,7 +105,7 @@ func (s *Server) setModel(w http.ResponseWriter, r *http.Request, team store.Tea
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// identifyRobot makes one of the team's robots blink and beep.
+// identifyRobot makes one of the team's robots blink and show that on its display.
 func (s *Server) identifyRobot(w http.ResponseWriter, r *http.Request, team store.Team) {
 	id := r.PathValue("robot")
 	for _, rb := range s.Robots.Snapshot() {

@@ -108,10 +108,8 @@ Sent immediately on change, otherwise two to five times per second.
 | `stop` | none | none |
 | `set_leds` | `color` or `pattern` | none |
 | `show_text` | `text` | none |
-| `play_sound` | `name` | none |
-| `play_melody` | `notes`: list of `[frequency_hz, duration_ms]` | none |
 | `gesture` | `kind`: `nod`, `shake`, `spin` | none |
-| `identify` | none | none |
+| `identify` | none: blinks white and shows "Hier bin ich!" for 3 s, silently | none |
 | `clear_log` | none | none |
 
 ## Rules

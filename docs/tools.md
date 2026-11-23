@@ -12,9 +12,16 @@ the way is clear", "follow the line to blue"), the robot closes the loop with fi
 its 40 Hz main loop and reports a structured result. The ultrasonic sensor only looks forward, so
 the goals are about driving, turning and scanning, not about following walls on the side.
 
-Not offered to agents yet, because the robot does not implement them: `play_melody`,
-`gesture`. The team page lists them as "kommt bald". `set_leds`
-takes a color only, no pattern.
+Not offered to agents yet, because the robot does not implement it: `gesture`. The team page
+lists it as "kommt bald". `set_leds` takes a color only, no pattern.
+
+**Nothing blocks.** The robot's main loop (20 to 50 ms per pass) runs line following, the
+emergency stop and the heartbeat watchdog. No tool may use a vendor call that holds the loop,
+also not while the robot stands. So there is no `play_sound` or `play_melody`: the built-in
+sounds (`cyberpi.audio.play`) and melodies (`audio.play_music`) block. Also out: vendor LED
+animations (`led.play`, the ultrasonic sensor's emotion effects), cloud speech
+(`cloud.listen`) and the fixed-distance drive calls (`mbot2.straight`, `mbot2.turn`).
+`sim/tests/test_world_and_bundle.py` fails when the bundle calls one of them.
 
 | Group | Tool | Parameters | Result |
 | --- | --- | --- | --- |
@@ -32,8 +39,6 @@ takes a color only, no pattern.
 | Sense | `list_robots` | none | name, online, battery, color per robot |
 | Express | `set_leds` | `color` or `pattern` | `ok` |
 | Express | `show_text` | `text`, at most 60 characters | `ok` |
-| Express | `play_sound` | `name` | `ok` |
-| Express | `play_melody` | `notes` as a list of pitch and duration | `ok` |
 | Express | `gesture` | `kind`: `nod`, `shake`, `spin` | `ok` |
 | Express | `identify` | none | `ok` |
 | Talk | `say` | `to`, `text` up to 60 characters, `emotion?` | `delivered` |

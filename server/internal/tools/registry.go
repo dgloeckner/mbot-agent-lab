@@ -569,16 +569,7 @@ func builtins() []*tool {
 			},
 		},
 		{
-			name:     "play_sound",
-			desc:     "Spielt einen kurzen Ton.",
-			props:    static(map[string]any{"name": map[string]any{"type": "string", "enum": []string{"hello", "yeah", "wow", "laugh", "sad", "surprised", "beeps"}}}),
-			required: []string{"name"}, robot: robotOne,
-			run: func(ctx context.Context, c *call) any {
-				return c.command(ctx, c.robots[0], "play_sound", map[string]any{"name": c.str("name")}, 3*time.Second)
-			},
-		},
-		{
-			name: "identify", desc: "Lässt den Roboter einige Sekunden blinken und piepen, damit Menschen ihn finden.",
+			name: "identify", desc: "Lässt den Roboter einige Sekunden blinken und \"Hier bin ich!\" anzeigen, damit Menschen ihn finden.",
 			robot: robotOne,
 			run: func(ctx context.Context, c *call) any {
 				return c.command(ctx, c.robots[0], "identify", nil, 3*time.Second)

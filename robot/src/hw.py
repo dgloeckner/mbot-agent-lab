@@ -128,10 +128,3 @@ def hw_show_lines(lines):
     for line in lines:
         cyberpi.console.println(line)
 
-
-def hw_play(name):
-    cyberpi.audio.play(name)  # VERIFY: must not block
-
-
-def hw_beep():
-    cyberpi.audio.play_tone(880, 0.05)  # VERIFY: blocks for 50 ms

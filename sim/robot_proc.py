@@ -39,7 +39,6 @@ LED_COLORS = {
     "yellow": (255, 200, 0), "purple": (160, 0, 255), "cyan": (0, 255, 255),
     "white": (255, 255, 255), "orange": (255, 100, 0),
 }
-BEEP_HZ = 880  # hw_beep in robot/src/hw.py
 
 
 def led_name(rgb):
@@ -76,8 +75,7 @@ def trace_line(world):
     leds = [n for n, _ in runs(led_name(c) for c in drain(simstate.led_trail))] or [led_name(simstate.leds)]
     line = "[%s] x=%s y=%s heading=%s motors=%s/%s leds=%s" % (
         world.robot_id, s["x"], s["y"], s["heading"], s["left_rpm"], s["right_rpm"], "/".join(leds))
-    sounds = ["beep" if x == BEEP_HZ else ("%sHz" % x if isinstance(x, (int, float)) else str(x))
-              for x in drain(simstate.sounds)]
+    sounds = [("%sHz" % x if isinstance(x, (int, float)) else str(x)) for x in drain(simstate.sounds)]
     if sounds:
         line += " sound=" + ",".join(n if k == 1 else "%sx%d" % (n, k) for n, k in runs(sounds))
     return line + " | display: " + " / ".join(simstate.display)
