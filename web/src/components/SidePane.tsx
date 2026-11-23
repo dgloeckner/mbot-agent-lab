@@ -207,7 +207,7 @@ function ToolsPanel() {
   const groups = [...new Set(tools.map((t) => t.group))]
   return (
     <div class="tools-panel scroll">
-      <p class="panel-intro">Diese Werkzeuge kann euer Agent benutzen. Klickt eins an, um seinen Namen in den Prompt einzufügen.</p>
+      <p class="panel-intro">Diese Werkzeuge kann euer Agent benutzen. Klickt eins an, um seinen Namen in den Prompt einzufügen. Beim Schreiben schlägt der Editor ab drei Buchstaben passende Werkzeuge vor; <kbd>Tab</kbd> übernimmt den Vorschlag.</p>
       {robots.value.length > 1 && (
         <p class="panel-intro multi-robot">
           Euer Agent steuert {robots.value.length} Roboter: {robots.value.map((r, i) => (

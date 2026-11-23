@@ -1,7 +1,17 @@
 // CodeMirror 6 setup for the prompt editor: Markdown source with highlighting,
 // search, undo history and completion of tool names.
 
-import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap, type CompletionContext } from '@codemirror/autocomplete'
+import {
+  acceptCompletion,
+  autocompletion,
+  closeBrackets,
+  closeBracketsKeymap,
+  completionKeymap,
+  completionStatus,
+  moveCompletionSelection,
+  selectedCompletion,
+  type CompletionContext,
+} from '@codemirror/autocomplete'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { markdownKeymap, markdownLanguage } from '@codemirror/lang-markdown'
 import { HighlightStyle, LanguageSupport, syntaxHighlighting, indentOnInput, bracketMatching } from '@codemirror/language'
@@ -17,6 +27,7 @@ import {
   placeholder,
 } from '@codemirror/view'
 import { tags as t } from '@lezer/highlight'
+import { matchTools } from './completion'
 import type { ToolInfo } from './types'
 
 /** Highlighting uses CSS variables so light and dark themes switch without reconfiguring. */
@@ -65,19 +76,28 @@ export function markdownSupport(): LanguageSupport {
 
 function toolCompletion(tools: ToolInfo[]) {
   return (ctx: CompletionContext) => {
-    const word = ctx.matchBefore(/[a-z_]{2,}/)
-    if (!word && !ctx.explicit) return null
+    const line = ctx.state.doc.lineAt(ctx.pos)
+    const match = matchTools(line.text.slice(0, ctx.pos - line.from), tools, ctx.explicit)
+    if (!match) return null
     return {
-      from: word ? word.from : ctx.pos,
-      options: tools.map((tool) => ({
+      from: ctx.pos - match.word.length,
+      filter: false, // matchTools already filtered by prefix; no fuzzy matching on prose
+      options: match.tools.map((tool) => ({
         label: tool.name,
         type: 'function',
         detail: tool.params ? `(${tool.params})` : '()',
         info: tool.summary,
       })),
-      validFor: /^[a-z_]*$/,
     }
   }
+}
+
+// Tab takes the first suggestion. Enter keeps making line breaks: the list
+// opens without a selection, so prose is never replaced by a tool name.
+function acceptFirstCompletion(view: EditorView): boolean {
+  if (completionStatus(view.state) !== 'active') return false
+  if (!selectedCompletion(view.state)) moveCompletionSelection(true)(view)
+  return acceptCompletion(view)
 }
 
 export interface EditorOptions {
@@ -110,7 +130,7 @@ export function createEditor(o: EditorOptions): PromptEditor {
     highlightActiveLine(),
     highlightSelectionMatches(),
     search({ top: true }),
-    autocompletion({ override: [toolCompletion(o.tools)], icons: false }),
+    autocompletion({ override: [toolCompletion(o.tools)], icons: false, selectOnOpen: false }),
     markdownSupport(),
     syntaxHighlighting(markdownHighlight),
     EditorView.lineWrapping,
@@ -126,6 +146,7 @@ export function createEditor(o: EditorOptions): PromptEditor {
       ...searchKeymap,
       ...historyKeymap,
       ...completionKeymap,
+      { key: 'Tab', run: acceptFirstCompletion },
       indentWithTab,
     ]),
     EditorView.updateListener.of((u) => {
