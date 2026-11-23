@@ -108,6 +108,13 @@ export function formatCost(microEUR: number): string {
   return `${cents.toLocaleString('de-DE', { maximumFractionDigits: 2 })} ct`
 }
 
+/** Model prices per million tokens, e.g. "0,1 / 0,5 € pro Mio. Token". */
+export function formatPrices(priceIn: number, priceOut: number): string {
+  if (!priceIn && !priceOut) return 'ohne Kosten'
+  const f = (n: number) => n.toLocaleString('de-DE', { maximumFractionDigits: 2 })
+  return `${f(priceIn)} / ${f(priceOut)} € pro Mio. Token`
+}
+
 /** One line of text for a log entry. */
 export function describe(e: LogEntry): string {
   const d = (e.data ?? {}) as Record<string, any>

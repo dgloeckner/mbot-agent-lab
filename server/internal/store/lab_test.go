@@ -63,6 +63,36 @@ func TestTeamsAndAssignments(t *testing.T) {
 	}
 }
 
+func TestTeamProvider(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+	a, _ := s.CreateTeam(ctx, Team{ID: "t1", Name: "Eins", Token: "tok1", Color: "red"})
+	b, _ := s.CreateTeam(ctx, Team{ID: "t2", Name: "Zwei", Token: "tok2", Color: "blue"})
+	if a.Provider != "" {
+		t.Fatalf("new team provider = %q", a.Provider)
+	}
+	if err := s.SetTeamProvider(ctx, a.ID, "claude"); err != nil {
+		t.Fatal(err)
+	}
+	_ = s.SetTeamProvider(ctx, b.ID, "mistral")
+	if err := s.SetTeamProvider(ctx, "nope", "claude"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown team: %v", err)
+	}
+	if got, _ := s.Team(ctx, a.ID); got.Provider != "claude" {
+		t.Errorf("provider = %q", got.Provider)
+	}
+	ids, err := s.ClearTeamProvider(ctx, "claude")
+	if err != nil || len(ids) != 1 || ids[0] != a.ID {
+		t.Fatalf("cleared %v, %v", ids, err)
+	}
+	if got, _ := s.TeamByToken(ctx, "tok1"); got.Provider != "" {
+		t.Errorf("after clear = %q", got.Provider)
+	}
+	if got, _ := s.Team(ctx, b.ID); got.Provider != "mistral" {
+		t.Errorf("other team = %q", got.Provider)
+	}
+}
+
 func TestSettings(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)

@@ -137,6 +137,12 @@ All vendor API calls live in `robot/src/hw.py` and are marked `VERIFY` until che
 - **Robot names:** a newly assigned robot is called after its sticker color (`rot`, `blau`, …).
   Teams rename their robots on the team page; these names are what the agent uses for the `robot`
   parameter. The robot's display shows its name and team, and its LEDs show the team color.
+- **Models:** each team picks its language model on the team page, among the providers of
+  `llm.providers` the control room released (the `default` provider is always released). The
+  control room lists every configured provider with its model and prices, shows which model each
+  team uses, and releases or revokes models with a checkbox; teams on a revoked model go back to
+  the default. A choice applies at the team's next run, so a run keeps one model throughout. The
+  release list lives in the database (setting `team_models`), the choice in `teams.provider`.
 - **Reassigning** a robot stops it, ends a running command with `reassigned` and clears its trip
   log. Renaming a team or robot does not interrupt anything.
 
@@ -154,6 +160,8 @@ robot's LEDs show, and the color band pulses in the robot's rhythm while the age
 - **Notes** the agent sees every round, and the **tool catalog** with one-click insertion.
 - **Robots:** live state per robot, rename by clicking the name, and "Finden" to make a robot
   blink and beep. The team name can be changed by clicking it; the link button copies the team link.
+- **Model:** the model of the next run with its price per million tokens, as a choice when the
+  control room released more than one.
 - **Browser storage** (`localStorage`, per team): the unsaved draft, up to 80 draft snapshots and
   UI preferences (theme, split, font size). Deployed versions live on the server. If another PC of
   the team deploys while this draft has changes, the page offers to take over the new version.
@@ -184,7 +192,8 @@ wake-up, so they do not burn tokens.
   the local development config uses it by default. Set `default: mistral` and `MISTRAL_API_KEY`,
   or `default: claude` and `ANTHROPIC_API_KEY`, for a real model. Only the `default` and
   `fallback` providers need their key; the server leaves out any other provider whose key
-  variable is not set and logs it at startup.
+  variable is not set and logs it at startup. Teams run on `default` unless they choose another
+  released provider (see "Control room and teams"); the fallback applies to every team.
 - **Claude:** the key comes from a Claude Console organization. Claude Max, Ultra and Team plans
   include monthly API credits for such an organization (claim them on claude.ai under Settings →
   Billing); the subscription login itself is not an API credential. Claude's thinking blocks go

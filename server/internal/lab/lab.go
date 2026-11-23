@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"unicode"
 	"unicode/utf8"
 
@@ -73,8 +74,10 @@ type Service struct {
 	// to the team's agent (it decides itself whether that wakes it).
 	OnTeamEvent func(teamID, kind, text string)
 
-	mu      sync.Mutex // serializes changes to teams and assignments
-	labCode string
+	mu        sync.Mutex // serializes changes to teams, assignments and model choices
+	labCode   string
+	allowed   map[string]bool // providers teams may choose besides the default
+	modelsGen atomic.Int64
 }
 
 // Start loads the lab code and restores robot assignments from the database.
@@ -94,6 +97,9 @@ func (s *Service) Start(ctx context.Context) error {
 		return err
 	}
 	s.labCode = code
+	if err := s.loadAllowed(ctx); err != nil {
+		return err
+	}
 
 	teams, err := s.teamMap(ctx)
 	if err != nil {

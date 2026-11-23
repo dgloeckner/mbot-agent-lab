@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/agent"
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/lab"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/live"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/protocol"
 )
@@ -26,6 +27,7 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 	admin("PUT /admin/api/teams/{id}", s.adminRenameTeam)
 	admin("DELETE /admin/api/teams/{id}", s.adminDeleteTeam)
 	admin("POST /admin/api/stop-all", s.adminStopAll)
+	admin("PUT /admin/api/models", s.adminSetModels)
 }
 
 // AdminRobot is one robot as the control room sees it.
@@ -48,11 +50,13 @@ type AdminTeam struct {
 	Link      string       `json:"link"` // path of the secret team link
 	Connected int          `json:"connected"`
 	CreatedAt time.Time    `json:"created_at"`
+	Provider  string       `json:"provider"` // model provider of the team's next run
 	Agent     agent.Status `json:"agent"`
 }
 
 type adminState struct {
 	LabCode string       `json:"lab_code"`
+	Models  []lab.Model  `json:"models"`
 	Teams   []AdminTeam  `json:"teams"`
 	Robots  []AdminRobot `json:"robots"`
 }
@@ -62,11 +66,11 @@ func (s *Server) buildAdminState(ctx context.Context) (adminState, error) {
 	if err != nil {
 		return adminState{}, err
 	}
-	st := adminState{LabCode: s.Lab.LabCode(), Teams: []AdminTeam{}, Robots: []AdminRobot{}}
+	st := adminState{LabCode: s.Lab.LabCode(), Models: s.Lab.Models(), Teams: []AdminTeam{}, Robots: []AdminRobot{}}
 	for _, t := range teams {
 		st.Teams = append(st.Teams, AdminTeam{
 			ID: t.ID, Name: t.Name, Color: t.Color, Link: "/t/" + t.Token,
-			Connected: s.Hub.Connected(t.ID), CreatedAt: t.CreatedAt, Agent: s.Agents.Status(t.ID),
+			Connected: s.Hub.Connected(t.ID), CreatedAt: t.CreatedAt, Provider: s.Lab.Provider(t), Agent: s.Agents.Status(t.ID),
 		})
 	}
 	for _, rb := range s.Robots.Snapshot() {
@@ -139,6 +143,21 @@ func (s *Server) adminAssign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.Lab.AssignRobot(r.Context(), req.Robot, req.Team); err != nil {
+		s.labError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// adminSetModels sets the providers teams may choose besides the default.
+func (s *Server) adminSetModels(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Allowed []string `json:"allowed"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.Lab.SetAllowedModels(r.Context(), req.Allowed); err != nil {
 		s.labError(w, err)
 		return
 	}

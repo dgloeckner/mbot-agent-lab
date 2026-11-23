@@ -72,6 +72,7 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request, team store.Team
 		"robots":          s.teamRobots(team.ID),
 		"agent":           s.Agents.Status(team.ID),
 		"agent_available": s.Agents.Available(),
+		"models":          s.Lab.ModelsFor(team),
 		"prompt":          prompt,
 		"versions":        versions,
 		"notes":           notes,
@@ -309,8 +310,8 @@ const (
 	ssePingInterval   = 15 * time.Second
 )
 
-// events streams robot snapshots ("robots") and log entries ("log") to the
-// team page. Last-Event-ID lets a reconnecting browser catch up on the log.
+// events streams robot snapshots ("robots"), the agent status ("agent"), the
+// model choice ("models") and log entries ("log") to the team page. Last-Event-ID lets a reconnecting browser catch up on the log.
 func (s *Server) events(w http.ResponseWriter, r *http.Request, team store.Team) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -326,7 +327,26 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, team store.Team)
 	backlog, ch, cancel := s.Hub.Subscribe(team.ID, after)
 	defer cancel()
 
-	var lastRobots, lastAgent []byte
+	var lastRobots, lastAgent, lastModels []byte
+	modelsGen := int64(-1)
+	sendModels := func() error {
+		gen := s.Lab.ModelsVersion()
+		if gen == modelsGen {
+			return nil
+		}
+		t, err := s.Store.Team(r.Context(), team.ID)
+		if err != nil {
+			return nil // deleted: the page learns it from its next request
+		}
+		modelsGen = gen
+		b, _ := json.Marshal(s.Lab.ModelsFor(t))
+		if bytes.Equal(b, lastModels) {
+			return nil
+		}
+		lastModels = b
+		_, err = fmt.Fprintf(w, "event: models\ndata: %s\n\n", b)
+		return err
+	}
 	sendAgent := func() error {
 		b, _ := json.Marshal(s.Agents.Status(team.ID))
 		if bytes.Equal(b, lastAgent) {
@@ -352,7 +372,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, team store.Team)
 	}
 
 	_, _ = fmt.Fprint(w, "retry: 2000\n\n")
-	if sendRobots() != nil || sendAgent() != nil {
+	if sendRobots() != nil || sendAgent() != nil || sendModels() != nil {
 		return
 	}
 	for _, e := range backlog {
@@ -374,9 +394,11 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, team store.Team)
 		case e := <-ch:
 			err = sendLog(e)
 		case <-poll.C:
-			// Both only send when something changed.
+			// These only send when something changed.
 			if err = sendRobots(); err == nil {
-				err = sendAgent()
+				if err = sendAgent(); err == nil {
+					err = sendModels()
+				}
 			}
 		case <-ping.C:
 			_, err = fmt.Fprint(w, ": ping\n\n")

@@ -17,6 +17,7 @@ type Team struct {
 	Name      string    `json:"name"`
 	Token     string    `json:"-"`
 	Color     string    `json:"color"`
+	Provider  string    `json:"provider"` // chosen model provider, "" = lab default
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -51,7 +52,7 @@ func (s *Store) CreateTeam(ctx context.Context, t Team) (Team, error) {
 func scanTeam(row interface{ Scan(...any) error }) (Team, error) {
 	var t Team
 	var at string
-	err := row.Scan(&t.ID, &t.Name, &t.Token, &t.Color, &at)
+	err := row.Scan(&t.ID, &t.Name, &t.Token, &t.Color, &t.Provider, &at)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Team{}, ErrNotFound
 	}
@@ -61,17 +62,17 @@ func scanTeam(row interface{ Scan(...any) error }) (Team, error) {
 
 // TeamByToken finds the team of a team link.
 func (s *Store) TeamByToken(ctx context.Context, token string) (Team, error) {
-	return scanTeam(s.DB.QueryRowContext(ctx, `SELECT id, name, token, color, created_at FROM teams WHERE token = ?`, token))
+	return scanTeam(s.DB.QueryRowContext(ctx, `SELECT id, name, token, color, provider, created_at FROM teams WHERE token = ?`, token))
 }
 
 // Team returns one team by ID.
 func (s *Store) Team(ctx context.Context, id string) (Team, error) {
-	return scanTeam(s.DB.QueryRowContext(ctx, `SELECT id, name, token, color, created_at FROM teams WHERE id = ?`, id))
+	return scanTeam(s.DB.QueryRowContext(ctx, `SELECT id, name, token, color, provider, created_at FROM teams WHERE id = ?`, id))
 }
 
 // Teams returns all teams in the order they joined.
 func (s *Store) Teams(ctx context.Context) ([]Team, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT id, name, token, color, created_at FROM teams ORDER BY created_at, id`)
+	rows, err := s.DB.QueryContext(ctx, `SELECT id, name, token, color, provider, created_at FROM teams ORDER BY created_at, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -94,6 +95,30 @@ func (s *Store) RenameTeam(ctx context.Context, id, name string) error {
 		return ErrConflict
 	}
 	return err
+}
+
+// SetTeamProvider stores the model provider a team chose ("" = lab default).
+func (s *Store) SetTeamProvider(ctx context.Context, id, provider string) error {
+	return s.affectOne(ctx, `UPDATE teams SET provider = ? WHERE id = ?`, provider, id)
+}
+
+// ClearTeamProvider sets every team that chose provider back to the lab
+// default and returns their IDs.
+func (s *Store) ClearTeamProvider(ctx context.Context, provider string) ([]string, error) {
+	rows, err := s.DB.QueryContext(ctx, `UPDATE teams SET provider = '' WHERE provider = ? RETURNING id`, provider)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 // DeleteTeam removes a team and frees its robots. Prompts and notes stay in

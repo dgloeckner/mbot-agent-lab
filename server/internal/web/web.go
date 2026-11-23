@@ -96,6 +96,7 @@ func (s *Server) Handler() http.Handler {
 	team("PUT /t/{token}/notes/{id}", s.updateNote)
 	team("DELETE /t/{token}/notes/{id}", s.deleteNote)
 	team("PUT /t/{token}/name", s.renameTeam)
+	team("PUT /t/{token}/model", s.setModel)
 	team("PUT /t/{token}/robots/{robot}/alias", s.renameRobot)
 	team("POST /t/{token}/robots/{robot}/identify", s.identifyRobot)
 	return mux

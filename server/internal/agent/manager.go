@@ -53,6 +53,7 @@ type Status struct {
 	State        string    `json:"state"`
 	Running      bool      `json:"running"`
 	RunID        int64     `json:"run_id,omitempty"`
+	Provider     string    `json:"provider,omitempty"` // model provider of the current run
 	Model        string    `json:"model,omitempty"`
 	StartedAt    time.Time `json:"started_at,omitzero"`
 	TokensIn     int       `json:"tokens_in"`
@@ -78,6 +79,10 @@ type Deps struct {
 	Tools   *tools.Registry
 	Budgets config.Budgets
 	Log     *slog.Logger
+
+	// TeamProvider names the model provider for a team's next run
+	// (lab.Service.TeamProvider). Nil or "" means the default provider.
+	TeamProvider func(ctx context.Context, teamID string) string
 }
 
 // Manager owns the actors. Safe for concurrent use.

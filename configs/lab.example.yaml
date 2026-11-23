@@ -1,6 +1,7 @@
 # Example lab configuration for the Azure VM.
 # Secrets never go into this file: every *_env key names an environment variable.
 # Only the default and fallback providers need their API key; others without one are left out.
+# Teams run on the default provider; the control room can release other providers for teams to choose.
 
 server:
   http_addr: ":443"

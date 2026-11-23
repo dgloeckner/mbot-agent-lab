@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"net/http"
 	"net/http/cookiejar"
 	"strings"
@@ -176,5 +177,63 @@ func TestDeletedTeamLosesLinkAndRobots(t *testing.T) {
 		if rb.ID == "mbot-2" && rb.Owner != "" {
 			t.Errorf("robot of deleted team still owned: %+v", rb)
 		}
+	}
+}
+
+func TestTeamChoosesReleasedModel(t *testing.T) {
+	srv := newTestServer(t)
+	c := adminClient(t, srv)
+	models := func(token string) (string, []string) {
+		t.Helper()
+		_, s := do(t, srv, "GET", "/t/"+token+"/api/session", "")
+		m := s["models"].(map[string]any)
+		var opts []string
+		for _, o := range m["options"].([]any) {
+			opts = append(opts, o.(map[string]any)["provider"].(string))
+		}
+		return m["selected"].(string), opts
+	}
+
+	// Only the default is released at first.
+	if sel, opts := models("tok-rot"); sel != "fake" || len(opts) != 1 {
+		t.Fatalf("initial: %q %v", sel, opts)
+	}
+	if code, _ := do(t, srv, "PUT", "/t/tok-rot/model", `{"provider":"teuer"}`); code != http.StatusBadRequest {
+		t.Errorf("unreleased model: %d", code)
+	}
+	if code := adminDo(t, c, srv, "PUT", "/admin/api/models", `{"allowed":["teuer","gibtsnicht"]}`); code != http.StatusBadRequest {
+		t.Errorf("unknown provider: %d", code)
+	}
+	if code := adminDo(t, c, srv, "PUT", "/admin/api/models", `{"allowed":["teuer"]}`); code != http.StatusNoContent {
+		t.Fatalf("release: %d", code)
+	}
+	if code, _ := do(t, srv, "PUT", "/t/tok-rot/model", `{"provider":"teuer"}`); code != http.StatusNoContent {
+		t.Fatalf("choose: %d", code)
+	}
+	if sel, opts := models("tok-rot"); sel != "teuer" || len(opts) != 2 || opts[0] != "fake" {
+		t.Errorf("after choosing: %q %v", sel, opts)
+	}
+	if sel, _ := models("tok-blau"); sel != "fake" {
+		t.Errorf("other team: %q", sel)
+	}
+
+	// The next run uses the chosen model.
+	do(t, srv, "POST", "/t/tok-rot/prompt", `{"text":"Fahr los."}`)
+	code, st := do(t, srv, "POST", "/t/tok-rot/start", "")
+	if code != http.StatusAccepted || st["model"] != "teuer-modell" || st["provider"] != "teuer" {
+		t.Errorf("start: %d %v", code, st)
+	}
+	do(t, srv, "POST", "/t/tok-rot/stop", "")
+
+	// Revoking the release sends the team back to the default.
+	if code := adminDo(t, c, srv, "PUT", "/admin/api/models", `{"allowed":[]}`); code != http.StatusNoContent {
+		t.Fatalf("revoke: %d", code)
+	}
+	if sel, opts := models("tok-rot"); sel != "fake" || len(opts) != 1 {
+		t.Errorf("after revoke: %q %v", sel, opts)
+	}
+	team, _ := srv.lab.Store.Team(context.Background(), "rot")
+	if team.Provider != "" {
+		t.Errorf("stored choice not cleared: %q", team.Provider)
 	}
 }

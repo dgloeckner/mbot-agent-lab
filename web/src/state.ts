@@ -100,6 +100,9 @@ export async function init() {
     status: (st) => (conn.value = st),
     robots: (r) => (robots.value = r),
     agent: (a) => (agent.value = a),
+    models: (m) => {
+      if (session.value) session.value = { ...session.value, models: m }
+    },
     log: (e) => {
       const cur = log.value
       if (cur.length && e.id <= cur[cur.length - 1].id) return // replayed after reconnect
@@ -291,6 +294,16 @@ async function attempt(p: Promise<unknown>, ok?: string): Promise<boolean> {
 }
 
 export const renameTeam = (name: string) => attempt(api.renameTeam(name.trim()), 'Teamname geändert')
+
+/** Chooses the model for the team's next runs. */
+export async function chooseModel(provider: string) {
+  const s = session.value
+  if (!s || s.models.selected === provider) return
+  const m = s.models.options.find((o) => o.provider === provider)
+  if (await attempt(api.setModel(provider), `Modell ${m?.model ?? provider} gilt ab dem nächsten Lauf`)) {
+    session.value = { ...session.value!, models: { ...session.value!.models, selected: provider } }
+  }
+}
 
 export const renameRobot = (robot: string, alias: string) => attempt(api.renameRobot(robot, alias.trim()))
 

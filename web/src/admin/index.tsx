@@ -1,8 +1,8 @@
 import { render } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
 import { signal } from '@preact/signals'
-import { COLOR_HEX, colorName, formatCost, formatNumber, onColor, relativeTime, skillName } from '../format'
-import type { AgentStatus, RobotState } from '../types'
+import { COLOR_HEX, colorName, formatCost, formatNumber, formatPrices, onColor, relativeTime, skillName } from '../format'
+import type { AgentStatus, ModelOption, RobotState } from '../types'
 import './admin.css'
 
 interface AdminRobot {
@@ -23,11 +23,13 @@ interface AdminTeam {
   link: string
   connected: number
   created_at: string
+  provider: string // model provider of the team's next run
   agent: AgentStatus
 }
 
 interface AdminState {
   lab_code: string
+  models: ModelOption[]
   teams: AdminTeam[]
   robots: AdminRobot[]
 }
@@ -106,6 +108,20 @@ const assign = (robot: string, team: string) => {
   if (!r || r.team === team) return
   const tname = state.value?.teams.find((t) => t.id === team)?.name
   void act(call('POST', '/assign', { robot, team }), team ? `${robot} gehört jetzt ${tname}` : `${robot} ist frei`)
+}
+
+const modelName = (provider: string) => state.value?.models.find((m) => m.provider === provider)?.model ?? provider
+
+/** Releases a model for teams or takes it back. Teams using a revoked model go back to the default. */
+function release(provider: string, on: boolean) {
+  const s = state.value!
+  const allowed = s.models.filter((m) => !m.default && (m.provider === provider ? on : m.allowed)).map((m) => m.provider)
+  const users = s.teams.filter((t) => t.provider === provider).length
+  if (!on && users > 0) {
+    const def = s.models.find((m) => m.default)?.model ?? 'das Standardmodell'
+    if (!confirm(`${modelName(provider)} sperren? ${users === 1 ? '1 Team nutzt' : `${users} Teams nutzen`} es und ${users === 1 ? 'wechselt' : 'wechseln'} ab dem nächsten Lauf zu ${def}.`)) return
+  }
+  void act(call('PUT', '/models', { allowed }), on ? `${modelName(provider)} freigegeben` : `${modelName(provider)} gesperrt`)
 }
 
 // ---------------------------------------------------------------------------
@@ -294,8 +310,41 @@ function TeamCard({ t, robots, teams }: { t: AdminTeam; robots: AdminRobot[]; te
         {t.agent.running ? `Agent ${AGENT_LABEL[t.agent.state]}` : 'Kein Lauf'}
         {t.agent.calls > 0 && `, ${formatNumber(t.agent.tokens_in + t.agent.tokens_out)} Token, ${formatCost(t.agent.cost_micro_eur)}`}
       </p>
+      <p class="team-model">
+        Modell {modelName(t.provider)}
+        {t.agent.running && t.agent.provider && t.agent.provider !== t.provider && ` (Lauf noch mit ${t.agent.model})`}
+      </p>
       <p class="team-age">Beigetreten {relativeTime(t.created_at)}</p>
     </DropZone>
+  )
+}
+
+function ModelsPanel({ models, teams }: { models: ModelOption[]; teams: AdminTeam[] }) {
+  return (
+    <section class="models-panel" aria-label="Modelle">
+      <h2>Modelle</h2>
+      <p class="pool-sub">Teams wählen auf ihrer Seite unter den freigegebenen Modellen. Ein Wechsel gilt ab dem nächsten Lauf.</p>
+      <ul class="model-list">
+        {models.map((m) => {
+          const users = teams.filter((t) => t.provider === m.provider).length
+          return (
+            <li key={m.provider}>
+              <label>
+                <input type="checkbox" checked={m.allowed} disabled={m.default} onChange={(e) => release(m.provider, e.currentTarget.checked)} />
+                <span class="model-main">
+                  <strong>{m.model}</strong>
+                  <span>
+                    {m.provider}
+                    {m.default ? ', Standard' : ''}, {formatPrices(m.price_in, m.price_out)}
+                    {users > 0 && `, ${users === 1 ? '1 Team' : `${users} Teams`}`}
+                  </span>
+                </span>
+              </label>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
   )
 }
 
@@ -338,15 +387,18 @@ function Board() {
       </header>
 
       <main class="admin-main">
-        <DropZone team="" class="pool" label="Freie Roboter">
-          <h2>Freie Roboter</h2>
-          <p class="pool-sub">
-            {online} von {s.robots.length} online. Zieht einen Roboter auf ein Team.
-          </p>
-          <ul class="robot-list">
-            {free.length === 0 ? <li class="drop-hint">Alle Roboter sind zugeteilt. Hierher ziehen gibt einen frei.</li> : free.map((r) => <RobotChip key={r.id} r={r} teams={s.teams} inTeam={false} />)}
-          </ul>
-        </DropZone>
+        <div class="side">
+          <DropZone team="" class="pool" label="Freie Roboter">
+            <h2>Freie Roboter</h2>
+            <p class="pool-sub">
+              {online} von {s.robots.length} online. Zieht einen Roboter auf ein Team.
+            </p>
+            <ul class="robot-list">
+              {free.length === 0 ? <li class="drop-hint">Alle Roboter sind zugeteilt. Hierher ziehen gibt einen frei.</li> : free.map((r) => <RobotChip key={r.id} r={r} teams={s.teams} inTeam={false} />)}
+            </ul>
+          </DropZone>
+          <ModelsPanel models={s.models} teams={s.teams} />
+        </div>
 
         <section class="teams" aria-label="Teams">
           {s.teams.length === 0 ? (
