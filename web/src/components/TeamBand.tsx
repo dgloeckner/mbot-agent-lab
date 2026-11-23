@@ -21,7 +21,7 @@ function RobotCard({ r }: { r: Robot }) {
         <InlineEdit class="robot-alias" value={r.alias} label="Name des Roboters" maxLength={16} onSave={(v) => renameRobot(r.id, v)} />
         <span class="robot-id">
           {r.id}
-          <button class="robot-find" onClick={() => identifyRobot(r.id, r.alias)} disabled={!r.online} title="Lässt den Roboter blinken und piepen">
+          <button class="robot-find" onClick={() => identifyRobot(r.id, r.alias)} disabled={!r.online} title="Lässt den Roboter blinken und „Hier bin ich!“ anzeigen">
             Finden
           </button>
         </span>

@@ -349,7 +349,7 @@ export async function chooseModel(provider: string) {
 export const renameRobot = (robot: string, alias: string) => attempt(api.renameRobot(robot, alias.trim()))
 
 export const identifyRobot = (robot: string, alias: string) =>
-  attempt(api.identify(robot), `${alias} blinkt und piept jetzt`)
+  attempt(api.identify(robot), `${alias} blinkt jetzt`)
 
 export async function copyTeamLink() {
   try {

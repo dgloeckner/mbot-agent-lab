@@ -82,6 +82,33 @@ class BundleTest(unittest.TestCase):
                 found.add(node.module.split(".")[0])
         self.assertLessEqual(found, allowed)
 
+    def test_bundle_calls_nothing_that_blocks(self):
+        # The main loop runs line following, the emergency stop and the watchdog:
+        # vendor calls that hold it are not allowed, also not while standing
+        # (docs/tools.md, "Nothing blocks"). Matched on the end of the dotted name.
+        blocking = ("audio.play", "audio.play_music", "audio.play_record_until", "led.play",
+                    "cloud.listen", "mbot2.straight", "mbot2.turn", "mbot2.forward",
+                    "mbot2.backward", "mbot2.turn_left", "mbot2.turn_right", "time.sleep",
+                    "ultrasonic2.play", "ultrasonic2.show_led_emotion", "ultrasonic2.show_animation")
+
+        def dotted(node):
+            parts = []
+            while isinstance(node, ast.Attribute):
+                parts.append(node.attr)
+                node = node.value
+            if isinstance(node, ast.Name):
+                parts.append(node.id)
+            return ".".join(reversed(parts))
+
+        found = []
+        for node in ast.walk(ast.parse(bundle.bundle())):
+            if isinstance(node, ast.Call):
+                name = dotted(node.func)
+                if any(name == b or name.endswith("." + b) for b in blocking) or \
+                        (name.startswith("mbuild.ultrasonic2.") and name.endswith("_effect")):
+                    found.append(name)
+        self.assertEqual(found, [])
+
     def test_bundle_size_budget(self):
         # Not RAM but start-up limits the size: on 2026-11-23 a bundle of 80 KB
         # started, one of 120 KB hung the CyberPi (docs/measurements.md). The

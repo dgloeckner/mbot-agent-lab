@@ -3,7 +3,7 @@
 
 from compat import ticks_ms, ticks_diff, sleep_ms, mem_free
 from config import ROBOT_ID, WIFI_SSID, WIFI_PASSWORD, BROKER_HOST, BROKER_PORT, BROKER_TLS, BROKER_PASSWORD
-from hw import hw_motors_stop, hw_mac, hw_play
+from hw import hw_motors_stop, hw_mac
 from sense import Sense
 from ui import Ui
 from events import Events
@@ -101,9 +101,6 @@ class Robot:
             self.reply(cmd_id, True, "done")
         elif name == "show_text":
             self.ui.set_text(str(args.get("text", "")))
-            self.reply(cmd_id, True, "done")
-        elif name == "play_sound":
-            hw_play(str(args.get("name", "hello")))
             self.reply(cmd_id, True, "done")
         elif name == "identify":
             self.ui.identify()

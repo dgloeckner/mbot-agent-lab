@@ -47,14 +47,17 @@ class TraceLineTest(unittest.TestCase):
         self.assertNotIn("sound=", line)
         self.assertTrue(line.startswith("[mbot-1] x="), line)
 
-    def test_identify_blinks_white_and_beeps(self):
+    def test_identify_blinks_white_and_shows_text(self):
         self.client.deliver("lab/mbot-1/cmd", {"id": "i1", "name": "identify", "args": {}})
         self.spin(1.2)
         line = robot_proc.trace_line(simstate.world)
         self.assertRegex(line, r" leds=[a-z/]*white/off")
-        self.assertIn(" sound=beep", line)
-        # Sounds and blinking are reported once, not again on the next line.
-        self.assertNotIn("sound=", robot_proc.trace_line(simstate.world))
+        self.assertIn("Hier bin ich!", line)
+        self.assertNotIn("sound=", line)  # silent: sounds would block the main loop
+        # Blinking is reported once, not again on the next line.
+        self.assertNotIn("white/off", robot_proc.trace_line(simstate.world))
+        self.spin(2.2)
+        self.assertNotIn("Hier bin ich!", robot_proc.trace_line(simstate.world))
 
 
 if __name__ == "__main__":
