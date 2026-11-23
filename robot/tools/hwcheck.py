@@ -3,7 +3,9 @@
 # robot script uses (robot/src/hw.py) and prints one line per call:
 #   HW OK <call> = <value>      or      HW ERR <call>: <exception>
 # The lines go to the serial log (mBlock shows it as hex) and, shortened, to
-# the display. Wheels in the air: the last block turns each motor briefly.
+# the display. Wheels in the air: the motor block turns each motor briefly.
+# The turn block at the end turns on the spot: on the floor it checks the
+# angle against the gyro, on a stand only the encoders and the run-on.
 
 import time
 
@@ -71,5 +73,47 @@ check("drive_speed(20, 20)", lambda: mbot2.drive_speed(20, 20))
 time.sleep(1)
 check("EM_stop", lambda: mbot2.EM_stop("all"))
 check("EM angles after drive_speed(20,20)", lambda: (mbot2.EM_get_angle("EM1"), mbot2.EM_get_angle("EM2")))
+
+# Encoder turns, like the robot's turn skill: turn right on the spot until the
+# encoders say `deg`, slowing down over the last degrees, stop, then wait for
+# the wheels to stand still. Prints the angle at the stop, the run-on after it
+# and the gyro's view. On the floor the gyro shows the real rotation: if it
+# reads consistently more than the encoders, TRACK_CM in hw.py is too large
+# (new TRACK_CM = TRACK_CM * encoder / gyro). On a stand the gyro stays near 0.
+# Keep in step with robot/src/hw.py and skills.py.
+TRACK_CM = 12.0
+CM_PER_WHEEL_DEG = 3.14159 * 6.5 / 360
+DEG_PER_WHEEL_DEG = CM_PER_WHEEL_DEG / TRACK_CM * 57.2958
+RUNON_S = 0.1
+
+
+def encoder_turn():
+    left, right = mbot2.EM_get_angle("EM1"), -mbot2.EM_get_angle("EM2")
+    return (left - right) * DEG_PER_WHEEL_DEG
+
+
+def turn_check(deg):
+    mbot2.EM_reset_angle("all")
+    cyberpi.reset_yaw()
+    t = time.time()
+    while time.time() - t < 10:
+        rest = deg - encoder_turn()
+        v = min(30, max(8, rest))
+        if rest <= v * 12 * RUNON_S * DEG_PER_WHEEL_DEG:
+            break
+        mbot2.drive_speed(v, v)  # the right motor is mirrored: both forward turns right
+        time.sleep(0.02)
+    mbot2.EM_stop("all")
+    at_stop = encoder_turn()
+    time.sleep(0.5)
+    end = encoder_turn()
+    out("HW TURN %d: stop %.1f end %.1f run-on %.1f gyro %.1f" % (deg, at_stop, end, end - at_stop, -cyberpi.get_yaw()))
+
+
+out("HW turns in 3 s")
+time.sleep(3)
+check("turn 90", lambda: turn_check(90))
+time.sleep(1)
+check("turn 180", lambda: turn_check(180))
 
 out("HW check done")

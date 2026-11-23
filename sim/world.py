@@ -13,6 +13,11 @@ sensors misbehave like real ones: ultrasonic dropouts (0) and ghost echoes,
 color and line readings that jitter at edges, and gyro twitches on bumps.
 The robot script must cope with that; the tests check it does.
 
+The motors do not follow a speed change at once: the wheel speed follows the
+command with a lag (motor_lag_s in mbot2.json; with noise it differs per
+robot), so after a stop the wheels run on. With "stand": true the robot sits
+on a stand: the wheels and encoders turn, the body does not move.
+
 Units are centimetres and degrees. Heading 0 points along +y, positive headings
 turn clockwise (to the right), matching the robot's yaw convention.
 Time advances lazily: every sensor read or motor change integrates the motion
@@ -37,6 +42,8 @@ PROBES = ("L2", "L1", "R1", "R2")
 PROBE_LATERAL_CM = tuple(GEOMETRY["probe_lateral_cm"][p] for p in PROBES)
 LINE_OFFSETS_CM = PROBE_LATERAL_CM
 PROBE_SPOT_CM = GEOMETRY["probe_spot_cm"]
+MOTOR_LAG_S = GEOMETRY["motor_lag_s"]  # time constant of the wheel speed
+MOTOR_SNAP_RPM = 2       # below this a stopped motor stands still
 PROBE_JITTER_CM = 0.2    # the bar is fixed; only the edge blur wobbles
 PROBE_SAMPLE_S = 0.004   # one RGB measurement serves the three channel reads
 MAX_RANGE_CM = 300
@@ -62,18 +69,23 @@ class World:
         self.lines = spec.get("lines", [])
         self.floor = spec.get("floor", "white")
         self.bands = _bands(spec)
+        self.stand = bool(spec.get("stand"))
         self.probe_cache = {}
         # Color cast and brightness of this robot's sensor, fixed per robot.
         self.tint = (1.0, 1.0, 1.0)
         if self.rng:
             gain = self.rng.uniform(0.85, 1.05)
             self.tint = tuple(gain * self.rng.uniform(0.92, 1.08) for _ in range(3))
+        self.motor_lag = MOTOR_LAG_S
+        if self.rng:
+            self.motor_lag *= self.rng.uniform(0.7, 1.3)
         start = spec.get("start", {"x": 0, "y": 0, "heading": 0})
         self.x, self.y, self.heading = float(start["x"]), float(start["y"]), float(start.get("heading", 0))
         self.pitch = 0.0
         self.roll = 0.0
-        self.left_rpm = 0.0
+        self.left_rpm = 0.0      # commanded
         self.right_rpm = 0.0
+        self.wheel_rpm = [0.0, 0.0]  # what the wheels actually do
         self.left_deg = 0.0
         self.right_deg = 0.0
         self.yaw_zero = self.heading
@@ -105,8 +117,18 @@ class World:
             self._step(h)
 
     def _step(self, dt):
-        dl_deg = self.left_rpm * 6 * dt     # rpm * 360 / 60
-        dr_deg = self.right_rpm * 6 * dt
+        k = min(1.0, dt / self.motor_lag) if self.motor_lag > 0 else 1.0
+        w = self.wheel_rpm
+        for i, cmd in enumerate((self.left_rpm, self.right_rpm)):
+            w[i] += (cmd - w[i]) * k
+            if cmd == 0 and abs(w[i]) < MOTOR_SNAP_RPM:
+                w[i] = 0.0
+        dl_deg = w[0] * 6 * dt     # rpm * 360 / 60
+        dr_deg = w[1] * 6 * dt
+        self.left_deg += dl_deg
+        self.right_deg += dr_deg
+        if self.stand:
+            return
         dl, dr = dl_deg * CM_PER_WHEEL_DEG, dr_deg * CM_PER_WHEEL_DEG
         d = (dl + dr) / 2
         dtheta = math.degrees((dl - dr) / TRACK_CM)
@@ -116,8 +138,6 @@ class World:
             # Blocked: wheels slip, the pose only rotates.
             self.bumped = True
             nx, ny = self.x, self.y
-        self.left_deg += dl_deg
-        self.right_deg += dr_deg
         self.x, self.y = nx, ny
         self.heading = (self.heading + dtheta) % 360
 
