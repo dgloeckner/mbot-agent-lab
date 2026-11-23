@@ -26,10 +26,10 @@ llm:
     claude:
       kind: anthropic
       api_key_env: ANTHROPIC_API_KEY
-      model: claude-opus-5-5
+      model: claude-haiku-5-5   # cheapest; claude-sonnet-5-5 or claude-opus-5-5 for harder tasks
       effort: low
-      price_in: 4       # USD list price per million tokens
-      price_out: 20
+      price_in: 0.10    # USD list price per million tokens (Sonnet 5.5: 2 / 10, Opus 5.5: 4 / 20)
+      price_out: 0.50
     ollama:
       base_url: http://localhost:11434/v1
       model: qwen3

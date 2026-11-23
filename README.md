@@ -189,8 +189,10 @@ wake-up, so they do not burn tokens.
   include monthly API credits for such an organization (claim them on claude.ai under Settings →
   Billing); the subscription login itself is not an API credential. Claude's thinking blocks go
   back unchanged with tool results; when trimmed history or changed notes invalidate them, the API
-  drops them (`drop_block`) instead of failing. Opus/Sonnet 5.5 use the server-side refusal
-  fallback; if a request is still declined, the client moves on to the configured fallback
+  drops them (`drop_block`) instead of failing. The example configs use Claude Haiku 5.5, the
+  cheapest model (about 40 times cheaper than Opus 5.5); switch `model` to `claude-sonnet-5-5` or
+  `claude-opus-5-5` for harder tasks. Opus/Sonnet 5.5 use the server-side refusal fallback;
+  Haiku 5.5 has none. If a request is declined, the client moves on to the configured fallback
   provider.
 - **Log:** every run, message, tool call and model call is stored in SQLite for the comparison of
   report and protocol ("Lügendetektor").
