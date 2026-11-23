@@ -1,7 +1,7 @@
 # Main loop: commands, skills, reflexes, events, state, heartbeat watchdog.
 # Target: 20 to 50 ms per iteration. Nothing in here may block while a motor runs.
 
-from compat import ticks_ms, ticks_diff, sleep_ms
+from compat import ticks_ms, ticks_diff, sleep_ms, mem_free
 from config import ROBOT_ID, WIFI_SSID, WIFI_PASSWORD, BROKER_HOST, BROKER_PORT, BROKER_TLS, BROKER_PASSWORD
 from hw import hw_motors_stop, hw_mac, hw_play
 from sense import Sense
@@ -194,7 +194,8 @@ class Robot:
         self.ui.tick(now)
         try:
             self.link.connect(WIFI_SSID, WIFI_PASSWORD,
-                              {"v": PROTOCOL_VERSION, "script": SCRIPT_VERSION, "mac": hw_mac()})
+                              {"v": PROTOCOL_VERSION, "script": SCRIPT_VERSION, "mac": hw_mac(),
+                               "mem_free": mem_free()})
         except Exception:
             self.link.close()
             self.ui.set_conn("getrennt")

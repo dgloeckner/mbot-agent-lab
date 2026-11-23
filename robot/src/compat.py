@@ -20,3 +20,13 @@ try:
     import ujson as json
 except ImportError:
     import json
+
+
+def mem_free():
+    """Free heap in bytes after a collection; -1 where unknown (CPython)."""
+    try:
+        import gc
+        gc.collect()
+        return gc.mem_free()
+    except Exception:
+        return -1

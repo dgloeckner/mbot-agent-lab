@@ -40,7 +40,8 @@ type AdminRobot struct {
 	Online   bool           `json:"online"`
 	Accepted bool           `json:"accepted"`
 	Script   string         `json:"script"`
-	Team     string         `json:"team"` // team ID, empty if free
+	MemFree  int            `json:"mem_free"` // free heap after connecting, -1 unknown
+	Team     string         `json:"team"`     // team ID, empty if free
 	Alias    string         `json:"alias"`
 	State    protocol.State `json:"state"`
 }
@@ -85,7 +86,7 @@ func (s *Server) buildAdminState(ctx context.Context) (adminState, error) {
 	}
 	for _, rb := range s.Robots.Snapshot() {
 		st.Robots = append(st.Robots, AdminRobot{
-			ID: rb.ID, Color: rb.Color, Online: rb.Online, Accepted: rb.Accepted, Script: rb.Hello.Script,
+			ID: rb.ID, Color: rb.Color, Online: rb.Online, Accepted: rb.Accepted, Script: rb.Hello.Script, MemFree: rb.Hello.MemFree,
 			Team: rb.Owner, Alias: rb.Alias, State: rb.State,
 		})
 	}

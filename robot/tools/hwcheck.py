@@ -35,8 +35,41 @@ def nested(depth, f):
     return f() if depth == 0 else nested(depth - 1, f)
 
 
+def largest_block():
+    # Largest single allocation that still works, to 1 KB: the heap may be
+    # fragmented, so this can be well below mem_free.
+    lo, hi = 0, 16 * 1024 * 1024
+    while hi - lo > 1024:
+        mid = (lo + hi) // 2
+        try:
+            b = bytearray(mid)
+            del b
+            lo = mid
+        except MemoryError:
+            hi = mid
+        gc.collect()
+    return lo
+
+
 cyberpi.console.clear()
 out("HW check start")
+
+# Memory without the robot script: the room our main.py can use at most.
+# The robot reports mem_free with its script loaded in hello (control room).
+import gc
+import os
+import sys
+
+check("python", lambda: (sys.implementation, sys.version))
+check("mem_free, mem_alloc", lambda: (gc.collect(), gc.mem_free(), gc.mem_alloc())[1:])
+check("flash statvfs /", lambda: os.statvfs("/"))
+try:
+    # Before the probe below: the conservative GC may keep its big block alive.
+    import micropython
+    micropython.mem_info()  # serial log only
+except Exception as e:
+    out("HW ERR mem_info: %s" % e)
+check("largest block", largest_block)
 q = mbuild.quad_rgb_sensor
 print("HW DIR quad_rgb_sensor %r" % (dir(q),))
 print("HW DIR ultrasonic2 %r" % (dir(mbuild.ultrasonic2),))

@@ -71,9 +71,9 @@ class BundleTest(unittest.TestCase):
     def test_bundle_imports_only_firmware_modules(self):
         # Every import must exist on the CyberPi: the firmware had no umqtt, so the
         # robot crashed with ImportError at start. Add a module only after checking
-        # it on the robot. json/time are fallbacks for CPython and _thread is optional,
+        # it on the robot. json/time are fallbacks for CPython, _thread and gc are optional,
         # all behind try/except.
-        allowed = {"config", "cyberpi", "mbot2", "mbuild", "socket", "ssl", "time", "json", "ujson", "_thread", "sys"}
+        allowed = {"config", "cyberpi", "mbot2", "mbuild", "socket", "ssl", "time", "json", "ujson", "_thread", "sys", "gc"}
         found = set()
         for node in ast.walk(ast.parse(bundle.bundle())):
             if isinstance(node, ast.Import):
@@ -83,9 +83,10 @@ class BundleTest(unittest.TestCase):
         self.assertLessEqual(found, allowed)
 
     def test_bundle_size_budget(self):
-        # The CyberPi has little RAM. Raise this deliberately, not by accident.
-        # 40000 -> 43000: one screen per state on the display (ui.py).
-        self.assertLess(len(bundle.bundle().encode()), 43000)
+        # Not RAM but start-up limits the size: on 2026-11-23 a bundle of 80 KB
+        # started, one of 120 KB hung the CyberPi (docs/measurements.md). The
+        # budget keeps 25 % below 80 KB. Raise it deliberately, not by accident.
+        self.assertLess(len(bundle.bundle().encode()), 60000)
 
 
 if __name__ == "__main__":
