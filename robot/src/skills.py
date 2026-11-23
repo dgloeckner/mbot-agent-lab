@@ -159,6 +159,19 @@ class Motion:
 
     forward = False
     deg = 0
+    stop_color = None
+    armed = False
+
+    def color_hit(self, s):
+        """Has the stop color appeared? A color under the robot at the start
+        counts only once the probes have left it, so a robot standing in the
+        red start field can drive back to red."""
+        if self.stop_color is None:
+            return False
+        if _sees_color(s["floor"], self.stop_color):
+            return self.armed
+        self.armed = True
+        return False
 
     def segment(self):
         return ("turn", round(self.deg))
@@ -210,7 +223,6 @@ class DriveSkill(Motion):
         else:
             cm = _num(args, "cm")
             self.stop_below = None
-            self.stop_color = None
         if cm is None:
             raise ValueError("distance missing")
         self.target = _clamp(abs(cm), 0, SK_MAX_CM)
@@ -243,7 +255,7 @@ class DriveSkill(Motion):
             return self._end(True, "max_cm" if self.until else "done", s)
         if self.stop_below is not None and self.forward and self.wall.check(s["distance_cm"] < self.stop_below):
             return self._end(True, "wall", s)
-        if self.stop_color is not None and _sees_color(s["floor"], self.stop_color):
+        if self.color_hit(s):
             return self._end(True, "color", s)
         if ticks_diff(now, self.started) > SK_MAX_MS:
             return self._end(False, "timeout", s)
@@ -256,6 +268,7 @@ class TurnSkill(Motion):
     """turn(deg): positive is right, measured with the wheel encoders."""
 
     name = "turn"
+    min_step = SK_FLOOR_MIN_DEG
 
     def __init__(self, args):
         deg = _num(args, "deg")
@@ -265,7 +278,7 @@ class TurnSkill(Motion):
         self.direction = 1 if deg > 0 else -1
 
     def start(self, s):
-        self.trace = Trace(s, SK_FLOOR_MIN_DEG)
+        self.trace = Trace(s, self.min_step)
         hw_wheels_reset()
         self.started = ticks_ms()
 
@@ -276,10 +289,15 @@ class TurnSkill(Motion):
     def there(self):
         return self.toward(self.target, SK_TURN_SPEED)
 
+    def pos(self):
+        return self.deg
+
     def step(self, s, now):
         if self.there():
             return self._end(True, "done", s)
-        self.trace.update(s, self.deg)
+        self.trace.update(s, self.pos())
+        if self.color_hit(s):
+            return self._end(True, "color", s)
         if ticks_diff(now, self.started) > SK_MAX_MS:
             return self._end(False, "timeout", s)
         return None
@@ -414,7 +432,7 @@ class FollowLineSkill(DriveSkill):
     def step(self, s, now):
         self.driven = abs(_driven_cm())
         self.trace.update(s, self.driven)
-        if self.stop_color is not None and _sees_color(s["floor"], self.stop_color):
+        if self.color_hit(s):
             return self._end(True, "color", s)
         if self.driven >= self.target:
             return self._end(True, "max_cm", s)
@@ -533,17 +551,19 @@ class RetraceSkill(Motion):
 
 
 class ArcSkill(TurnSkill):
-    """drive_arc(radius_cm, deg, speed): drive forward along a circle.
+    """drive_arc(radius_cm, deg, stop_on_color, speed): drive forward along a circle.
 
     deg is the heading change, positive curves right; it ends when the wheel
-    encoders say so, like turn, and the floor trace counts degrees too.
-    radius_cm is to the circle's center, speed the speed of the robot's center.
-    The trip log gets the arc as its chord (turn half, drive, turn half), so
-    retrace_path drives a straight line back.
+    encoders say so, like turn, or at stop_on_color like drive_until. The floor
+    trace counts cm along the way, like drive: stripe widths stay readable on
+    any radius. radius_cm is to the circle's center, speed the speed of the
+    robot's center. The trip log gets the arc as its chord (turn half, drive,
+    turn half), so retrace_path drives a straight line back.
     """
 
     name = "drive_arc"
     forward = True
+    min_step = SK_FLOOR_MIN_CM
 
     def __init__(self, args, log):
         TurnSkill.__init__(self, args)
@@ -552,6 +572,7 @@ class ArcSkill(TurnSkill):
             raise ValueError("radius_cm missing")
         self.r = _clamp(r, SK_ARC_MIN_CM, SK_ARC_MAX_CM)
         self.speed = _clamp(abs(_num(args, "speed", SK_DEFAULT_SPEED)), 5, SK_MAX_SPEED)
+        self.stop_color = _color_arg(args, "stop_on_color")
         self.log = log
 
     def start(self, s):
@@ -569,12 +590,16 @@ class ArcSkill(TurnSkill):
         hw_motors_stop()
         return True
 
+    def pos(self):
+        return abs(_driven_cm())
+
     def segment(self):
         return ("drive", 0)  # _end logs the arc
 
     def _end(self, ok, reason, s):
         r = TurnSkill._end(self, ok, reason, s)
-        r[2]["driven_cm"] = cm = round(abs(_driven_cm()), 1)
+        r[2]["color"] = s["color"]
+        r[2]["driven_cm"] = cm = round(self.pos(), 1)
         h = self.deg
         if abs(h) > 1:
             cm = abs(cm * 114.6 * _sin(h / 2) / h)  # chord = 2 r sin(h / 2), r = cm / h in radians

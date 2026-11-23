@@ -98,7 +98,7 @@ Sent immediately on change, otherwise two to five times per second.
 | --- | --- | --- |
 | `drive` | `cm`, `speed?` | `driven_cm`, `distance_cm`, `color`, trace |
 | `turn` | `deg`, positive is right | `turned_deg`, `distance_cm`, trace |
-| `drive_arc` | `radius_cm` (10..200, to the center), `deg` (heading change, positive is right), `speed?` (40, of the center) | `turned_deg`, `driven_cm`, `distance_cm`, trace (position in degrees) |
+| `drive_arc` | `radius_cm` (10..200, to the center), `deg` (heading change, positive is right), `stop_on_color?`, `speed?` (40, of the center) | `turned_deg`, `driven_cm`, `distance_cm`, `color`, trace (position in cm along the way) |
 | `drive_until` | `max_cm`, `stop_below_cm?`, `stop_on_color?`, `speed?` | `driven_cm`, `distance_cm`, `color`, trace |
 | `turn_until_clear` | `direction` (`left`/`right`), `min_cm?` (40), `min_deg?` (20), `max_deg?` (360) | `turned_deg`, `distance_cm`, trace |
 | `scan` | `from_deg?` (-90), `to_deg?` (90), `step_deg?` (15), `face?` (`best`/`start`) | `profile` (`[[deg, cm], …]`, `cm` null if no reading), `best_deg`, `best_cm`, `turned_deg`, `distance_cm` |
@@ -130,7 +130,9 @@ Sent immediately on change, otherwise two to five times per second.
 - **Trace:** every motion skill except `scan` and `retrace_path` reports `floor` (and `floor_truncated` when cut
   off) and `min_distance_cm`, also when it ends with `stopped`, `obstacle` or another abort.
 - **`stop_on_color`:** `white`, `black`, `red`, `yellow`, `green`, `blue` or `any` (anything but
-  white). It triggers when one of the four probes sees the color.
+  white). It triggers when one of the four probes sees the color. A color the probes already see
+  at the start counts only after they have left it (a robot in the red start field can drive back
+  to red). Same for `drive_until`, `drive_arc` and `follow_line_until`.
 - **Filtered sensors:** every decision on the robot uses filtered readings (`robot/src/sense.py`):
   distance as the median of the last 5 valid readings (dropouts below 2 cm ignored), the floor
   pattern only after 3 equal readings in a row, tilt with hysteresis (on above 45°, off below 30°)
@@ -181,8 +183,8 @@ classifies each into a letter: `w` white, `k` black, `r` red, `y` yellow, `g` gr
 - At a stripe edge the probes rarely change together. An entry that the next one replaces within
   0.5 cm (4° when turning) is such a transition and left out of `floor`.
 - `floor` in a result is a list of `[position, pattern]`. An entry starts where its pattern
-  began. Position counts from the start of the motion: cm when driving, degrees (positive right)
-  when turning or driving an arc, one decimal. An entry lasts until the next begins.
+  began. Position counts from the start of the motion: cm when driving (on an arc: along the way
+  of the robot's center), degrees (positive right) when turning on the spot, one decimal. An entry lasts until the next begins.
 - At most 20 entries; then `floor_truncated: true` and the motion goes on.
 - The robot never interprets patterns. What a stripe means is up to the agent and its prompt
   (see `docs/field.md`).
