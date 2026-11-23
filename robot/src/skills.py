@@ -460,12 +460,111 @@ class FollowLineSkill:
         return self._end(False, reason, s)
 
 
+def _norm(deg):
+    """An angle in -180 .. 180."""
+    return (deg + 180) % 360 - 180
+
+
+class RetraceSkill:
+    """retrace_path(): drive the trip log back to where it began.
+
+    The log is the way from its start to here. A turn at its end is folded
+    into self.turned (the robot's rotation on top of the logged way). Before a
+    drive the robot faces back (turned 180) and drives the same distance
+    forward, so the obstacle reflex stays on. Sub-steps are ordinary drive and
+    turn skills and never reach the log. The skill works the log off in place:
+    done leaves it empty, an abort leaves the way still to go plus a turn for
+    self.turned, so a new retrace_path continues from here.
+    """
+
+    name = "retrace_path"
+    forward = False
+    speed = SK_DEFAULT_SPEED
+
+    def __init__(self, log):
+        self.log = log
+        self.empty = not log
+        self.turned = 0
+        self.segments = 0
+        self.sub = None
+        self.started = 0
+
+    def start(self, s):
+        self.started = ticks_ms()
+
+    def segment(self):
+        return ("drive", 0)  # the log is already up to date
+
+    def _next(self, s):
+        """Start the next sub-step; False when the log is worked off."""
+        log = self.log
+        while log and log[-1][0] == "turn":
+            self.turned += log.pop()[1]
+            self.segments += 1
+        if not log:
+            return False
+        deg = _norm(180 - self.turned)
+        if abs(deg) > SK_TURN_TOLERANCE_DEG:
+            self.sub = TurnSkill({"deg": deg})
+        else:
+            self.sub = DriveSkill({"cm": log[-1][1]})
+        self.forward = self.sub.forward
+        self.sub.start(s)
+        return True
+
+    def _apply(self, s, reason):
+        """End the sub-step and take what it did off the log."""
+        if reason:
+            self.sub.abort(reason, s)
+        kind, value = self.sub.segment()
+        if kind == "turn":
+            self.turned += value
+        else:
+            rest = round(self.log[-1][1] - value, 1)
+            if abs(rest) < 1:
+                self.log.pop()
+                self.segments += 1
+            else:
+                self.log[-1] = ("drive", rest)
+        self.sub = None
+        self.forward = False
+
+    def _end(self, ok, reason, s):
+        hw_motors_stop()
+        turned = _norm(round(self.turned))
+        if self.log and turned:
+            self.log.append(("turn", turned))
+        return ok, reason, {"segments": self.segments, "distance_cm": s["distance_cm"]}
+
+    def step(self, s, now):
+        if ticks_diff(now, self.started) > SK_MAX_MS:
+            return self.abort("timeout", s)
+        if self.sub:
+            r = self.sub.step(s, now)
+            if r is None:
+                return None
+            self._apply(s, None)
+            if not r[0]:
+                return self._end(False, r[1], s)
+        if self._next(s):
+            return None
+        return self._end(True, "empty" if self.empty else "done", s)
+
+    def abort(self, reason, s):
+        if self.sub:
+            self._apply(s, reason)
+        return self._end(False, reason, s)
+
+
 MOTION_SKILLS = ("drive", "turn", "drive_until", "turn_until_clear", "scan", "follow_line_until",
                  "retrace_path", "gesture")
 
 
-def make_motion_skill(name, args):
-    """Create a motion skill or raise ValueError / NotImplementedError."""
+def make_motion_skill(name, args, log=None):
+    """Create a motion skill or raise ValueError / NotImplementedError.
+
+    log is the robot's trip log; retrace_path works it off in place.
+    """
     if name == "drive":
         return DriveSkill(args)
     if name == "drive_until":
@@ -478,5 +577,7 @@ def make_motion_skill(name, args):
         return ScanSkill(args)
     if name == "follow_line_until":
         return FollowLineSkill(args)
-    # TODO: retrace_path, gesture
+    if name == "retrace_path":
+        return RetraceSkill(log)
+    # TODO: gesture
     raise NotImplementedError(name)

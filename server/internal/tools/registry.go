@@ -402,6 +402,14 @@ func builtins() []*tool {
 			},
 		},
 		{
+			name:  "retrace_path",
+			desc:  "Fährt den bisherigen Weg zurück zum Anfang: dreht sich um und fährt die gespeicherten Strecken und Drehungen in umgekehrter Reihenfolge ab, vorwärts, damit er Hindernisse sieht. Der Weg zählt seit dem letzten retrace_path oder seit der Roboter euch gehört. Der Roboter fährt dabei gerade Strecken und folgt keiner Linie. Am Ende steht er am Anfang und schaut in die Richtung, aus der er gekommen ist. Ergebnis: segments (abgefahrene Wegstücke), distance_cm und reason: done, empty (kein Weg gespeichert), obstacle, stopped, tilted oder timeout (nach 20 Sekunden). Bei einem Abbruch bleibt der Rest gespeichert, ein neuer Aufruf fährt von dort weiter.",
+			robot: robotOne,
+			run: func(ctx context.Context, c *call) any {
+				return c.command(ctx, c.robots[0], "retrace_path", nil, motionTimeout)
+			},
+		},
+		{
 			name: "stop", desc: "Hält sofort an. Mit robot \"alle\" halten alle eure Roboter an.",
 			robot: robotAll,
 			run: func(ctx context.Context, c *call) any {

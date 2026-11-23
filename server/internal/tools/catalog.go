@@ -18,7 +18,7 @@ var Catalog = []Info{
 	{"drive_until", "Bewegen", "max_cm, stop_below_cm?, stop_on_color?", "Fährt, bis eine Wand nah ist, eine Farbe kommt oder die Strecke erreicht ist.", true},
 	{"turn_until_clear", "Bewegen", "direction, min_cm?, max_deg?", "Dreht sich, bis vorne genug Platz ist.", true},
 	{"follow_line_until", "Bewegen", "max_cm, stop_on_color?, stop_at_crossing?", "Folgt einer Linie bis zu einer Farbe, einer Kreuzung oder ihrem Ende.", true},
-	{"retrace_path", "Bewegen", "", "Fährt den bisherigen Weg rückwärts ab.", false},
+	{"retrace_path", "Bewegen", "", "Fährt den bisherigen Weg zurück zum Anfang.", true},
 	{"stop", "Bewegen", "", "Hält sofort an.", true},
 	{"read_sensors", "Wahrnehmen", "", "Liest Abstand, Bodenfarbe, Linie, Richtung und Akku.", true},
 	{"scan", "Wahrnehmen", "from_deg?, to_deg?, step_deg?, face?", "Dreht sich und misst rundum, dann schaut er in die freieste Richtung.", true},

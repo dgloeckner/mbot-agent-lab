@@ -216,8 +216,8 @@ robot registry, SQLite store, team joining with lab code, control room with robo
 (1..N robots per team), team page with prompt editor, versions, notes, robot names and live log,
 agent runtime with tool registry, LLM client and test model, robot script with filtered sensors,
 `drive`, `turn`, `drive_until`, the goal-oriented `turn_until_clear`, `scan` and
-`follow_line_until`, reflexes and events, bundler, simulator with realistic sensor noise. Not yet:
-`retrace_path`, `gesture`, `play_melody` on the robot, summaries of long runs, a run history view,
+`follow_line_until`, `retrace_path`, reflexes and events, bundler, simulator with realistic sensor
+noise. Not yet: `gesture`, `play_melody` on the robot, summaries of long runs, a run history view,
 chat wall, MCP. Vendor API calls on the robot are not verified on hardware yet.
 
 ## License

@@ -100,7 +100,7 @@ Sent immediately on change, otherwise two to five times per second.
 | `scan` | `from_deg?` (-90), `to_deg?` (90), `step_deg?` (15), `face?` (`best`/`start`) | `profile` (`[[deg, cm], …]`, `cm` null if no reading), `best_deg`, `best_cm`, `turned_deg`, `distance_cm` |
 | `follow_line_until` | `max_cm`, `stop_on_color?`, `stop_at_crossing?` (true), `speed?` (30) | `driven_cm`, `color`, `distance_cm`, trace |
 | `calibrate_colors` | `cm?` (38) | `refs`: per probe six `[r, g, b]` for white, black, red, yellow, green, blue; `driven_cm` |
-| `retrace_path` | none | `segments` |
+| `retrace_path` | none | `segments`, `distance_cm` (see [Trip log](#trip-log)) |
 | `stop` | none | none |
 | `set_leds` | `color` or `pattern` | none |
 | `show_text` | `text` | none |
@@ -121,8 +121,9 @@ Sent immediately on change, otherwise two to five times per second.
   `reason:"busy"`. `stop` is always accepted and idempotent.
 - **Values for `reason`:** `done`, `wall`, `color`, `max_cm`, `timeout`, `stopped`, `obstacle`,
   `busy`, `tilted`, `reassigned`, `error`, and for the goal skills `clear` and `max_deg`
-  (`turn_until_clear`), `crossing` and `line_lost` (`follow_line_until`).
-- **Trace:** every motion skill except `scan` reports `floor` (and `floor_truncated` when cut
+  (`turn_until_clear`), `crossing` and `line_lost` (`follow_line_until`), `empty`
+  (`retrace_path` with an empty trip log).
+- **Trace:** every motion skill except `scan` and `retrace_path` reports `floor` (and `floor_truncated` when cut
   off) and `min_distance_cm`, also when it ends with `stopped`, `obstacle` or another abort.
 - **`stop_on_color`:** `white`, `black`, `red`, `yellow`, `green`, `blue` or `any` (anything but
   white). It triggers when one of the four probes sees the color.
@@ -136,6 +137,28 @@ Sent immediately on change, otherwise two to five times per second.
   right before the reference strip and drives across it; it finds the black field itself, so the
   start position needs no precision. The references apply at once and are lost on restart until
   the server resends them (planned: a `config` message, field handoff G7).
+
+## Trip log
+
+The robot logs every finished or aborted motion skill as a segment, `drive` with signed cm or
+`turn` with signed degrees (positive right). The log is the way from where it began to the
+current pose. It is cleared by `clear_log`, on owner change and on restart.
+
+`retrace_path` works the log off from the end:
+
+- A turn at the end of the log is folded into the robot's extra rotation; nothing moves yet.
+- Before a drive the robot turns until it faces back (extra rotation 180°), then drives the
+  logged distance forward. The forward-looking obstacle reflex stays active the whole way.
+  So the logged turns come out negated and the robot ends at the start, facing the way it came.
+- Drives go straight and turns go through the same turn skill as `turn`. Lines are not
+  followed; turns at the end of a log with no drive before them do not move the robot.
+- The retrace's own moves are not logged. `segments` counts the log entries worked off.
+- `done` (or `empty` when there was nothing to do) leaves the log empty: the robot's pose is the
+  new beginning. An abort (`obstacle`, `stopped`, `tilted`, `timeout`, …) leaves the way still to
+  go in the log plus a turn for the extra rotation, so the log again describes the way from the
+  beginning to here. A new `retrace_path` continues from there, also after detours.
+- The whole retrace counts as one command: it ends with `timeout` after 20 seconds like every
+  motion skill, and a new call drives on.
 
 ## Floor trace
 

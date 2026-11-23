@@ -274,6 +274,7 @@ func TestGoalToolsPassArguments(t *testing.T) {
 		{"turn_until_clear", `{"direction":"left","min_cm":50}`},
 		{"scan", `{"from_deg":-45,"to_deg":45}`},
 		{"follow_line_until", `{"max_cm":120,"stop_on_color":"blue"}`},
+		{"retrace_path", `{}`},
 	} {
 		got := schemaOf(t, r.Call(context.Background(), env, call[0], call[1]))
 		if got["ok"] != true {
@@ -282,7 +283,7 @@ func TestGoalToolsPassArguments(t *testing.T) {
 	}
 	bus.mu.Lock()
 	defer bus.mu.Unlock()
-	want := []string{"mbot-1:turn_until_clear", "mbot-1:scan", "mbot-1:follow_line_until"}
+	want := []string{"mbot-1:turn_until_clear", "mbot-1:scan", "mbot-1:follow_line_until", "mbot-1:retrace_path"}
 	if strings.Join(bus.cmds, ",") != strings.Join(want, ",") {
 		t.Errorf("commands = %v", bus.cmds)
 	}
