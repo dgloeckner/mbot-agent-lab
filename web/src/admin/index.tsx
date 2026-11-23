@@ -1,7 +1,7 @@
 import { render } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
 import { signal } from '@preact/signals'
-import { COLOR_HEX, colorName, formatPrices, formatUsage, onColor, relativeTime, skillName } from '../format'
+import { COLOR_HEX, colorName, formatCost, formatNumber, formatPrices, onColor, relativeTime, skillName } from '../format'
 import type { AgentStatus, ModelOption, RobotState, Totals } from '../types'
 import './admin.css'
 
@@ -251,7 +251,7 @@ function RobotChip({ r, teams, inTeam }: { r: AdminRobot; teams: AdminTeam[]; in
         </button>
       </span>
       <select
-        class="chip-move"
+        class="chip-move field-select"
         aria-label={`${r.id} zuteilen`}
         value={r.team}
         onChange={(e) => assign(r.id, e.currentTarget.value)}
@@ -351,8 +351,9 @@ function TeamCard({ t, robots, teams }: { t: AdminTeam; robots: AdminRobot[]; te
           mine.map((r) => <RobotChip key={r.id} r={r} teams={teams} inTeam />)
         )}
       </ul>
-      <footer class="team-foot">
+      <div class="team-add">
         <select
+          class="field-select"
           aria-label={`Roboter zu ${t.name} hinzufügen`}
           value=""
           onChange={(e) => {
@@ -360,7 +361,7 @@ function TeamCard({ t, robots, teams }: { t: AdminTeam; robots: AdminRobot[]; te
             e.currentTarget.value = ''
           }}
         >
-          <option value="">Roboter hinzufügen …</option>
+          <option value="">+ Roboter hinzufügen …</option>
           {robots
             .filter((r) => r.team !== t.id)
             .map((r) => (
@@ -370,7 +371,35 @@ function TeamCard({ t, robots, teams }: { t: AdminTeam; robots: AdminRobot[]; te
               </option>
             ))}
         </select>
-        <span class="spacer" />
+      </div>
+      <dl class="team-stats">
+        <dt>Agent</dt>
+        <dd class="agent-state" data-running={t.agent.running}>
+          {t.agent.running ? AGENT_LABEL[t.agent.state] : t.agent.state !== 'waiting' ? 'kein Lauf, im Gespräch' : 'kein Lauf'}
+        </dd>
+        {t.agent.calls > 0 && (
+          <>
+            <dt>{t.agent.running ? 'Dieser Lauf' : 'Letzter Lauf'}</dt>
+            <Usage tokens={t.agent.tokens_in + t.agent.tokens_out} cost={t.agent.cost_micro_eur} />
+          </>
+        )}
+        {(t.total.runs > 0 || t.total.conversation.count > 0) && (
+          <>
+            <dt>Gesamt</dt>
+            <Usage tokens={t.total.tokens_in + t.total.tokens_out} cost={t.total.cost_micro_eur} note={totalNote(t.total)} />
+          </>
+        )}
+        <dt>Modell</dt>
+        <dd>
+          <span class="model-id">{modelName(t.provider)}</span>
+          {t.agent.running && t.agent.provider && t.agent.provider !== t.provider && (
+            <span class="stat-note warn">Lauf noch mit {t.agent.model}</span>
+          )}
+        </dd>
+        <dt>Beigetreten</dt>
+        <dd>{relativeTime(t.created_at)}</dd>
+      </dl>
+      <footer class="team-foot">
         <button
           class="btn-link"
           onClick={() =>
@@ -396,28 +425,37 @@ function TeamCard({ t, robots, teams }: { t: AdminTeam; robots: AdminRobot[]; te
           Löschen
         </button>
       </footer>
-      <p class="team-agent" data-running={t.agent.running}>
-        {t.agent.running ? `Agent ${AGENT_LABEL[t.agent.state]}` : t.agent.state !== 'waiting' ? 'Kein Lauf, Agent im Gespräch' : 'Kein Lauf'}
-        {t.agent.calls > 0 &&
-          `, ${t.agent.running ? 'dieser' : 'letzter'} Lauf: ${formatUsage(t.agent.tokens_in + t.agent.tokens_out, t.agent.cost_micro_eur)}`}
-      </p>
-      {(t.total.runs > 0 || t.total.conversation.count > 0) && (
-        <p class="team-model">
-          Gesamt: {formatUsage(t.total.tokens_in + t.total.tokens_out, t.total.cost_micro_eur)} in{' '}
-          {t.total.runs === 1 ? '1 Lauf' : `${t.total.runs} Läufen`}
-          {t.total.conversation.count > 0 &&
-            `, davon ${formatUsage(t.total.conversation.tokens_in + t.total.conversation.tokens_out, t.total.conversation.cost_micro_eur)} in ${
-              t.total.conversation.count === 1 ? '1 Gespräch' : `${t.total.conversation.count} Gesprächen`
-            }`}
-        </p>
-      )}
-      <p class="team-model">
-        Modell {modelName(t.provider)}
-        {t.agent.running && t.agent.provider && t.agent.provider !== t.provider && ` (Lauf noch mit ${t.agent.model})`}
-      </p>
-      <p class="team-age">Beigetreten {relativeTime(t.created_at)}</p>
     </DropZone>
   )
+}
+
+/** Tokens and cost as separate pieces, so a narrow card wraps between them, not inside. */
+function Usage({ tokens, cost, note }: { tokens: number; cost: number; note?: { text: string; title: string } }) {
+  return (
+    <dd>
+      <span class="usage">
+        <span>{formatNumber(tokens)} Token</span>
+        <span>{formatCost(cost)}</span>
+      </span>
+      {note && (
+        <span class="stat-note" title={note.title}>
+          {note.text}
+        </span>
+      )}
+    </dd>
+  )
+}
+
+/** What the team total is made of: runs, and conversations with their own cost. */
+function totalNote(total: Totals): { text: string; title: string } {
+  const runs = total.runs === 1 ? '1 Lauf' : `${total.runs} Läufe`
+  const c = total.conversation
+  if (c.count === 0) return { text: runs, title: runs }
+  const talks = c.count === 1 ? '1 Gespräch' : `${c.count} Gespräche`
+  return {
+    text: `${runs}, ${talks} (${formatCost(c.cost_micro_eur)})`,
+    title: `${talks}: ${formatNumber(c.tokens_in + c.tokens_out)} Token, ${formatCost(c.cost_micro_eur)}`,
+  }
 }
 
 function ModelsPanel({ models, teams }: { models: ModelOption[]; teams: AdminTeam[] }) {
