@@ -89,10 +89,10 @@ class SmokeTest(unittest.TestCase):
         env = dict(os.environ, LAB_ADMIN_PASSWORD=self.admin_password, LAB_CODE=self.lab_code,
                    MBOT1_PASSWORD=robot_password, MBOT2_PASSWORD=robot_password,
                    MBOT3_PASSWORD=robot_password)
-        # Providers the config names need their key variable set, but the
-        # scripted model never calls them: a dummy keeps real keys out.
+        # Keys of providers other than the default are optional: drop them so
+        # the server starts without any, and real keys never reach the test.
         for var in re.findall(r"api_key_env:\s*(\w+)", cfg_text):
-            env[var] = "unset"
+            env.pop(var, None)
 
         self.server_log = self.tmp / "server.log"
         self.sim_log = self.tmp / "sim.log"

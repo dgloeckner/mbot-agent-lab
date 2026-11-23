@@ -182,7 +182,9 @@ wake-up, so they do not burn tokens.
   cost estimate from the configured prices (prompt-cache reads and writes priced separately).
   `kind: fake` is a scripted test model that explores with the real tools and needs no API key;
   the local development config uses it by default. Set `default: mistral` and `MISTRAL_API_KEY`,
-  or `default: claude` and `ANTHROPIC_API_KEY`, for a real model.
+  or `default: claude` and `ANTHROPIC_API_KEY`, for a real model. Only the `default` and
+  `fallback` providers need their key; the server leaves out any other provider whose key
+  variable is not set and logs it at startup.
 - **Claude:** the key comes from a Claude Console organization. Claude Max, Ultra and Team plans
   include monthly API credits for such an organization (claim them on claude.ai under Settings →
   Billing); the subscription login itself is not an API credential. Claude's thinking blocks go

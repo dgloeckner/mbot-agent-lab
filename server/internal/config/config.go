@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -61,6 +62,10 @@ type LLM struct {
 	Fallback         string              `yaml:"fallback"`
 	Providers        map[string]Provider `yaml:"providers"`
 	MaxParallelCalls int                 `yaml:"max_parallel_calls"`
+
+	// Unkeyed lists providers left out because their API key variable is not
+	// set. Only the default and fallback providers must have their key.
+	Unkeyed []string `yaml:"-"`
 }
 
 // Provider is one model endpoint.
@@ -140,6 +145,9 @@ func Parse(raw []byte, lookup func(string) (string, bool)) (*Config, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
+	for _, name := range c.LLM.Unkeyed {
+		delete(c.LLM.Providers, name)
+	}
 	return &c, nil
 }
 
@@ -205,13 +213,20 @@ func (c *Config) resolveSecrets(lookup func(string) (string, bool)) error {
 		c.Server.LabCode = strings.ToUpper(strings.TrimSpace(get(c.Server.LabCodeEnv, false)))
 	}
 	for name, p := range c.LLM.Providers {
-		// API keys are optional: local providers such as Ollama need none.
+		// Local providers such as Ollama name no key variable. A named key is
+		// required only for the providers runs actually use; any other
+		// provider without its key is left out (see Unkeyed).
 		p.APIKey = get(p.APIKeyEnv, false)
 		if p.APIKeyEnv != "" && p.APIKey == "" {
-			missing = append(missing, p.APIKeyEnv)
+			if name == c.LLM.Default || name == c.LLM.Fallback {
+				missing = append(missing, p.APIKeyEnv)
+			} else {
+				c.LLM.Unkeyed = append(c.LLM.Unkeyed, name)
+			}
 		}
 		c.LLM.Providers[name] = p
 	}
+	slices.Sort(c.LLM.Unkeyed)
 	if len(missing) > 0 {
 		return fmt.Errorf("config: missing environment variables: %s", strings.Join(missing, ", "))
 	}
