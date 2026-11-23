@@ -24,7 +24,7 @@ takes a color only, no pattern.
 | Move | `drive_until` | `max_cm`, `stop_below_cm?`, `stop_on_color?` | `driven_cm`, `reason`, `distance_cm`, `color`, `floor`, `min_distance_cm` |
 | Move | `turn_until_clear` | `direction`, `min_cm?`, `min_deg?`, `max_deg?` | `turned_deg`, `reason` (`clear`, `max_deg`), `distance_cm`, `floor` |
 | Move | `follow_line_until` | `max_cm`, `stop_on_color?`, `stop_at_crossing?` | `driven_cm`, `reason` (`color`, `crossing`, `line_lost`, `max_cm`), `color`, `floor` |
-| Move | `retrace_path` | none | `segments`, `reason` (`done`, `empty`, `obstacle`, `stopped`, `timeout`), `distance_cm` |
+| Move | `retrace_path` | none | `segments`, `driven_cm`, `reason` (`done`, `empty`, `obstacle`, `stopped`, `timeout`), `distance_cm` |
 | Move | `stop` | none | `ok` |
 | Sense | `read_sensors` | none | `distance_cm`, `floor` (current pattern), `color`, `line`, `yaw`, `battery`, `tilted` |
 | Sense | `scan` | `from_deg?`, `to_deg?`, `step_deg?`, `face?` | `profile` `[[deg, cm], …]`, `best_deg`, `best_cm`, `turned_deg` |
