@@ -8,8 +8,12 @@ All modules end up in one namespace, so:
 With --config the given config.py is inlined at the top. Without it, the bundle
 keeps `from config import ...` so the simulator can provide its own config module.
 
+With --pad the bundle gets that many bytes of extra code that is never called,
+to find out on the robot how much bigger the script may grow (see
+docs/measurements.md).
+
 Usage:
-    python3 robot/tools/bundle.py [--config robot/config.py] [--out robot/dist/main.py]
+    python3 robot/tools/bundle.py [--config robot/config.py] [--out robot/dist/main.py] [--pad 20000]
 """
 
 import argparse
@@ -108,7 +112,28 @@ def compact_indent(source):
     return "\n".join(out) + "\n"
 
 
-def bundle(config_path=None, strip=True):
+PAD_TEMPLATE = """def _pad_%(i)d(a, b):
+ x = a * %(i)d + b
+ if x > 100:
+  return {"k": x, "n": "pad%(i)d"}
+ for i in range(3):
+  x = x + i
+ return [x, a, b]
+"""
+
+
+def padding(size):
+    """About size bytes of functions that compile like real code but never run."""
+    out, n, i = [], 0, 0
+    while n < size:
+        text = PAD_TEMPLATE % {"i": i}
+        out.append(text)
+        n += len(text)
+        i += 1
+    return "".join(out)
+
+
+def bundle(config_path=None, strip=True, pad=0):
     local = set(MODULES)
     parts = []
     seen = {}
@@ -126,6 +151,9 @@ def bundle(config_path=None, strip=True):
             if n in seen:
                 raise SystemExit("bundle: name %r defined in both %s and %s" % (n, seen[n], name))
             seen[n] = name
+        if name == "main" and pad:
+            # Before main: main() never returns.
+            parts.append("# ---- padding (%d bytes, never called)\n\n%s" % (pad, padding(pad)))
         parts.append("# ---- %s %s\n\n%s" % (name, "-" * (70 - len(name)), text))
 
     header = (
@@ -143,8 +171,9 @@ def main(argv=None):
     p.add_argument("--config", help="config.py to inline (contains secrets: never commit the result)")
     p.add_argument("--out", default=str(ROOT / "dist" / "main.py"))
     p.add_argument("--keep-comments", action="store_true", help="keep comments, e.g. to read the bundle")
+    p.add_argument("--pad", type=int, default=0, metavar="BYTES", help="add this much never-called code (memory test)")
     a = p.parse_args(argv)
-    out = bundle(a.config, strip=not a.keep_comments)
+    out = bundle(a.config, strip=not a.keep_comments, pad=a.pad)
     path = pathlib.Path(a.out)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(out, encoding="utf-8")

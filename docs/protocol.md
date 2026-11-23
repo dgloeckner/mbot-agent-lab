@@ -18,7 +18,7 @@ Every robot has its own prefix `lab/<robot_id>/`, e.g. `lab/mbot-1/`.
 | `event` | robot → server | no | event on a state change | [event.json](examples/protocol/event.json) |
 | `state` | robot → server | yes | current state | [state.json](examples/protocol/state.json) |
 | `status` | robot → server | yes, as last will | `online` or `offline`, plain text | [status.txt](examples/protocol/status.txt) |
-| `hello` | robot → server | no | protocol version, script version, MAC address on connect | [hello.json](examples/protocol/hello.json) |
+| `hello` | robot → server | no | protocol version, script version, MAC address, free memory on connect | [hello.json](examples/protocol/hello.json) |
 | `hb` | server → robot | no | heartbeat, once per second | [hb.json](examples/protocol/hb.json) |
 
 ## Messages
@@ -69,8 +69,11 @@ Sent immediately on change, otherwise two to five times per second.
 ### `hello`
 
 ```json
-{"v":1,"script":"0.1.0","mac":"aa:bb:cc:dd:ee:ff"}
+{"v":1,"script":"0.1.0","mac":"aa:bb:cc:dd:ee:ff","mem_free":61440}
 ```
+
+- `mem_free`: free heap in bytes right after connecting, after a garbage collection; `-1` where
+  unknown (simulator). It tells how much room the script has left (`docs/measurements.md`).
 
 ### `hb`
 
