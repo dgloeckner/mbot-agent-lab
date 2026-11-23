@@ -110,6 +110,9 @@ func run(configPath string, log *slog.Logger) error {
 	}()
 
 	models := llm.New(cfg.LLM, log)
+	for _, name := range cfg.LLM.Unkeyed {
+		log.Info("model provider left out: its API key variable is not set", "provider", name)
+	}
 	agents := agent.NewManager(agent.Deps{
 		Store: db, Robots: reg, Hub: hub, LLM: models,
 		Tools:   tools.NewRegistry(reg, db, hub, cfg.Budgets),
