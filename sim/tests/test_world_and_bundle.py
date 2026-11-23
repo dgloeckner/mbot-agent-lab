@@ -67,6 +67,20 @@ class BundleTest(unittest.TestCase):
                 self.assertNotIn(node.module, local)
         self.assertTrue(src.rstrip().endswith("main()"))
 
+    def test_bundle_imports_only_firmware_modules(self):
+        # Every import must exist on the CyberPi: the firmware had no umqtt, so the
+        # robot crashed with ImportError at start. Add a module only after checking
+        # it on the robot. json/time are fallbacks for CPython and _thread is optional,
+        # all behind try/except.
+        allowed = {"config", "cyberpi", "mbot2", "mbuild", "socket", "ssl", "time", "json", "ujson", "_thread", "sys"}
+        found = set()
+        for node in ast.walk(ast.parse(bundle.bundle())):
+            if isinstance(node, ast.Import):
+                found |= {a.name.split(".")[0] for a in node.names}
+            elif isinstance(node, ast.ImportFrom):
+                found.add(node.module.split(".")[0])
+        self.assertLessEqual(found, allowed)
+
     def test_bundle_size_budget(self):
         # The CyberPi has little RAM. Raise this deliberately, not by accident.
         self.assertLess(len(bundle.bundle().encode()), 40000)

@@ -56,7 +56,8 @@ with colored stripes: `docs/field.md` (field handoff, German, with approved devi
   initial bundle lean: rarely used views (preview, history) are lazy-loaded via `web/src/lazy.tsx`,
   and use `markdownLanguage` instead of `markdown()` (which drags in HTML/CSS/JS parsers).
   Browser storage is only for drafts, draft snapshots and UI prefs (`web/src/storage.ts`).
-- `sim/`: fakes for `cyberpi`, `mbot2`, `mbuild`, `umqtt.simple` in `sim/fakes/`; 2D world in
+- `sim/`: fakes for `cyberpi`, `mbot2`, `mbuild` in `sim/fakes/` (MQTT is real: the robot bundles
+  its own client, `robot/src/mqtt.py`, because the CyberPi firmware has no `umqtt`); 2D world in
   `sim/world.py` with optional sensor noise (seeded `random.Random`); the floor is a drawing of
   tape bands seen by four probes. Assumed robot geometry in `sim/mbot2.json` (replace with
   measurements). `sim/grid.py` generates `sim/worlds/gitter.json` and `docs/lab/feld/bauplan.svg`;

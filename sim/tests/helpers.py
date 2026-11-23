@@ -22,7 +22,7 @@ from world import World  # noqa: E402
 
 
 class MemoryClient:
-    """In-memory stand-in for umqtt.simple.MQTTClient."""
+    """In-memory stand-in for the robot's MQTTClient (robot/src/mqtt.py)."""
 
     instances = []
 
