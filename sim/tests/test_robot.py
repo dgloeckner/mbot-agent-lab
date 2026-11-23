@@ -117,9 +117,14 @@ class RobotTest(unittest.TestCase):
             self.hb()
             time.sleep(0.02)
         self.assertEqual(simstate.leds, green)
-        # A new team gets its own color again.
-        self.client.deliver("lab/mbot-1/hb", {"team": "t2", "owner": "Team Blau", "name": "Scout", "color": "blue", "agent": "waiting"})
-        self.run_until(lambda: simstate.leds == (0, 0, 255))
+        # A new team gets its own color again. Only send its heartbeats here:
+        # run_until() would interleave heartbeats of the old team.
+        end = time.monotonic() + 5
+        while simstate.leds != (0, 0, 255):
+            self.assertLess(time.monotonic(), end, "LEDs %s, want the new team's blue" % (simstate.leds,))
+            self.client.deliver("lab/mbot-1/hb", {"team": "t2", "owner": "Team Blau", "name": "Scout", "color": "blue", "agent": "waiting"})
+            self.robot.iterate()
+            time.sleep(0.02)
 
     def test_unknown_command(self):
         self.client.deliver("lab/mbot-1/cmd", {"id": "c-9", "name": "self_destruct"})
