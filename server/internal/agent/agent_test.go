@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -74,7 +75,7 @@ func (b *robotBus) Publish(topic string, payload []byte, _ bool, _ byte) error {
 	b.mu.Lock()
 	h := b.handler
 	b.cmds = append(b.cmds, id+":"+cmd.Name)
-	if b.gate && cmd.Name != "stop" {
+	if b.gate && cmd.Name != "stop" && cmd.Name != "clear_log" { // clear_log: sent at run start
 		b.held = append(b.held, func() { h(protocol.Topic(id, protocol.TopicResult), res) })
 		b.who = append(b.who, id+":"+cmd.Name)
 		b.mu.Unlock()
@@ -202,6 +203,21 @@ func TestStartNeedsPrompt(t *testing.T) {
 	var se *StartError
 	if err := f.m.Start(context.Background(), "rot"); !errors.As(err, &se) || !strings.Contains(se.Msg, "Prompt") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestRunStartClearsTheTeamsTripLogs(t *testing.T) {
+	f := newFixture(t, config.Budgets{})
+	f.deploy(t, "rot", "Warte.")
+	f.model.next = func(int, llm.Request) llm.Message {
+		return llm.Message{Role: llm.RoleAssistant, Content: "Ich warte."}
+	}
+	if err := f.m.Start(context.Background(), "rot"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "clear_log to the team's robot", func() bool { return slices.Contains(f.bus.sent(), "mbot-1:clear_log") })
+	if slices.Contains(f.bus.sent(), "mbot-2:clear_log") {
+		t.Error("another team's robot lost its trip log")
 	}
 }
 

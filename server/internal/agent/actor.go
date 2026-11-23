@@ -225,6 +225,16 @@ func (a *actor) startRun(ctx context.Context) (*run, error) {
 	a.updateStatus(func(s *Status) {
 		*s = Status{State: StateWaiting, Running: true, RunID: id, Provider: provider, Model: model, StartedAt: now}
 	})
+	// Each run starts a new way: retrace_path must not drive back through
+	// earlier runs. Robots that are offline keep their log until they get
+	// a new team or a later run starts.
+	for _, rb := range a.m.Robots.TeamRobots(a.team) {
+		go func() {
+			if _, err := a.m.Robots.Send(context.Background(), rb.ID, "clear_log", nil, 2*time.Second); err != nil {
+				a.m.Log.Warn("clear trip log at run start", "robot", rb.ID, "err", err)
+			}
+		}()
+	}
 	a.log(live.SourceSystem, "run_start", "", map[string]any{"run": id, "version": p.Version, "model": model})
 	a.m.Log.Info("run started", "team", a.team, "run", id, "prompt", p.Version, "model", model)
 	return r, nil

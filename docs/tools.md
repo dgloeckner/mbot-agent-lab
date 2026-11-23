@@ -57,8 +57,9 @@ takes a color only, no pattern.
   without changing prompts as long as the new robot gets the same name. `all` and `alle` are
   reserved and cannot be robot names.
 - **`retrace_path` turns around:** it drives the way back forward, so the obstacle reflex
-  stays on, and ends at the start facing the way it came. After an abort the rest stays in the
-  trip log and the next call continues (details in `docs/protocol.md`, "Trip log").
+  stays on, and ends at the start facing the way it came. The way counts from the start of the
+  run: the server clears the trip log of the team's robots when a run starts. After an abort the
+  rest stays in the trip log and the next call continues (details in `docs/protocol.md`, "Trip log").
 - **`say` is a bundle:** text on the speaker's display, light, sound, optional gesture, and the
   message lands in the recipient's inbox. `to` is an agent name or `"all"`.
 - **`finish` delivers the report** that the team later compares with the log.
