@@ -127,6 +127,16 @@ class NoisySkillTest(unittest.TestCase):
         self.assertEqual(r["reason"], "color", r)
         self.assertTrue(100 < r["data"]["driven_cm"] < 170, r)
 
+    def test_drive_until_color_ignores_the_color_it_starts_on(self):
+        spec = {
+            "walls": box(200, 200),
+            "fields": [{"rect": [20, 10, 40, 30], "color": "blue"}, {"rect": [20, 90, 40, 20], "color": "blue"}],
+            "start": {"x": 40, "y": 20, "heading": 0},
+        }
+        r = SkillRun(spec, seed=7).run("drive_until", {"max_cm": 150, "stop_on_color": "blue"})
+        self.assertEqual(r["reason"], "color", r)
+        self.assertTrue(55 < r["data"]["driven_cm"] < 75, r)
+
     def test_follow_line_reports_line_end(self):
         spec = {
             "walls": box(200, 200),

@@ -217,6 +217,13 @@ func TestDriveArc(t *testing.T) {
 	if len(args) != 2 || args["radius_cm"] != 20.0 || args["deg"] != -360.0 {
 		t.Errorf("robot args = %v, want radius_cm and deg (signed, like turn)", args)
 	}
+	r.Call(ctx, env, "drive_arc", `{"radius_cm":30,"degrees":360,"stop_on_color":"red"}`)
+	bus.mu.Lock()
+	args = bus.args["drive_arc"]
+	bus.mu.Unlock()
+	if args["stop_on_color"] != "red" || args["deg"] != 360.0 {
+		t.Errorf("robot args = %v, want stop_on_color passed on", args)
+	}
 	got = schemaOf(t, r.Call(ctx, env, "drive_arc", `{"degrees":90}`))
 	if got["ok"] != false || !strings.Contains(got["error"].(string), `"radius_cm"`) {
 		t.Errorf("missing radius = %v", got)

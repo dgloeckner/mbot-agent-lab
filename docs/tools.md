@@ -20,7 +20,7 @@ takes a color only, no pattern.
 | --- | --- | --- | --- |
 | Move | `drive` | `cm`, `speed?` | `driven_cm`, `reason`, `floor`, `min_distance_cm` |
 | Move | `turn` | `degrees`, positive is right | `turned_deg`, `reason`, `distance_cm`, `floor` |
-| Move | `drive_arc` | `radius_cm`, `degrees` (positive is right), `speed?` | `turned_deg`, `driven_cm`, `reason`, `distance_cm`, `floor`, `min_distance_cm` |
+| Move | `drive_arc` | `radius_cm`, `degrees` (positive is right), `stop_on_color?`, `speed?` | `turned_deg`, `driven_cm`, `reason` (`done`, `color`), `distance_cm`, `color`, `floor`, `min_distance_cm` |
 | Move | `drive_until` | `max_cm`, `stop_below_cm?`, `stop_on_color?` | `driven_cm`, `reason`, `distance_cm`, `color`, `floor`, `min_distance_cm` |
 | Move | `turn_until_clear` | `direction`, `min_cm?`, `min_deg?`, `max_deg?` | `turned_deg`, `reason` (`clear`, `max_deg`), `distance_cm`, `floor` |
 | Move | `follow_line_until` | `max_cm`, `stop_on_color?`, `stop_at_crossing?` | `driven_cm`, `reason` (`color`, `crossing`, `line_lost`, `max_cm`), `color`, `floor` |
@@ -64,7 +64,8 @@ takes a color only, no pattern.
 - **`drive_arc` curves:** it drives forward on a circle of `radius_cm` (10 to 200 cm, to the
   center) until the heading has changed by `degrees`, measured like `turn`; 360 is a full circle.
   The sign follows `turn`: positive curves right. The obstacle reflex looks along the tangent.
-  `floor` counts degrees. In the trip log an arc is its chord (half turn, straight drive, half
+  `stop_on_color` ends it early, like `drive_until`. `floor` counts cm along the way, so stripe
+  widths read the same as when driving straight. In the trip log an arc is its chord (half turn, straight drive, half
   turn), so `retrace_path` drives back on a straight line.
 - **`say` is a bundle:** text on the speaker's display, light, sound, optional gesture, and the
   message lands in the recipient's inbox. `to` is an agent name or `"all"`.

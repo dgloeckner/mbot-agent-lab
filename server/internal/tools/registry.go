@@ -351,7 +351,7 @@ const motionTimeout = 22 * time.Second
 var floorColors = []string{"white", "black", "red", "yellow", "green", "blue", "any"}
 
 // floorHelp explains the floor trace once, in the drive tool; the others refer to it.
-const floorHelp = "floor ist die Bodenspur: eine Liste aus [Position, Muster]. Die Position zählt ab Beginn der Bewegung, in cm beim Fahren, in Grad beim Drehen. Das Muster sind vier Buchstaben für die vier Bodensonden von links nach rechts: w weiß, k schwarz, r rot, y gelb, g grün, b blau, ? unklar. Ein Eintrag gilt bis zum nächsten. Höchstens 20 Einträge; steht floor_truncated true dabei, fahre kürzere Strecken."
+const floorHelp = "floor ist die Bodenspur: eine Liste aus [Position, Muster]. Die Position zählt ab Beginn der Bewegung, in cm beim Fahren (auch auf einer Kurve, entlang des Wegs), in Grad beim Drehen auf der Stelle. Das Muster sind vier Buchstaben für die vier Bodensonden von links nach rechts: w weiß, k schwarz, r rot, y gelb, g grün, b blau, ? unklar. Ein Eintrag gilt bis zum nächsten. Höchstens 20 Einträge; steht floor_truncated true dabei, fahre kürzere Strecken."
 
 var ledColors = []string{"red", "green", "blue", "yellow", "purple", "cyan", "white", "orange", "off"}
 var robotEvents = []string{"obstacle_near", "obstacle_clear", "color_changed", "tilted", "button_a", "button_b", "clap", "battery_low"}
@@ -394,22 +394,23 @@ func builtins() []*tool {
 		},
 		{
 			name: "drive_arc",
-			desc: "Fährt vorwärts eine Kurve auf einem Kreis mit dem Radius radius_cm (gemessen bis zur Kreismitte). degrees sagt, wie weit sich die Fahrtrichtung dabei dreht: 360 ist ein ganzer Kreis, 180 ein Halbkreis, 90 eine Viertelkurve. Positiv ist eine Rechtskurve, negativ eine Linkskurve. Hält von selbst bei einem Hindernis an. Nach 20 Sekunden ist Schluss (reason timeout); mit Standardtempo schafft er darin etwa 2,5 m, größere Kreise also in Teilen oder schneller fahren. Ergebnis: turned_deg, driven_cm, reason (done, obstacle, stopped, tilted, timeout), floor (wie bei drive, Position in Grad) und min_distance_cm.",
+			desc: "Fährt vorwärts eine Kurve auf einem Kreis mit dem Radius radius_cm (gemessen bis zur Kreismitte). degrees sagt, wie weit sich die Fahrtrichtung dabei dreht: 360 ist ein ganzer Kreis, 180 ein Halbkreis, 90 eine Viertelkurve. Positiv ist eine Rechtskurve, negativ eine Linkskurve. Mit stop_on_color hält er vorher an, sobald die Bodenfarbe erscheint (reason color), wie bei drive_until. Hält von selbst bei einem Hindernis an. Nach 20 Sekunden ist Schluss (reason timeout); mit Standardtempo schafft er darin etwa 2,5 m, größere Kreise also in Teilen oder schneller fahren. Ergebnis: turned_deg, driven_cm, reason (done, color, obstacle, stopped, tilted, timeout), color, floor (wie bei drive, Position in cm entlang der Kurve) und min_distance_cm.",
 			props: static(map[string]any{
-				"radius_cm": map[string]any{"type": "number", "minimum": 10, "maximum": 200},
-				"degrees":   map[string]any{"type": "number", "minimum": -720, "maximum": 720},
-				"speed":     map[string]any{"type": "number", "minimum": 5, "maximum": 80, "description": "Umdrehungen pro Minute, Standard 40."},
+				"radius_cm":     map[string]any{"type": "number", "minimum": 10, "maximum": 200},
+				"degrees":       map[string]any{"type": "number", "minimum": -720, "maximum": 720},
+				"stop_on_color": map[string]any{"type": "string", "enum": floorColors},
+				"speed":         map[string]any{"type": "number", "minimum": 5, "maximum": 80, "description": "Umdrehungen pro Minute, Standard 40."},
 			}),
 			required: []string{"radius_cm", "degrees"}, robot: robotOne,
 			run: func(ctx context.Context, c *call) any {
-				args := c.pick("radius_cm", "speed")
+				args := c.pick("radius_cm", "stop_on_color", "speed")
 				args["deg"] = c.num("degrees", 0)
 				return c.command(ctx, c.robots[0], "drive_arc", args, motionTimeout)
 			},
 		},
 		{
 			name: "drive_until",
-			desc: "Fährt geradeaus, bis eine Wand näher als stop_below_cm ist (reason wall), die Bodenfarbe stop_on_color erscheint (reason color) oder max_cm gefahren sind (reason max_cm). Die Farbe zählt, sobald eine der vier Bodensonden sie sieht; any ist jede Farbe außer Weiß. Der Roboter prüft das selbst mit geglätteten Messwerten. Ergebnis: driven_cm, reason, distance_cm, color, floor (wie bei drive) und min_distance_cm.",
+			desc: "Fährt geradeaus, bis eine Wand näher als stop_below_cm ist (reason wall), die Bodenfarbe stop_on_color erscheint (reason color) oder max_cm gefahren sind (reason max_cm). Die Farbe zählt, sobald eine der vier Bodensonden sie sieht; any ist jede Farbe außer Weiß. Steht der Roboter beim Start schon auf der Farbe, zählt sie erst, wenn er sie verlassen hat und wieder erreicht. Der Roboter prüft das selbst mit geglätteten Messwerten. Ergebnis: driven_cm, reason, distance_cm, color, floor (wie bei drive) und min_distance_cm.",
 			props: static(map[string]any{
 				"max_cm":        map[string]any{"type": "number", "minimum": 1, "maximum": 300},
 				"stop_below_cm": map[string]any{"type": "number", "minimum": 3, "maximum": 100},
@@ -457,7 +458,7 @@ func builtins() []*tool {
 		},
 		{
 			name: "follow_line_until",
-			desc: "Folgt einer Linie auf dem Boden und lenkt dabei selbst. Endet an der Farbe stop_on_color (reason color), an einer Kreuzung (reason crossing, abschaltbar mit stop_at_crossing false), wenn die Linie aufhört (reason line_lost) oder nach max_cm (reason max_cm). Ergebnis: driven_cm, reason, color und floor (wie bei drive).",
+			desc: "Folgt einer Linie auf dem Boden und lenkt dabei selbst. Endet an der Farbe stop_on_color (reason color, zählt wie bei drive_until), an einer Kreuzung (reason crossing, abschaltbar mit stop_at_crossing false), wenn die Linie aufhört (reason line_lost) oder nach max_cm (reason max_cm). Ergebnis: driven_cm, reason, color und floor (wie bei drive).",
 			props: static(map[string]any{
 				"max_cm":           map[string]any{"type": "number", "minimum": 1, "maximum": 300},
 				"stop_on_color":    map[string]any{"type": "string", "enum": floorColors},
