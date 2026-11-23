@@ -80,6 +80,8 @@ the user chose Nx over Make). Run `npm install` once.
 - `npx nx run server:dev`: server with `deploy/local/lab.yaml` (HTTP 127.0.0.1:8080, MQTT :1883,
   dev secrets set in `server/project.json`).
 - `npx nx run sim:run --robots=2 --world=sim/worlds/labyrinth.json`: simulated robots.
+- `npx nx run sim:e2e`: end-to-end smoke test (`sim/e2e/`): builds and starts `labserver` with the
+  scripted model, one seeded sim robot, drives join/assign/prompt/start over HTTP. Runs in CI.
 - `npx nx run robot:bundle [--config=robot/config.py]`: build `robot/dist/main.py`.
 - `npx nx run sim:grid`: regenerate the line field world and build plan after changing `sim/grid.py`.
 - `go test -race ./...` in `server/` before touching agent, robots or tools: they are concurrent.

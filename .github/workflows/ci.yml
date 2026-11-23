@@ -41,3 +41,6 @@ jobs:
 
       - name: Lint, test, build, bundle
         run: npx nx run-many -t lint test build-linux bundle --outputStyle=static
+
+      - name: End-to-end smoke test (server + simulated robot + scripted model)
+        run: npx nx run sim:e2e --outputStyle=static

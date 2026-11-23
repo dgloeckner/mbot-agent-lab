@@ -32,6 +32,7 @@ def main(argv=None):
     p.add_argument("--world", default=str(HERE / "worlds" / "arena.json"))
     p.add_argument("--trace", type=float, default=0)
     p.add_argument("--no-noise", action="store_true", help="ideal sensors (default: realistic noise)")
+    p.add_argument("--seed", type=int, default=None, help="seed the sensor noise; robot n gets seed+n-1")
     a = p.parse_args(argv)
 
     build = HERE / ".build" / "main.py"
@@ -47,6 +48,8 @@ def main(argv=None):
                "--host", a.host, "--port", str(a.port),
                "--world", a.world, "--start", str(i - 1),
                "--bundle", str(build), "--trace", str(a.trace)] + (["--no-noise"] if a.no_noise else [])
+        if a.seed is not None:
+            cmd += ["--seed", str(a.seed + i - 1)]
         procs.append(subprocess.Popen(cmd))
         print("sim: started %s" % robot_id, file=sys.stderr)
 

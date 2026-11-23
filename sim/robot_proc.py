@@ -54,9 +54,11 @@ def main(argv=None):
     p.add_argument("--bundle", required=True, help="bundled main.py built without --config")
     p.add_argument("--trace", type=float, default=0, help="print the pose every N seconds")
     p.add_argument("--no-noise", action="store_true", help="ideal sensors instead of realistic noise")
+    p.add_argument("--seed", type=int, default=None, help="seed for the sensor noise (default: random)")
     a = p.parse_args(argv)
 
-    simstate.world = World.load(a.world, a.id, a.start, noise=None if a.no_noise else random.Random())
+    noise = None if a.no_noise else random.Random(a.seed)
+    simstate.world = World.load(a.world, a.id, a.start, noise=noise)
     sys.modules["config"] = make_config(a)
     if a.trace > 0:
         threading.Thread(target=trace, args=(simstate.world, a.trace), daemon=True).start()
