@@ -73,6 +73,7 @@ class Robot:
             self.end_skill("reassigned")
             hw_motors_stop()
             self.trip_log = []
+            self.ui.led = None
         self.owner = team
         self.ui.set_owner(p.get("owner", "") if team else "", p.get("name", ""), p.get("color"))
         self.ui.set_agent(p.get("agent", "waiting"))
@@ -96,7 +97,7 @@ class Robot:
         elif name in MOTION_SKILLS or name == "calibrate_colors":
             self.start_motion(cmd_id, name, args)
         elif name == "set_leds":
-            self.ui.color = args.get("color") or self.ui.color
+            self.ui.led = args.get("color") or self.ui.led
             self.reply(cmd_id, True, "done")
         elif name == "show_text":
             self.ui.set_text(str(args.get("text", "")))

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -201,6 +202,29 @@ func (s *Service) RenameTeam(ctx context.Context, teamID, name string) error {
 		}
 	}
 	s.notify(teamID, "team_renamed", fmt.Sprintf("Euer Team heißt jetzt „%s“.", name), map[string]string{"name": name})
+	return nil
+}
+
+// SetTeamColor changes a team's color. Its robots switch their LEDs at the
+// next heartbeat. Several teams may share a color.
+func (s *Service) SetTeamColor(ctx context.Context, teamID, color string) error {
+	if !slices.Contains(TeamColors, color) {
+		return &UserError{Msg: "Diese Farbe gibt es nicht."}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.Store.SetTeamColor(ctx, teamID, color); errors.Is(err, store.ErrNotFound) {
+		return ErrUnknownTeam
+	} else if err != nil {
+		return err
+	}
+	t, _ := s.Store.Team(ctx, teamID)
+	for _, rb := range s.Robots.Snapshot() {
+		if rb.Owner == teamID {
+			_ = s.Robots.Assign(rb.ID, robots.Owner{TeamID: t.ID, TeamName: t.Name, Color: t.Color, Alias: rb.Alias})
+		}
+	}
+	s.notify(teamID, "team_color", fmt.Sprintf("Eure Teamfarbe ist jetzt %s.", colorNames[color]), map[string]string{"color": color})
 	return nil
 }
 
