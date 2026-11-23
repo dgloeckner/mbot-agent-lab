@@ -72,7 +72,7 @@ class BundleTest(unittest.TestCase):
         # robot crashed with ImportError at start. Add a module only after checking
         # it on the robot. json/time are fallbacks for CPython and _thread is optional,
         # all behind try/except.
-        allowed = {"config", "cyberpi", "mbot2", "mbuild", "socket", "ssl", "time", "json", "ujson", "_thread"}
+        allowed = {"config", "cyberpi", "mbot2", "mbuild", "socket", "ssl", "time", "json", "ujson", "_thread", "sys"}
         found = set()
         for node in ast.walk(ast.parse(bundle.bundle())):
             if isinstance(node, ast.Import):

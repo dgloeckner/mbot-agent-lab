@@ -126,6 +126,20 @@ class RobotTest(unittest.TestCase):
             self.robot.iterate()
             time.sleep(0.02)
 
+    def test_older_robot_thread_stops_when_the_program_starts_again(self):
+        import sys
+        import threading
+        gen = [1]
+        sys.modules["mbot_gen"] = gen
+        t = threading.Thread(target=self.ns["run_robot"], args=(gen, 1), daemon=True)
+        t.start()
+        time.sleep(0.3)
+        self.assertTrue(t.is_alive())
+        gen[0] += 1  # what main() does on the next start
+        t.join(2)
+        self.assertFalse(t.is_alive(), "old robot thread still running")
+        del sys.modules["mbot_gen"]
+
     def test_unknown_command(self):
         self.client.deliver("lab/mbot-1/cmd", {"id": "c-9", "name": "self_destruct"})
         self.run_until(lambda: self.result("c-9"))

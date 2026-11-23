@@ -259,10 +259,13 @@ class Robot:
         self.publish_state(now)
         self.ui.tick(now)
 
-    def run(self):
-        while True:
+    def run(self, alive=None):
+        """Loop until alive() turns false, then stop and drop the connection."""
+        while alive is None or alive():
             start = ticks_ms()
             self.iterate()
             rest = LOOP_MS - ticks_diff(ticks_ms(), start)
             if rest > 0:
                 sleep_ms(rest)
+        hw_motors_stop()
+        self.link.close()
