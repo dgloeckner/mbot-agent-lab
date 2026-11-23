@@ -66,7 +66,11 @@ func (a *actor) addInbox(ctx context.Context, r *run, msgs []Message) {
 		line, _ := json.Marshal(inboxLine{From: sourceLabel(m), AgoS: int(now.Sub(m.At).Seconds()), Kind: kind, Text: m.Text, Data: m.Data})
 		b.Write(line)
 		b.WriteByte('\n')
-		if id := a.store(ctx, r, m.From, m.Kind, m.Text, m.Data); id != 0 {
+		source := m.From
+		if m.From == SourceRobot && m.Robot != "" {
+			source = SourceRobot + ":" + m.Robot // which robot, for the protocol of a conversation
+		}
+		if id := a.store(ctx, r, source, m.Kind, m.Text, m.Data); id != 0 {
 			r.lastMsgID = id
 		}
 	}

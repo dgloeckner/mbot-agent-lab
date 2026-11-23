@@ -49,7 +49,7 @@ export interface Snapshot {
 }
 
 export type Theme = 'system' | 'light' | 'dark'
-export type SideTab = 'log' | 'notes' | 'tools'
+export type SideTab = 'log' | 'conversation' | 'notes' | 'tools'
 
 export interface Prefs {
   theme: Theme

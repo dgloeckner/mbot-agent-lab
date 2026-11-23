@@ -16,6 +16,11 @@ const (
 	SourceAgent  = "agent" // the team's own agent; other agents are "agent:<team name>"
 )
 
+// ChannelConversation marks entries of the conversation between a team and
+// its agent while no run is active. The team page shows them apart from the
+// run protocol.
+const ChannelConversation = "conversation"
+
 // LogEntry is one line in a team's live log. Text is only set for free text
 // (team messages, system notices); robot events carry Kind and Data and are
 // worded by the frontend.
@@ -27,6 +32,8 @@ type LogEntry struct {
 	Robot  string          `json:"robot,omitempty"` // alias of the robot
 	Text   string          `json:"text,omitempty"`
 	Data   json.RawMessage `json:"data,omitempty"`
+	// Channel is empty for the run protocol, ChannelConversation for the conversation.
+	Channel string `json:"channel,omitempty"`
 }
 
 // backlogSize is how many entries per team are kept for clients that

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"time"
 )
 
@@ -22,17 +23,46 @@ type Run struct {
 	Report        string    `json:"report,omitempty"`
 }
 
-// Totals sums the runs of a team.
+// Kinds of rows in runs. A conversation is the talk between a team and its
+// agent while no run is active; it never moves a robot.
+const (
+	KindRun          = "run"
+	KindConversation = "conversation"
+)
+
+// Totals sums the runs and conversations of a team. Tokens and cost include
+// the conversations; Conversation shows their share on its own.
 type Totals struct {
 	Runs         int   `json:"runs"`
 	TokensIn     int   `json:"tokens_in"`
 	TokensOut    int   `json:"tokens_out"`
 	CostMicroEUR int64 `json:"cost_micro_eur"`
+
+	Conversation ConversationTotals `json:"conversation"`
 }
 
-const totalsQuery = `SELECT team_id, COUNT(*), COALESCE(SUM(tokens_in), 0), COALESCE(SUM(tokens_out), 0), COALESCE(SUM(cost_microeur), 0) FROM runs`
+// ConversationTotals sums the conversations of a team.
+type ConversationTotals struct {
+	Count        int   `json:"count"`
+	TokensIn     int   `json:"tokens_in"`
+	TokensOut    int   `json:"tokens_out"`
+	CostMicroEUR int64 `json:"cost_micro_eur"`
+}
 
-// TeamTotals sums all runs per team, the running ones included.
+const totalsQuery = `SELECT team_id,
+	COALESCE(SUM(kind = 'run'), 0), COALESCE(SUM(tokens_in), 0), COALESCE(SUM(tokens_out), 0), COALESCE(SUM(cost_microeur), 0),
+	COALESCE(SUM(kind = 'conversation'), 0),
+	COALESCE(SUM(CASE WHEN kind = 'conversation' THEN tokens_in END), 0),
+	COALESCE(SUM(CASE WHEN kind = 'conversation' THEN tokens_out END), 0),
+	COALESCE(SUM(CASE WHEN kind = 'conversation' THEN cost_microeur END), 0)
+	FROM runs`
+
+func scanTotals(sc interface{ Scan(...any) error }, team *sql.NullString, t *Totals) error {
+	c := &t.Conversation
+	return sc.Scan(team, &t.Runs, &t.TokensIn, &t.TokensOut, &t.CostMicroEUR, &c.Count, &c.TokensIn, &c.TokensOut, &c.CostMicroEUR)
+}
+
+// TeamTotals sums all runs and conversations per team, the open ones included.
 func (s *Store) TeamTotals(ctx context.Context) (map[string]Totals, error) {
 	rows, err := s.DB.QueryContext(ctx, totalsQuery+` GROUP BY team_id`)
 	if err != nil {
@@ -41,67 +71,95 @@ func (s *Store) TeamTotals(ctx context.Context) (map[string]Totals, error) {
 	defer rows.Close()
 	out := map[string]Totals{}
 	for rows.Next() {
-		var team string
+		var team sql.NullString
 		var t Totals
-		if err := rows.Scan(&team, &t.Runs, &t.TokensIn, &t.TokensOut, &t.CostMicroEUR); err != nil {
+		if err := scanTotals(rows, &team, &t); err != nil {
 			return nil, err
 		}
-		out[team] = t
+		out[team.String] = t
 	}
 	return out, rows.Err()
 }
 
-// TeamTotal sums all runs of one team, the running one included.
+// TeamTotal sums all runs and conversations of one team, the open ones included.
 func (s *Store) TeamTotal(ctx context.Context, team string) (Totals, error) {
 	var t Totals
 	var id sql.NullString
-	err := s.DB.QueryRowContext(ctx, totalsQuery+` WHERE team_id = ?`, team).Scan(&id, &t.Runs, &t.TokensIn, &t.TokensOut, &t.CostMicroEUR)
+	err := scanTotals(s.DB.QueryRowContext(ctx, totalsQuery+` WHERE team_id = ?`, team), &id, &t)
 	return t, err
 }
 
 // CreateRun starts a run with the given prompt.
 func (s *Store) CreateRun(ctx context.Context, team string, promptID int64, model string) (int64, error) {
-	res, err := s.DB.ExecContext(ctx, `INSERT INTO runs (team_id, prompt_id, model, started_at) VALUES (?, ?, ?, ?)`, team, nullID(promptID), model, now())
+	return s.create(ctx, KindRun, team, promptID, model)
+}
+
+// CreateConversation starts a conversation. promptID is the prompt the team
+// had deployed then (0 for none).
+func (s *Store) CreateConversation(ctx context.Context, team string, promptID int64, model string) (int64, error) {
+	return s.create(ctx, KindConversation, team, promptID, model)
+}
+
+func (s *Store) create(ctx context.Context, kind, team string, promptID int64, model string) (int64, error) {
+	res, err := s.DB.ExecContext(ctx, `INSERT INTO runs (team_id, kind, prompt_id, model, started_at) VALUES (?, ?, ?, ?, ?)`, team, kind, nullID(promptID), model, now())
 	if err != nil {
 		return 0, err
 	}
 	return res.LastInsertId()
 }
 
-// EndRun records why and when a run ended, and the agent's report.
+// EndRun records why and when a run (or conversation) ended, and the agent's report.
 func (s *Store) EndRun(ctx context.Context, id int64, reason, report string) error {
 	_, err := s.DB.ExecContext(ctx, `UPDATE runs SET ended_at = ?, end_reason = ?, report = ? WHERE id = ? AND ended_at IS NULL`,
 		now(), reason, nullString(report), id)
 	return err
 }
 
-// EndOpenRuns closes runs left open by a server restart.
+// EndOpenRuns closes runs and conversations left open by a server restart.
 func (s *Store) EndOpenRuns(ctx context.Context, reason string) error {
 	_, err := s.DB.ExecContext(ctx, `UPDATE runs SET ended_at = ?, end_reason = ? WHERE ended_at IS NULL`, now(), reason)
 	return err
 }
 
-// Runs returns the latest runs of a team, newest first.
+const runColumns = `r.id, r.team_id, COALESCE(p.version, 0), r.model, r.started_at, COALESCE(r.ended_at, ''),
+	COALESCE(r.end_reason, ''), r.tokens_in, r.tokens_out, r.cost_microeur, COALESCE(r.report, '')
+	FROM runs r LEFT JOIN prompts p ON p.id = r.prompt_id`
+
+func scanRun(sc interface{ Scan(...any) error }) (Run, error) {
+	var r Run
+	var started, ended string
+	err := sc.Scan(&r.ID, &r.TeamID, &r.PromptVersion, &r.Model, &started, &ended, &r.EndReason,
+		&r.TokensIn, &r.TokensOut, &r.CostMicroEUR, &r.Report)
+	r.StartedAt, r.EndedAt = parseTime(started), parseTime(ended)
+	return r, err
+}
+
+// Runs returns the latest runs of a team, newest first. Conversations are left out.
 func (s *Store) Runs(ctx context.Context, team string, limit int) ([]Run, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT r.id, r.team_id, COALESCE(p.version, 0), r.model, r.started_at, COALESCE(r.ended_at, ''),
-		COALESCE(r.end_reason, ''), r.tokens_in, r.tokens_out, r.cost_microeur, COALESCE(r.report, '')
-		FROM runs r LEFT JOIN prompts p ON p.id = r.prompt_id WHERE r.team_id = ? ORDER BY r.id DESC LIMIT ?`, team, limit)
+	rows, err := s.DB.QueryContext(ctx, `SELECT `+runColumns+` WHERE r.team_id = ? AND r.kind = 'run' ORDER BY r.id DESC LIMIT ?`, team, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	out := []Run{}
 	for rows.Next() {
-		var r Run
-		var started, ended string
-		if err := rows.Scan(&r.ID, &r.TeamID, &r.PromptVersion, &r.Model, &started, &ended, &r.EndReason,
-			&r.TokensIn, &r.TokensOut, &r.CostMicroEUR, &r.Report); err != nil {
+		r, err := scanRun(rows)
+		if err != nil {
 			return nil, err
 		}
-		r.StartedAt, r.EndedAt = parseTime(started), parseTime(ended)
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// LastRun returns the newest ended run of a team, or ErrNotFound.
+func (s *Store) LastRun(ctx context.Context, team string) (Run, error) {
+	r, err := scanRun(s.DB.QueryRowContext(ctx, `SELECT `+runColumns+`
+		WHERE r.team_id = ? AND r.kind = 'run' AND r.ended_at IS NOT NULL ORDER BY r.id DESC LIMIT 1`, team))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Run{}, ErrNotFound
+	}
+	return r, err
 }
 
 // AddMessage logs a message of a run (inbox entry, agent text, system notice).
@@ -163,6 +221,48 @@ func (s *Store) RunMessages(ctx context.Context, run int64) ([]RunMessage, error
 		out = append(out, m)
 	}
 	return out, rows.Err()
+}
+
+// RunStep is one entry of a run's protocol: a message (Source set) or a tool
+// call (Tool set), in the order they happened.
+type RunStep struct {
+	Seq    int
+	Source string
+	Kind   string
+	Text   string
+	Data   json.RawMessage
+	Tool   string
+	Args   json.RawMessage
+	Result json.RawMessage
+}
+
+// RunSteps returns the messages and tool calls of a run in order.
+func (s *Store) RunSteps(ctx context.Context, run int64) ([]RunStep, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT seq, source, kind, text, COALESCE(data, ''), '', '', '' FROM messages WHERE run_id = ?
+		UNION ALL SELECT seq, '', '', '', '', name, args, COALESCE(result, '') FROM tool_calls WHERE run_id = ?
+		ORDER BY 1`, run, run)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []RunStep{}
+	for rows.Next() {
+		var st RunStep
+		var data, args, result string
+		if err := rows.Scan(&st.Seq, &st.Source, &st.Kind, &st.Text, &data, &st.Tool, &args, &result); err != nil {
+			return nil, err
+		}
+		st.Data, st.Args, st.Result = rawOrNil(data), rawOrNil(args), rawOrNil(result)
+		out = append(out, st)
+	}
+	return out, rows.Err()
+}
+
+func rawOrNil(s string) json.RawMessage {
+	if s == "" {
+		return nil
+	}
+	return json.RawMessage(s)
 }
 
 func nullString(s string) any {

@@ -32,6 +32,7 @@ export const api = {
   prompt: (version: number) => req<PromptVersion>('GET', `/prompts/${version}`),
   deploy: (text: string, restart: boolean) => req<PromptVersion>('POST', '/prompt', { text, restart }),
   message: (text: string) => req<LogEntry>('POST', '/message', { text }),
+  newConversation: () => req<void>('POST', '/conversation/new'),
   start: () => req<AgentStatus>('POST', '/start'),
   stop: () => req<unknown>('POST', '/stop'),
   notes: () => req<Note[]>('GET', '/notes'),

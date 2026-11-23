@@ -98,6 +98,10 @@ type Budgets struct {
 	MaxAgentMessagesPerMinute int `yaml:"max_agent_messages_per_minute"`
 	MaxRunMinutes             int `yaml:"max_run_minutes"`
 	MaxHistoryMessages        int `yaml:"max_history_messages"` // older ones are left out of the context
+
+	// Conversations: a team talks with its agent while no run is active.
+	MaxConversationMessagesPerMinute int `yaml:"max_conversation_messages_per_minute"`
+	MaxTokensPerConversation         int `yaml:"max_tokens_per_conversation"` // then a new conversation begins
 }
 
 // Robot is one physical (or simulated) mBot2.
@@ -119,6 +123,9 @@ const (
 	DefaultMaxAgentMessages  = 6
 	DefaultMaxRunMinutes     = 20
 	DefaultMaxHistory        = 40
+
+	DefaultMaxConversationMessages  = 6
+	DefaultMaxTokensPerConversation = 100000
 )
 
 var idPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
@@ -181,6 +188,12 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Budgets.MaxHistoryMessages == 0 {
 		c.Budgets.MaxHistoryMessages = DefaultMaxHistory
+	}
+	if c.Budgets.MaxConversationMessagesPerMinute == 0 {
+		c.Budgets.MaxConversationMessagesPerMinute = DefaultMaxConversationMessages
+	}
+	if c.Budgets.MaxTokensPerConversation == 0 {
+		c.Budgets.MaxTokensPerConversation = DefaultMaxTokensPerConversation
 	}
 	for name, p := range c.LLM.Providers {
 		if p.Kind == "" {

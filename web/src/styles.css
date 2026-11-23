@@ -1078,6 +1078,135 @@ kbd {
   color: var(--muted);
 }
 
+/* ---------- conversation ---------- */
+
+.composer-hint {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.composer-hint p {
+  margin: 0;
+  flex: 1;
+}
+
+.conversation-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.conversation-head .panel-intro {
+  flex: 1;
+}
+
+.conversation-head .btn {
+  margin-top: 12px;
+  white-space: nowrap;
+}
+
+.talk {
+  list-style: none;
+  margin: 0;
+  padding: 10px 2px 14px;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.talk-msg {
+  max-width: 85%;
+  padding: 8px 12px 10px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 14.5px;
+  line-height: 1.45;
+}
+
+.talk-msg[data-from='team'] {
+  align-self: flex-end;
+  border-color: color-mix(in oklab, var(--accent) 35%, var(--line));
+  background: color-mix(in oklab, var(--accent) 9%, var(--surface));
+  border-bottom-right-radius: 4px;
+}
+
+.talk-msg[data-from='agent'] {
+  align-self: flex-start;
+  border-color: color-mix(in oklab, var(--agent) 30%, var(--line));
+  background: color-mix(in oklab, var(--agent) 6%, var(--surface));
+  border-bottom-left-radius: 4px;
+}
+
+.talk-msg p {
+  margin: 2px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.talk-who {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.talk-msg[data-from='agent'] .talk-who {
+  color: var(--agent);
+}
+
+.talk-who time {
+  margin-left: 6px;
+  font-weight: 400;
+  color: var(--faint);
+}
+
+.talk-note {
+  align-self: center;
+  max-width: 92%;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.talk-thinking {
+  animation: talk-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes talk-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .talk-thinking {
+    animation: none;
+  }
+}
+
+.tab-badge {
+  display: inline-block;
+  min-width: 1.5em;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--agent);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
 .panel-intro {
   margin: 12px 0 14px;
   color: var(--muted);

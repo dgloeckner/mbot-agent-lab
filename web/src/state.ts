@@ -11,10 +11,18 @@ let local: LocalStore
 export const session = signal<Session | null>(null)
 export const loadError = signal<string | null>(null)
 export const robots = signal<Robot[]>([])
-export const agent = signal<AgentStatus>({ state: 'waiting', running: false, tokens_in: 0, tokens_out: 0, cost_micro_eur: 0, calls: 0 })
-/** All runs of the team, the current one included. */
-export const totals = signal<Totals>({ runs: 0, tokens_in: 0, tokens_out: 0, cost_micro_eur: 0 })
+export const agent = signal<AgentStatus>({ state: 'waiting', running: false, tokens_in: 0, tokens_out: 0, cost_micro_eur: 0, calls: 0, conversation: false })
+/** All runs and conversations of the team, the current one included. */
+export const totals = signal<Totals>({
+  runs: 0, tokens_in: 0, tokens_out: 0, cost_micro_eur: 0,
+  conversation: { count: 0, tokens_in: 0, tokens_out: 0, cost_micro_eur: 0 },
+})
+/** The run protocol. */
 export const log = signal<LogEntry[]>([])
+/** The conversation with the agent while no run is active, kept apart from the protocol. */
+export const conversation = signal<LogEntry[]>([])
+/** Agent answers in the conversation the team has not seen yet. */
+export const conversationUnread = signal(0)
 export const conn = signal<ConnState>('connecting')
 export const notes = signal<Note[]>([])
 
@@ -60,6 +68,19 @@ function fail(err: unknown) {
 export function updatePrefs(patch: Partial<Prefs>) {
   prefs.value = { ...prefs.value, ...patch }
   LocalStore.savePrefs(kv, prefs.value)
+}
+
+// Seeing the conversation tab marks its answers as read.
+effect(() => {
+  if (prefs.value.sideTab === 'conversation') conversationUnread.value = 0
+})
+
+/** Appends a live entry; false if it was a replay after a reconnect. */
+function append(list: typeof log, e: LogEntry): boolean {
+  const cur = list.value
+  if (cur.length && e.id <= cur[cur.length - 1].id) return false
+  list.value = cur.length >= MAX_LOG ? [...cur.slice(-MAX_LOG + 1), e] : [...cur, e]
+  return true
 }
 
 // Apply the theme preference to the document.
@@ -108,9 +129,13 @@ export async function init() {
       if (session.value) session.value = { ...session.value, models: m }
     },
     log: (e) => {
-      const cur = log.value
-      if (cur.length && e.id <= cur[cur.length - 1].id) return // replayed after reconnect
-      log.value = cur.length >= MAX_LOG ? [...cur.slice(-MAX_LOG + 1), e] : [...cur, e]
+      if (e.channel === 'conversation') {
+        if (append(conversation, e) && e.source === 'agent' && e.kind === 'text' && prefs.value.sideTab !== 'conversation') {
+          conversationUnread.value++
+        }
+        return
+      }
+      if (!append(log, e)) return
       if (e.kind === 'deploy') void onRemoteDeploy(Number(e.data?.version))
       if (e.kind === 'team_renamed' && session.value && typeof e.data?.name === 'string') {
         session.value = { ...session.value, team: { ...session.value.team, name: e.data.name } }
@@ -225,15 +250,24 @@ export async function versionText(v: number): Promise<string> {
   return p.text ?? ''
 }
 
+/**
+ * Sends a message to the agent. The server decides where it goes: to the run
+ * if one is active, otherwise into the conversation. The page follows it.
+ */
 export async function sendMessage(text: string): Promise<boolean> {
   try {
-    await api.message(text)
+    const e = await api.message(text)
+    const tab = e.channel === 'conversation' ? 'conversation' : 'log'
+    if (prefs.value.sideTab !== tab) updatePrefs({ sideTab: tab })
     return true
   } catch (err) {
     fail(err)
     return false
   }
 }
+
+/** Ends the conversation; the agent then only knows its notes and the last run. */
+export const newConversation = () => attempt(api.newConversation())
 
 export async function stopAll() {
   busy.value = 'stop'

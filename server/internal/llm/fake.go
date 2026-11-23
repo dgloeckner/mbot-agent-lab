@@ -11,7 +11,9 @@ import (
 // Fake is a scripted stand-in for a language model. It explores with the real
 // tools (read sensors, drive to the next wall, turn, repeat) and finishes after
 // a few moves, so the agent runtime can be developed and demonstrated without
-// an API key or network. It ignores the team prompt.
+// an API key or network. It ignores the team prompt. Without the finish tool
+// it is in a conversation (no run active): it answers in text, reads the
+// sensors or writes a note, and never moves a robot.
 type Fake struct {
 	// Delay simulates thinking time; zero means a short default.
 	Delay time.Duration
@@ -71,6 +73,10 @@ func (f Fake) Chat(ctx context.Context, req Request) (Response, error) {
 		return Response{Message: msg, Usage: Usage{PromptTokens: in + 300, CompletionTokens: len(text)/4 + 20}}, nil
 	}
 
+	if _, run := has["finish"]; !run {
+		return f.converse(req, lastTool, lastResult, reply)
+	}
+
 	// A new instruction is the start of the run or a message from the team.
 	// Robot events slipped in between tool rounds just continue the plan.
 	if last.Role == RoleUser && (!assistantSeen || strings.Contains(last.Content, `"von":"Team"`)) {
@@ -112,6 +118,63 @@ func (f Fake) Chat(ctx context.Context, req Request) (Response, error) {
 	default:
 		return reply("Ich warte.", "", nil)
 	}
+}
+
+// converse answers a team message in a conversation. It only ever calls
+// read_sensors or remember.
+func (f Fake) converse(req Request, lastTool, lastResult string, reply func(string, string, map[string]any) (Response, error)) (Response, error) {
+	last := req.Messages[len(req.Messages)-1]
+	if last.Role == RoleTool {
+		switch lastTool {
+		case "read_sensors":
+			var st struct {
+				Distance float64 `json:"distance_cm"`
+				Battery  float64 `json:"battery"`
+				Error    string  `json:"error"`
+			}
+			_ = json.Unmarshal([]byte(lastResult), &st)
+			if st.Error != "" {
+				return reply("Ich konnte die Sensoren nicht lesen: "+st.Error, "", nil)
+			}
+			return reply(fmt.Sprintf("Vorne ist %.0f cm Platz, der Akku hat %.0f %%.", st.Distance, st.Battery), "", nil)
+		case "remember":
+			return reply("Gemerkt. Die Notiz sehe ich auch im nächsten Lauf.", "", nil)
+		}
+		return reply("Das ging nicht. Im Gespräch kann ich nur Sensoren lesen und Notizen anlegen.", "", nil)
+	}
+	question := lastTeamText(last.Content)
+	lower := strings.ToLower(question)
+	switch {
+	case strings.Contains(lower, "merk"):
+		return reply("", "remember", map[string]any{"text": clampText(question, 200)})
+	case strings.Contains(lower, "abstand") || strings.Contains(lower, "wand") || strings.Contains(lower, "sensor") || strings.Contains(lower, "akku"):
+		return reply("", "read_sensors", map[string]any{})
+	}
+	return reply("Ich bin das Testmodell im Gespräch. Gerade läuft kein Lauf, deshalb bewege ich keinen Roboter. "+
+		"Im nächsten Lauf würde ich mich mit read_sensors umsehen und mit drive_until bis zur nächsten Wand fahren.", "", nil)
+}
+
+// lastTeamText returns the text of the newest inbox line from the team.
+func lastTeamText(inbox string) string {
+	lines := strings.Split(inbox, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		var l struct {
+			From string `json:"von"`
+			Text string `json:"text"`
+		}
+		if json.Unmarshal([]byte(lines[i]), &l) == nil && l.From == "Team" {
+			return l.Text
+		}
+	}
+	return ""
+}
+
+func clampText(s string, n int) string {
+	r := []rune(s)
+	if len(r) > n {
+		r = r[:n]
+	}
+	return string(r)
 }
 
 // firstRobot returns the first allowed value of a tool's "robot" parameter.

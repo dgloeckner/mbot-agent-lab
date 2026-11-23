@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -150,5 +151,48 @@ func TestFakeExploresAndFinishes(t *testing.T) {
 	}
 	if names[0] != "read_sensors" || names[len(names)-1] != "finish" {
 		t.Errorf("sequence = %v", names)
+	}
+}
+
+// In a conversation (no finish tool) the fake answers in text, reads the
+// sensors or writes a note, and never moves a robot even when told to.
+func TestFakeConversationNeverMoves(t *testing.T) {
+	tools := []Tool{
+		{Name: "read_sensors", Parameters: json.RawMessage(`{"type":"object"}`)},
+		{Name: "remember", Parameters: json.RawMessage(`{"type":"object"}`)},
+	}
+	f := Fake{Delay: time.Millisecond}
+	ask := func(q string) Message {
+		line, _ := json.Marshal(map[string]any{"von": "Team", "vor_s": 0, "text": q})
+		resp, err := f.Chat(context.Background(), Request{Messages: []Message{{Role: RoleSystem}, {Role: RoleUser, Content: "Posteingang (älteste zuerst):\n" + string(line)}}, Tools: tools})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp.Message
+	}
+	for q, want := range map[string]string{
+		"Fahr sofort 20 cm!":               "",
+		"Stopp! Halt an!":                  "",
+		"Wie weit ist die Wand weg?":       "read_sensors",
+		"Merk dir: Kanten sind 20 cm lang": "remember",
+	} {
+		m := ask(q)
+		got := ""
+		if len(m.ToolCalls) > 0 {
+			got = m.ToolCalls[0].Function.Name
+		}
+		if got != want {
+			t.Errorf("%q: tool %q, want %q", q, got, want)
+		}
+		if want == "" && !strings.Contains(m.Content, "kein Lauf") {
+			t.Errorf("%q: answer %q", q, m.Content)
+		}
+	}
+	resp, _ := f.Chat(context.Background(), Request{Tools: tools, Messages: []Message{
+		{Role: RoleSystem}, {Role: RoleUser, Content: "x"}, ask("Abstand?"),
+		{Role: RoleTool, Name: "read_sensors", Content: `{"ok":true,"distance_cm":87,"battery":98}`},
+	}})
+	if !strings.Contains(resp.Message.Content, "87 cm") || len(resp.Message.ToolCalls) > 0 {
+		t.Errorf("after read_sensors: %+v", resp.Message)
 	}
 }

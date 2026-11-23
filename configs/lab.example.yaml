@@ -45,6 +45,8 @@ budgets:
   max_agent_messages_per_minute: 6
   max_run_minutes: 20              # a run ends after this long
   max_history_messages: 40         # older messages of a run leave the model context
+  max_conversation_messages_per_minute: 6   # team messages to a stopped agent
+  max_tokens_per_conversation: 100000      # then a new conversation begins
 
 robots:
   - { id: mbot-1, password_env: MBOT1_PASSWORD, color: red }

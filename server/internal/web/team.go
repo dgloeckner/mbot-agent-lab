@@ -163,11 +163,38 @@ func (s *Server) message(w http.ResponseWriter, r *http.Request, team store.Team
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("Die Nachricht hat %d Zeichen, erlaubt sind %d.", n, MaxMessageChars))
 		return
 	}
-	e := s.Hub.Publish(team.ID, live.LogEntry{Source: live.SourceTeam, Kind: "chat", Text: text})
-	if !s.Agents.Deliver(team.ID, agent.Message{From: agent.SourceTeam, Kind: "chat", Text: text, Wake: true}) {
-		s.Hub.Publish(team.ID, live.LogEntry{Source: live.SourceSystem, Kind: "info", Text: "Euer Agent läuft gerade nicht. Startet einen Lauf, dann liest er eure Nachrichten."})
+	// During a run the message goes to the run; otherwise it starts or
+	// continues a conversation. The returned entry's channel tells the page
+	// where the message ended up.
+	if s.Agents.Status(team.ID).Running {
+		e := s.Hub.Publish(team.ID, live.LogEntry{Source: live.SourceTeam, Kind: "chat", Text: text})
+		if !s.Agents.Deliver(team.ID, agent.Message{From: agent.SourceTeam, Kind: "chat", Text: text, Wake: true}) {
+			s.Hub.Publish(team.ID, live.LogEntry{Source: live.SourceSystem, Kind: "info", Text: "Der Lauf ist gerade zu Ende gegangen. Schreibt eure Nachricht im Gespräch noch einmal."})
+		}
+		writeJSON(w, http.StatusAccepted, e)
+		return
+	}
+	e, err := s.Agents.Talk(team.ID, text)
+	if err != nil {
+		var te *agent.TalkError
+		if !errors.As(err, &te) {
+			s.serverError(w, err)
+			return
+		}
+		status := http.StatusConflict
+		if te.Limited {
+			status = http.StatusTooManyRequests
+		}
+		writeError(w, status, te.Msg)
+		return
 	}
 	writeJSON(w, http.StatusAccepted, e)
+}
+
+// newConversation ends the open conversation; the next message starts a new one.
+func (s *Server) newConversation(w http.ResponseWriter, r *http.Request, team store.Team) {
+	s.Agents.NewConversation(team.ID)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) start(w http.ResponseWriter, r *http.Request, team store.Team) {

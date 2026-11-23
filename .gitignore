@@ -29,3 +29,6 @@ node_modules/
 
 # Team page build (embedded into the server)
 /server/internal/web/dist/app/
+
+# Conversation probe report (go test -tags chatprobe)
+/server/internal/agent/chatprobe-report.md

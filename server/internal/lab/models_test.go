@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/config"
@@ -97,4 +98,33 @@ func mustTeam(t *testing.T, st *store.Store, id string) store.Team {
 		t.Fatal(err)
 	}
 	return team
+}
+
+func TestConversationSwitch(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "lab.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	s := newService(t, st, map[string]config.Provider{"mistral": {Model: "m"}})
+	team, _ := s.Join(ctx, "TEST", "Rot")
+	if !s.ConversationEnabled() {
+		t.Fatal("conversations must be on by default")
+	}
+	if err := s.SetConversationEnabled(ctx, false); err != nil {
+		t.Fatal(err)
+	}
+	if s.ConversationEnabled() {
+		t.Error("still on")
+	}
+	backlog, _, cancel := s.Hub.Subscribe(team.ID, 0)
+	cancel()
+	if len(backlog) == 0 || backlog[len(backlog)-1].Channel != live.ChannelConversation || !strings.Contains(backlog[len(backlog)-1].Text, "abgeschaltet") {
+		t.Errorf("team not told: %+v", backlog)
+	}
+	// The switch survives a restart.
+	if again := newService(t, st, map[string]config.Provider{"mistral": {Model: "m"}}); again.ConversationEnabled() {
+		t.Error("switch not stored")
+	}
 }

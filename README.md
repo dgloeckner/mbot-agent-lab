@@ -134,7 +134,9 @@ All vendor API calls live in `robot/src/hw.py` and are marked `VERIFY` until che
   Robots are assigned by drag and drop or from a list; a team can have any number of robots, and
   every robot has at most one team. Teams can be renamed or deleted, team links copied, the lab
   code replaced, and all robots stopped at once. Each team card shows the tokens and cost of the
-  current or last run and the total over all its runs.
+  current or last run and the total over all its runs and conversations, the conversations'
+  share shown on its own. A checkbox switches conversations off for the whole lab, for example
+  for a competition (setting `conversation`).
 - **Robot names:** a newly assigned robot is called after its sticker color (`rot`, `blau`, …).
   Teams rename their robots on the team page; these names are what the agent uses for the `robot`
   parameter. The robot's display shows its name and team, and its LEDs show the team color.
@@ -157,12 +159,15 @@ robot's LEDs show, and the color band pulses in the robot's rhythm while the age
 - **Preview** of the rendered Markdown and **history** with a side-by-side diff against any
   deployed version or local snapshot, plus restore.
 - **Live log** over Server-Sent Events: robot events, deploys, messages, system notices. A
-  reconnecting browser catches up via `Last-Event-ID`.
+  reconnecting browser catches up via `Last-Event-ID`. Team messages go here during a run.
+- **Conversation** ("Gespräch"): while no run is active, the team talks with its agent in its
+  own tab, apart from the run protocol. A message sent without a run lands there; "Neues
+  Gespräch" starts over.
 - **Notes** the agent sees every round, and the **tool catalog** with one-click insertion.
 - **Robots:** live state per robot, rename by clicking the name, and "Finden" to make a robot
   blink and beep. The team name can be changed by clicking it; the link button copies the team link.
-- **Usage:** tokens and cost of the current or last run, and the total over all runs once there
-  is more than one.
+- **Usage:** tokens and cost of the current or last run, the total over all runs and
+  conversations, and the conversations' share.
 - **Model:** the model of the next run with its price per million tokens, as a choice when the
   control room released more than one.
 - **Browser storage** (`localStorage`, per team): the unsaved draft, up to 80 draft snapshots and
@@ -179,6 +184,16 @@ wake-up, so they do not burn tokens.
 - **Runs** start with "Lauf starten" and end with `finish(report)`, "Stopp" (which cancels a
   running model call), the time limit or the token limit. "Deployen und neu starten" begins a
   new run; a plain deploy takes effect at the next model call.
+- **Conversations:** while no run is active, a team message wakes the agent in conversation
+  mode instead of being dropped. It runs in the same actor on the team's model, but starts no
+  run: it is a `runs` row with `kind = 'conversation'`, so its messages, tool calls and model
+  calls are stored like a run's and its tokens count into the team totals, shown separately.
+  The context has conversation rules instead of the platform rules, every tool as text, the
+  team, prompt and notes, and the numbered protocol of the last run (`[2. drive]` = the second
+  `drive` call). Only `read_sensors` and `remember` can be called; motion and `finish` never.
+  The conversation never goes into a run's context, only notes do. It ends when a run starts,
+  with "Neues Gespräch", or at its token budget. Limits: 4 model calls per message,
+  `max_conversation_messages_per_minute`, `max_tokens_per_conversation`.
 - **Context** per model call: platform rules, the team prompt in its newest version, the notes,
   the last messages of the run (older ones are left out), then the inbox as one JSON line per
   message. The sender field (`Team`, `Roboter <Name>`, `Agent <Name>`, `System`) is set by the
@@ -187,7 +202,8 @@ wake-up, so they do not burn tokens.
   they get a `robot` parameter with the team's robot names. Mistakes by the model come back as
   results with `ok: false` and a German explanation, so the agent can correct itself.
 - **Budgets** in the config: steps per wake-up, tokens per run, minutes per run, messages to
-  other agents per minute, messages kept in the context.
+  other agents per minute, messages kept in the context, team messages per minute and tokens
+  per conversation.
 - **Models** (`server/internal/llm`): any OpenAI-compatible endpoint (Mistral, Ollama, …) or
   Claude (`kind: anthropic`, official Anthropic Go SDK), with retries, a fallback provider and a
   cost estimate from the configured prices (prompt-cache reads and writes priced separately).
