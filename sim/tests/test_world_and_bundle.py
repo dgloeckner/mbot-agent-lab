@@ -70,8 +70,9 @@ class BundleTest(unittest.TestCase):
     def test_bundle_imports_only_firmware_modules(self):
         # Every import must exist on the CyberPi: the firmware had no umqtt, so the
         # robot crashed with ImportError at start. Add a module only after checking
-        # it on the robot. json/time are fallbacks for CPython behind try/except.
-        allowed = {"config", "cyberpi", "mbot2", "mbuild", "socket", "ssl", "time", "json", "ujson"}
+        # it on the robot. json/time are fallbacks for CPython and _thread is optional,
+        # all behind try/except.
+        allowed = {"config", "cyberpi", "mbot2", "mbuild", "socket", "ssl", "time", "json", "ujson", "_thread"}
         found = set()
         for node in ast.walk(ast.parse(bundle.bundle())):
             if isinstance(node, ast.Import):
