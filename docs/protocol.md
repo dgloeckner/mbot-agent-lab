@@ -17,8 +17,8 @@ Every robot has its own prefix `lab/<robot_id>/`, e.g. `lab/mbot-1/`.
 | `result` | robot → server | no | result of a command | [result.json](examples/protocol/result.json) |
 | `event` | robot → server | no | event on a state change | [event.json](examples/protocol/event.json) |
 | `state` | robot → server | yes | current state | [state.json](examples/protocol/state.json) |
-| `status` | robot → server | yes, as last will | `online` or `offline`, plain text | [status.txt](examples/protocol/status.txt) |
-| `hello` | robot → server | no | protocol version, script version, MAC address, free memory on connect | [hello.json](examples/protocol/hello.json) |
+| `status` | robot → server | yes, as last will | `online`, `offline` or `restarting`, plain text | [status.txt](examples/protocol/status.txt) |
+| `hello` | robot → server | no | protocol and script version, device facts, free memory on connect | [hello.json](examples/protocol/hello.json) |
 | `hb` | server → robot | no | heartbeat, once per second | [hb.json](examples/protocol/hb.json) |
 
 ## Messages
@@ -69,8 +69,14 @@ Sent immediately on change, otherwise two to five times per second.
 ### `hello`
 
 ```json
-{"v":1,"script":"0.1.0","mac":"aa:bb:cc:dd:ee:ff","mem_free":61440}
+{"v":1,"script":"0.1.0","mac":"aa:bb:cc:dd:ee:ff","firmware":"44.01.008","name":"mbot-rot","battery":81,"mem_free":1244160}
 ```
+
+- `mac`: fixed per device. `firmware`: the CyberPi firmware version. `name`: the device name the
+  control room sets with `set_name` (shown at power-on), not the team's name for the robot.
+  `firmware` and `name` are empty when the CyberPi cannot tell. The control room shows them and
+  warns when a robot's script or firmware differs from most other robots.
+- `battery`: percent at connect time.
 
 - `mem_free`: free heap in bytes right after connecting, after a garbage collection; `-1` where
   unknown (simulator). It tells how much room the script has left (`docs/measurements.md`).
@@ -111,6 +117,8 @@ Sent immediately on change, otherwise two to five times per second.
 | `gesture` | `kind`: `nod`, `shake`, `spin` | none |
 | `identify` | none: blinks white and shows "Hier bin ich!" for 3 s, silently | none |
 | `clear_log` | none | none |
+| `restart` | none; control room only | none. The robot stops, answers, sets `status` to `restarting` and restarts its script; after the new `hello` it belongs to the same team, because assignments live in the server. A hung script needs the power switch |
+| `set_name` | `name`: ASCII, at most 20 characters; control room only | none |
 
 ## Rules
 

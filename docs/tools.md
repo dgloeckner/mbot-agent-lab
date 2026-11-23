@@ -85,7 +85,8 @@ animations (`led.play`, the ultrasonic sensor's emotion effects), cloud speech
   call and stops all robots of the team.
 - **Later:** motion tools that return at once and report the end as an event, so the agent can
   react to one robot while another still moves.
-- **Deliberately no tool for:** Wi-Fi, vendor cloud services, reboot, setting the name, raw motor
+- **Deliberately no tool for:** Wi-Fi, vendor cloud services, reboot and setting the device name
+  (both are control room functions: `restart`, `set_name` in `docs/protocol.md`), raw motor
   power.
 
 ## Mapping to the protocol

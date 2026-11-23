@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,6 +32,8 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 	admin("POST /admin/api/stop-all", s.adminStopAll)
 	admin("PUT /admin/api/models", s.adminSetModels)
 	admin("PUT /admin/api/conversation", s.adminSetConversation)
+	admin("POST /admin/api/robots/{id}/restart", s.adminRestartRobot)
+	admin("PUT /admin/api/robots/{id}/device-name", s.adminDeviceName)
 }
 
 // AdminRobot is one robot as the control room sees it.
@@ -41,7 +44,9 @@ type AdminRobot struct {
 	Accepted bool           `json:"accepted"`
 	Script   string         `json:"script"`
 	MemFree  int            `json:"mem_free"` // free heap after connecting, -1 unknown
-	Team     string         `json:"team"`     // team ID, empty if free
+	Firmware string         `json:"firmware"`
+	Device   string         `json:"device"` // the CyberPi's own name
+	Team     string         `json:"team"`   // team ID, empty if free
 	Alias    string         `json:"alias"`
 	State    protocol.State `json:"state"`
 }
@@ -87,6 +92,7 @@ func (s *Server) buildAdminState(ctx context.Context) (adminState, error) {
 	for _, rb := range s.Robots.Snapshot() {
 		st.Robots = append(st.Robots, AdminRobot{
 			ID: rb.ID, Color: rb.Color, Online: rb.Online, Accepted: rb.Accepted, Script: rb.Hello.Script, MemFree: rb.Hello.MemFree,
+			Firmware: rb.Hello.Firmware, Device: rb.Hello.Name,
 			Team: rb.Owner, Alias: rb.Alias, State: rb.State,
 		})
 	}
@@ -265,4 +271,47 @@ func (s *Server) adminStopAll(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, results)
+}
+
+// adminRestartRobot restarts a robot's script. The robot keeps its team: the
+// assignment lives in the server and the heartbeat after the new hello says so.
+func (s *Server) adminRestartRobot(w http.ResponseWriter, r *http.Request) {
+	s.robotCommand(w, r, "restart", nil)
+}
+
+// adminDeviceName sets the CyberPi's own name, shown when it is switched on.
+func (s *Server) adminDeviceName(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if err := lab.ValidDeviceName(name); err != nil {
+		s.labError(w, err)
+		return
+	}
+	s.robotCommand(w, r, "set_name", map[string]any{"name": name})
+}
+
+// robotCommand sends a maintenance command to the robot in the path.
+func (s *Server) robotCommand(w http.ResponseWriter, r *http.Request, name string, args map[string]any) {
+	id := r.PathValue("id")
+	for _, rb := range s.Robots.Snapshot() {
+		if rb.ID != id {
+			continue
+		}
+		res, err := s.Robots.Send(r.Context(), id, name, args, 3*time.Second)
+		switch {
+		case err != nil:
+			writeError(w, http.StatusServiceUnavailable, id+" antwortet gerade nicht. Ist er eingeschaltet?")
+		case !res.OK:
+			writeError(w, http.StatusBadGateway, id+" konnte das nicht: "+res.Error)
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
+		return
+	}
+	writeError(w, http.StatusNotFound, "Diesen Roboter gibt es nicht.")
 }

@@ -3,7 +3,7 @@
 
 from compat import ticks_ms, ticks_diff, sleep_ms, mem_free
 from config import ROBOT_ID, WIFI_SSID, WIFI_PASSWORD, BROKER_HOST, BROKER_PORT, BROKER_TLS, BROKER_PASSWORD
-from hw import hw_motors_stop, hw_mac
+from hw import hw_motors_stop, hw_mac, hw_info, hw_set_name, hw_restart
 from sense import Sense
 from ui import Ui
 from events import Events
@@ -105,6 +105,18 @@ class Robot:
         elif name == "identify":
             self.ui.identify()
             self.reply(cmd_id, True, "done")
+        elif name == "restart":
+            # Control room only. Stop, say so, let the messages leave, reboot.
+            self.end_skill("stopped")
+            hw_motors_stop()
+            self.reply(cmd_id, True, "done")
+            self.link.publish_raw("status", "restarting", True)
+            sleep_ms(200)
+            hw_restart()
+            self.link.close()  # only reached in the simulator: connect again like after a reboot
+        elif name == "set_name":
+            hw_set_name(str(args.get("name", ""))[:20])
+            self.reply(cmd_id, True, "done")
         elif name == "clear_log":
             self.trip_log = []
             self.reply(cmd_id, True, "done")
@@ -191,7 +203,8 @@ class Robot:
         try:
             self.link.connect(WIFI_SSID, WIFI_PASSWORD,
                               {"v": PROTOCOL_VERSION, "script": SCRIPT_VERSION, "mac": hw_mac(),
-                               "mem_free": mem_free()})
+                               "firmware": hw_info("get_firmware_version"), "name": hw_info("get_name"),
+                               "battery": self.s["battery"], "mem_free": mem_free()})
         except Exception:
             self.link.close()
             self.ui.set_conn("getrennt")

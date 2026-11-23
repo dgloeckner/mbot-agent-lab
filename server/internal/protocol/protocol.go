@@ -31,8 +31,9 @@ const (
 
 // Status payloads (plain text, retained, offline is the last will).
 const (
-	StatusOnline  = "online"
-	StatusOffline = "offline"
+	StatusOnline     = "online"
+	StatusOffline    = "offline"
+	StatusRestarting = "restarting" // the control room restarted the script; hello follows
 )
 
 // Topic builds lab/<robotID>/<suffix>.
@@ -128,6 +129,12 @@ type Hello struct {
 	V      int    `json:"v"`
 	Script string `json:"script"`
 	MAC    string `json:"mac"`
+	// Firmware and Name come from the CyberPi, empty where it cannot tell.
+	// Name is the device name the control room sets (shown at power-on), not
+	// the team's name for the robot.
+	Firmware string `json:"firmware"`
+	Name     string `json:"name"`
+	Battery  int    `json:"battery"`
 	// MemFree is the robot's free heap in bytes right after connecting, -1
 	// where unknown (simulator). It shows how much room the script has left.
 	MemFree int `json:"mem_free"`

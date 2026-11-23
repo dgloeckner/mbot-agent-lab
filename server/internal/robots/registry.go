@@ -276,7 +276,7 @@ func (r *Registry) handle(topic string, payload []byte) {
 		if !rb.Accepted {
 			r.log.Warn("unsupported protocol version", "robot", id, "v", h.V)
 		} else {
-			r.log.Info("robot hello", "robot", id, "script", h.Script, "mac", h.MAC, "mem_free", h.MemFree)
+			r.log.Info("robot hello", "robot", id, "script", h.Script, "firmware", h.Firmware, "name", h.Name, "mac", h.MAC, "mem_free", h.MemFree)
 		}
 	case protocol.TopicState:
 		var s protocol.State
