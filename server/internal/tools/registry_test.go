@@ -23,6 +23,7 @@ type robotBus struct {
 	mu      sync.Mutex
 	handler func(string, []byte)
 	cmds    []string
+	args    map[string]map[string]any // last args per command name
 }
 
 func (b *robotBus) Handle(_ string, _ int, fn func(string, []byte)) error {
@@ -41,6 +42,10 @@ func (b *robotBus) Publish(topic string, payload []byte, _ bool, _ byte) error {
 	_ = json.Unmarshal(payload, &cmd)
 	b.mu.Lock()
 	b.cmds = append(b.cmds, id+":"+cmd.Name)
+	if b.args == nil {
+		b.args = map[string]map[string]any{}
+	}
+	b.args[cmd.Name] = cmd.Args
 	h := b.handler
 	b.mu.Unlock()
 	res := protocol.Result{ID: cmd.ID, OK: true, Reason: protocol.ReasonDone}
@@ -191,6 +196,30 @@ func TestCallRobotTools(t *testing.T) {
 	}
 	if bus.cmds[0] != "mbot-2:drive_until" {
 		t.Errorf("first command = %v", bus.cmds)
+	}
+}
+
+func TestDriveArc(t *testing.T) {
+	r, bus, _ := setup(t, map[string]string{"mbot-1": "Scout"})
+	env := &Env{TeamID: "rot"}
+	ctx := context.Background()
+	schema := find(r, env, "drive_arc")
+	if req := schema["required"].([]any); len(req) != 2 || req[0] != "radius_cm" || req[1] != "degrees" {
+		t.Errorf("required = %v", req)
+	}
+	got := schemaOf(t, r.Call(ctx, env, "drive_arc", `{"radius_cm":20,"degrees":-360}`))
+	if got["ok"] != true || got["reason"] != "done" {
+		t.Errorf("drive_arc = %v", got)
+	}
+	bus.mu.Lock()
+	args := bus.args["drive_arc"]
+	bus.mu.Unlock()
+	if len(args) != 2 || args["radius_cm"] != 20.0 || args["deg"] != -360.0 {
+		t.Errorf("robot args = %v, want radius_cm and deg (signed, like turn)", args)
+	}
+	got = schemaOf(t, r.Call(ctx, env, "drive_arc", `{"degrees":90}`))
+	if got["ok"] != false || !strings.Contains(got["error"].(string), `"radius_cm"`) {
+		t.Errorf("missing radius = %v", got)
 	}
 }
 

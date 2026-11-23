@@ -13,7 +13,7 @@
 
 from compat import ticks_ms, ticks_diff
 from hw import (hw_motors, hw_motors_stop, hw_wheels_reset, hw_wheels_deg,
-                hw_yaw, hw_yaw_reset, CM_PER_WHEEL_DEG)
+                hw_yaw, hw_yaw_reset, CM_PER_WHEEL_DEG, TRACK_CM)
 from sense import Steady, SN_FLOOR_STEADY, SN_FROM_NAME
 
 SK_DEFAULT_SPEED = 40      # RPM
@@ -28,6 +28,8 @@ SK_MAX_CM = 300            # per command
 SK_MAX_DEG = 720           # per command
 SK_MAX_MS = 20000          # per command; the server waits this + 2 s
 SK_TURN_TOLERANCE_DEG = 2
+SK_ARC_MIN_CM = 10         # arc radius limits; the inner wheel turns forward down to TRACK_CM / 2
+SK_ARC_MAX_CM = 200
 SK_CONFIRM = 2             # loop iterations a stop condition must hold
 SK_CLEAR_CONFIRM = 3       # same for "the way ahead is clear"
 SK_LOST_CONFIRM = 8        # same for "the line is gone": long enough to bridge tape gaps
@@ -156,7 +158,20 @@ def _rotate(direction, speed):
     hw_motors(v, -v)
 
 
-class DriveSkill:
+class Motion:
+    """What the motion skills share. Turning skills keep a Heading."""
+
+    forward = False
+    heading = None
+
+    def segment(self):
+        return ("turn", round(self.heading.value) if self.heading else 0)
+
+    def abort(self, reason, s):
+        return self._end(False, reason, s)
+
+
+class DriveSkill(Motion):
     """drive(cm, speed) and drive_until(max_cm, stop_below_cm, stop_on_color)."""
 
     name = "drive"
@@ -179,9 +194,7 @@ class DriveSkill:
         self.direction = -1 if cm < 0 else 1
         self.forward = self.direction > 0
         self.speed = _clamp(abs(_num(args, "speed", SK_DEFAULT_SPEED)), 5, SK_MAX_SPEED)
-        self.started = 0
         self.driven = 0
-        self.trace = None
         self.wall = Confirm(SK_CONFIRM)
 
     def start(self, s):
@@ -212,33 +225,24 @@ class DriveSkill:
             return self._end(False, "timeout", s)
         return None
 
-    def abort(self, reason, s):
-        return self._end(False, reason, s)
 
-
-class TurnSkill:
+class TurnSkill(Motion):
     """turn(deg): positive is right, measured with the gyro."""
 
     name = "turn"
-    forward = False
 
     def __init__(self, args):
         deg = _num(args, "deg")
         if deg is None:
             raise ValueError("deg missing")
         self.target = _clamp(deg, -SK_MAX_DEG, SK_MAX_DEG)
-        self.started = 0
-        self.heading = None
-        self.trace = None
+        self.direction = 1 if deg > 0 else -1
 
     def start(self, s):
         self.trace = Trace(s, SK_FLOOR_MIN_DEG)
         self.heading = Heading()
         self.started = ticks_ms()
-        _rotate(1 if self.target > 0 else -1, SK_TURN_SPEED)
-
-    def segment(self):
-        return ("turn", round(self.heading.value) if self.heading else 0)
+        _rotate(self.direction, SK_TURN_SPEED)
 
     def _end(self, ok, reason, s):
         hw_motors_stop()
@@ -253,11 +257,8 @@ class TurnSkill:
             return self._end(False, "timeout", s)
         return None
 
-    def abort(self, reason, s):
-        return self._end(False, reason, s)
 
-
-class TurnUntilClearSkill:
+class TurnUntilClearSkill(TurnSkill):
     """turn_until_clear(direction, min_cm, min_deg, max_deg).
 
     Turns at least min_deg (so it looks for a new direction), then keeps
@@ -265,7 +266,6 @@ class TurnUntilClearSkill:
     """
 
     name = "turn_until_clear"
-    forward = False
 
     def __init__(self, args):
         direction = args.get("direction", "right")
@@ -276,22 +276,6 @@ class TurnUntilClearSkill:
         self.min_deg = _clamp(_num(args, "min_deg", 20), 0, 180)
         self.max_deg = _clamp(_num(args, "max_deg", 360), 10, SK_MAX_DEG)
         self.clear = Confirm(SK_CLEAR_CONFIRM)
-        self.heading = None
-        self.trace = None
-        self.started = 0
-
-    def start(self, s):
-        self.trace = Trace(s, SK_FLOOR_MIN_DEG)
-        self.heading = Heading()
-        self.started = ticks_ms()
-        _rotate(self.direction, SK_TURN_SPEED)
-
-    def segment(self):
-        return ("turn", round(self.heading.value) if self.heading else 0)
-
-    def _end(self, ok, reason, s):
-        hw_motors_stop()
-        return ok, reason, self.trace.data({"turned_deg": round(self.heading.value), "distance_cm": s["distance_cm"]})
 
     def step(self, s, now):
         self.trace.update(s, self.heading.update())
@@ -304,11 +288,8 @@ class TurnUntilClearSkill:
             return self._end(False, "timeout", s)
         return None
 
-    def abort(self, reason, s):
-        return self._end(False, reason, s)
 
-
-class ScanSkill:
+class ScanSkill(Motion):
     """scan(from_deg, to_deg, step_deg, face).
 
     Turns to from_deg, sweeps slowly to to_deg while measuring, then faces the
@@ -317,7 +298,6 @@ class ScanSkill:
     """
 
     name = "scan"
-    forward = False
 
     def __init__(self, args):
         self.from_deg = _clamp(_num(args, "from_deg", -90), -180, 180)
@@ -331,16 +311,11 @@ class ScanSkill:
         self.bins = {}
         self.phase = "to_start"
         self.target = self.from_deg
-        self.heading = None
-        self.started = 0
         self.best = None
 
     def start(self, s):
         self.heading = Heading()
         self.started = ticks_ms()
-
-    def segment(self):
-        return ("turn", round(self.heading.value) if self.heading else 0)
 
     def _toward(self, target, speed):
         """Rotate toward target; True when there."""
@@ -395,11 +370,8 @@ class ScanSkill:
             return self._end(True, "done", s)
         return None
 
-    def abort(self, reason, s):
-        return self._end(False, reason, s)
 
-
-class FollowLineSkill:
+class FollowLineSkill(DriveSkill):
     """follow_line_until(max_cm, stop_on_color, stop_at_crossing, speed).
 
     Steers along the line with the quad RGB sensor (P-controller on the line
@@ -407,7 +379,7 @@ class FollowLineSkill:
     """
 
     name = "follow_line_until"
-    forward = True
+    direction = 1
 
     def __init__(self, args):
         cm = _num(args, "max_cm")
@@ -419,24 +391,8 @@ class FollowLineSkill:
         self.speed = _clamp(abs(_num(args, "speed", SK_LINE_SPEED)), 10, SK_LINE_MAX_SPEED)
         self.lost = Confirm(SK_LOST_CONFIRM)
         self.crossing = Confirm(SK_CONFIRM)
-        self.trace = None
         self.driven = 0
-        self.started = 0
         self.offset = 0
-
-    def start(self, s):
-        self.trace = Trace(s)
-        hw_wheels_reset()
-        self.started = ticks_ms()
-        hw_motors(self.speed, self.speed)
-
-    def segment(self):
-        return ("drive", round(self.driven, 1))
-
-    def _end(self, ok, reason, s):
-        hw_motors_stop()
-        data = {"driven_cm": round(self.driven, 1), "color": s["color"], "distance_cm": s["distance_cm"]}
-        return ok, reason, self.trace.data(data)
 
     def step(self, s, now):
         self.driven = abs(_driven_cm())
@@ -456,16 +412,20 @@ class FollowLineSkill:
         hw_motors(self.speed + turn, self.speed - turn)
         return None
 
-    def abort(self, reason, s):
-        return self._end(False, reason, s)
-
 
 def _norm(deg):
     """An angle in -180 .. 180."""
     return (deg + 180) % 360 - 180
 
 
-class RetraceSkill:
+def _sin(deg):
+    """Sine of an angle in degrees (Bhaskara I, error below 0.002): no math module."""
+    d = _norm(deg)
+    p = abs(d) * (180 - abs(d))
+    return 4 * p / (40500 - p) * (1 if d > 0 else -1)
+
+
+class RetraceSkill(Motion):
     """retrace_path(): drive the trip log back to where it began.
 
     The log is the way from its start to here. A turn at its end is folded
@@ -478,7 +438,6 @@ class RetraceSkill:
     """
 
     name = "retrace_path"
-    forward = False
     speed = SK_DEFAULT_SPEED
 
     def __init__(self, log):
@@ -556,8 +515,58 @@ class RetraceSkill:
         return self._end(False, reason, s)
 
 
+class ArcSkill(TurnSkill):
+    """drive_arc(radius_cm, deg, speed): drive forward along a circle.
+
+    deg is the heading change, positive curves right; it ends when the gyro
+    says so, like turn, and the floor trace counts degrees too. radius_cm is
+    to the circle's center, speed the speed of the robot's center.
+    The trip log gets the arc as its chord (turn half, drive, turn half), so
+    retrace_path drives a straight line back.
+    """
+
+    name = "drive_arc"
+    forward = True
+
+    def __init__(self, args, log):
+        TurnSkill.__init__(self, args)
+        r = _num(args, "radius_cm")
+        if r is None:
+            raise ValueError("radius_cm missing")
+        self.r = _clamp(r, SK_ARC_MIN_CM, SK_ARC_MAX_CM)
+        self.speed = _clamp(abs(_num(args, "speed", SK_DEFAULT_SPEED)), 5, SK_MAX_SPEED)
+        self.log = log
+        self.driven = 0
+
+    def start(self, s):
+        TurnSkill.start(self, s)  # then curve instead of turning on the spot
+        hw_wheels_reset()
+        k = TRACK_CM / 2 / self.r * self.direction
+        v = min(self.speed, SK_MAX_SPEED / (1 + abs(k)))
+        hw_motors(v * (1 + k), v * (1 - k))
+
+    def segment(self):
+        return ("drive", 0)  # _end logs the arc
+
+    def _end(self, ok, reason, s):
+        r = TurnSkill._end(self, ok, reason, s)
+        r[2]["driven_cm"] = cm = round(self.driven, 1)
+        h = self.heading.value
+        if abs(h) > 1:
+            cm = abs(cm * 114.6 * _sin(h / 2) / h)  # chord = 2 r sin(h / 2), r = cm / h in radians
+        h = round(h / 2)
+        for e in (("turn", h), ("drive", round(cm, 1)), ("turn", h)):
+            if e[1]:
+                self.log.append(e)
+        return r
+
+    def step(self, s, now):
+        self.driven = abs(_driven_cm())
+        return TurnSkill.step(self, s, now)
+
+
 MOTION_SKILLS = ("drive", "turn", "drive_until", "turn_until_clear", "scan", "follow_line_until",
-                 "retrace_path", "gesture")
+                 "retrace_path", "drive_arc", "gesture")
 
 
 def make_motion_skill(name, args, log=None):
@@ -579,5 +588,7 @@ def make_motion_skill(name, args, log=None):
         return FollowLineSkill(args)
     if name == "retrace_path":
         return RetraceSkill(log)
+    if name == "drive_arc":
+        return ArcSkill(args, log)
     # TODO: gesture
     raise NotImplementedError(name)

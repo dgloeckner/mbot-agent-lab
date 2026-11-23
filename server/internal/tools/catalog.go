@@ -15,6 +15,7 @@ type Info struct {
 var Catalog = []Info{
 	{"drive", "Bewegen", "cm, speed?", "Fährt eine Strecke geradeaus, negativ heißt rückwärts.", true},
 	{"turn", "Bewegen", "degrees", "Dreht auf der Stelle, positiv ist rechts.", true},
+	{"drive_arc", "Bewegen", "radius_cm, degrees, speed?", "Fährt eine Kurve oder einen Kreis, positiv ist rechts.", true},
 	{"drive_until", "Bewegen", "max_cm, stop_below_cm?, stop_on_color?", "Fährt, bis eine Wand nah ist, eine Farbe kommt oder die Strecke erreicht ist.", true},
 	{"turn_until_clear", "Bewegen", "direction, min_cm?, max_deg?", "Dreht sich, bis vorne genug Platz ist.", true},
 	{"follow_line_until", "Bewegen", "max_cm, stop_on_color?, stop_at_crossing?", "Folgt einer Linie bis zu einer Farbe, einer Kreuzung oder ihrem Ende.", true},
