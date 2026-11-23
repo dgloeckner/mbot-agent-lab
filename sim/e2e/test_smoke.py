@@ -79,7 +79,8 @@ class SmokeTest(unittest.TestCase):
         http_port, mqtt_port = free_port(), free_port()
         self.base = "http://127.0.0.1:%d" % http_port
         cfg = self.tmp / "lab.yaml"
-        cfg.write_text(test_config(http_port, mqtt_port, self.tmp / "lab.db"), encoding="utf-8")
+        cfg_text = test_config(http_port, mqtt_port, self.tmp / "lab.db")
+        cfg.write_text(cfg_text, encoding="utf-8")
 
         # Dev secrets, as in the server:dev target. Never in the YAML.
         self.admin_password = secrets.token_hex(8)
@@ -87,7 +88,11 @@ class SmokeTest(unittest.TestCase):
         robot_password = secrets.token_hex(8)
         env = dict(os.environ, LAB_ADMIN_PASSWORD=self.admin_password, LAB_CODE=self.lab_code,
                    MBOT1_PASSWORD=robot_password, MBOT2_PASSWORD=robot_password,
-                   MBOT3_PASSWORD=robot_password, MISTRAL_API_KEY="unset")
+                   MBOT3_PASSWORD=robot_password)
+        # Providers the config names need their key variable set, but the
+        # scripted model never calls them: a dummy keeps real keys out.
+        for var in re.findall(r"api_key_env:\s*(\w+)", cfg_text):
+            env[var] = "unset"
 
         self.server_log = self.tmp / "server.log"
         self.sim_log = self.tmp / "sim.log"
