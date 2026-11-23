@@ -26,6 +26,7 @@ var Catalog = []Info{
 	{"wait_for", "Wahrnehmen", "event, timeout_s", "Wartet auf ein Ereignis, etwa einen Knopfdruck, Klatschen oder Hochheben.", true},
 	{"list_robots", "Wahrnehmen", "", "Zeigt eure Roboter mit Status und Akku.", true},
 	{"set_leds", "Ausdrücken", "color", "Schaltet die Lichter in einer Farbe.", true},
+	{"led_effect", "Ausdrücken", "name, color?, color2?, value?, speed?, seconds?", "Startet einen Lichteffekt: pulsieren, blinken, Regenbogen, Balken und mehr.", true},
 	{"show_text", "Ausdrücken", "text", "Zeigt bis zu 60 Zeichen auf dem Display.", true},
 	{"gesture", "Ausdrücken", "kind: nod, shake, spin", "Nicken, Kopfschütteln oder Drehen.", false},
 	{"identify", "Ausdrücken", "", "Blinkt und zeigt „Hier bin ich!“, damit ihr euren Roboter findet.", true},

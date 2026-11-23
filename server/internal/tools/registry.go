@@ -566,6 +566,26 @@ func builtins() []*tool {
 			},
 		},
 		{
+			name: "led_effect",
+			desc: "Startet einen Lichteffekt auf den fünf LEDs. Der Effekt läuft weiter, auch während der Roboter fährt, bis du einen anderen startest, set_leds aufrufst oder seconds abgelaufen sind; das Tool kehrt sofort zurück. Effekte: breathe (pulsiert langsam), fade (blendet weich zu color), chase (heller Punkt wandert), blink_left und blink_right (die zwei linken oder rechten LEDs blinken, wie ein Blinker), rainbow (Farben laufen durch), gradient (stehender Verlauf von color zu color2), level (Balken, value von 0 bis 100), heartbeat (Doppelpuls), off (dunkel). Nutze blink_left und blink_right vor Drehungen, level für Fortschritt, breathe für Ruhe. color ist ein Name oder #rrggbb.",
+			props: static(map[string]any{
+				"name":    map[string]any{"type": "string", "enum": effectNames},
+				"color":   map[string]any{"type": "string", "description": "red, orange, yellow, green, cyan, blue, purple, white oder #rrggbb."},
+				"color2":  map[string]any{"type": "string", "description": "Zweite Farbe für gradient."},
+				"value":   map[string]any{"type": "number", "minimum": 0, "maximum": 100, "description": "Für level."},
+				"speed":   map[string]any{"type": "string", "enum": []string{"slow", "normal", "fast"}},
+				"seconds": map[string]any{"type": "number", "minimum": 1, "maximum": 60, "description": "Dauer; ohne Angabe läuft der Effekt, bis ein anderer ihn ersetzt."},
+			}),
+			required: []string{"name"}, robot: robotOne,
+			run: func(ctx context.Context, c *call) any {
+				args, err := effectArgs(c.str("name"), c.str("color"), c.str("color2"), c.str("speed"), c.num("value", 0), c.num("seconds", 0))
+				if err != nil {
+					return fail("%s", err.Error())
+				}
+				return c.command(ctx, c.robots[0], "led_effect", args, 3*time.Second)
+			},
+		},
+		{
 			name:     "show_text",
 			desc:     "Zeigt einen kurzen Text (höchstens 60 Zeichen) auf dem Display des Roboters.",
 			props:    static(map[string]any{"text": map[string]any{"type": "string", "maxLength": 60}}),
@@ -608,14 +628,14 @@ func builtins() []*tool {
 		},
 		{
 			name: "say",
-			desc: "Sagt einem anderen Agenten (oder \"alle\") etwas. Der Text erscheint auch auf dem Display eures Roboters. Höchstens 60 Zeichen.",
+			desc: "Sagt einem anderen Agenten (oder \"alle\") etwas. Der Text erscheint auch auf dem Display eures Roboters. Höchstens 60 Zeichen. Mit emotion zeigen die Lichter eures Roboters einige Sekunden lang die Stimmung.",
 			props: func(env *Env) map[string]any {
 				to := append(append([]string(nil), env.Agents...), AllRobots)
 				sort.Strings(to[:len(to)-1])
 				return map[string]any{
 					"to":      map[string]any{"type": "string", "enum": to, "description": "Name des anderen Teams oder \"alle\"."},
 					"text":    map[string]any{"type": "string", "maxLength": 60},
-					"emotion": map[string]any{"type": "string", "enum": []string{"freundlich", "aufgeregt", "traurig", "wütend"}},
+					"emotion": map[string]any{"type": "string", "enum": moodNames},
 				}
 			},
 			required: []string{"to", "text"},
@@ -629,6 +649,11 @@ func builtins() []*tool {
 				text := clampRunes(c.str("text"), 60)
 				for _, rb := range c.team {
 					_ = c.command(ctx, rb, "show_text", map[string]any{"text": text}, 2*time.Second)
+					if m, ok := moods[c.str("emotion")]; ok {
+						if args, err := effectArgs(m.name, m.color, m.color2, m.speed, 0, moodSeconds); err == nil {
+							_ = c.command(ctx, rb, "led_effect", args, 2*time.Second)
+						}
+					}
 					break // the first robot is the speaker
 				}
 				delivered := c.env.Say(c.str("to"), text)

@@ -27,11 +27,17 @@ def _set_leds(rgb):
 
 
 class _Led:
+    # Five LEDs, ids 1..5. simstate.leds is the middle one, for the trace.
     def on(self, r, g, b, id="all"):
-        _set_leds((r, g, b))
+        if id == "all":
+            simstate.led_strip = [(r, g, b)] * 5
+        else:
+            simstate.led_strip = list(simstate.led_strip)
+            simstate.led_strip[int(id) - 1] = (r, g, b)
+        _set_leds(simstate.led_strip[2])
 
     def off(self, id="all"):
-        _set_leds((0, 0, 0))
+        self.on(0, 0, 0, id)
 
 
 class _Console:

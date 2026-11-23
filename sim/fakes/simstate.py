@@ -2,7 +2,8 @@
 
 world = None          # sim.world.World, set by robot_proc before the robot script runs
 display = []          # last lines printed to the console
-leds = (0, 0, 0)      # last LED color
+leds = (0, 0, 0)      # last color of the middle LED
+led_strip = [(0, 0, 0)] * 5  # all five LEDs, left to right
 led_trail = []        # LED colors since the trace last looked (capped)
 sounds = []           # names / tones played
 buttons = {"a": False, "b": False}  # also joystick keys: up, down, left, right, middle

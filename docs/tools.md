@@ -13,7 +13,7 @@ its 40 Hz main loop and reports a structured result. The ultrasonic sensor only 
 the goals are about driving, turning and scanning, not about following walls on the side.
 
 Not offered to agents yet, because the robot does not implement it: `gesture`. The team page
-lists it as "kommt bald". `set_leds` takes a color only, no pattern.
+lists it as "kommt bald". `set_leds` takes a color only and ends a running `led_effect`.
 
 **Nothing blocks.** The robot's main loop (20 to 50 ms per pass) runs line following, the
 emergency stop and the heartbeat watchdog. No tool may use a vendor call that holds the loop,
@@ -37,12 +37,13 @@ animations (`led.play`, the ultrasonic sensor's emotion effects), cloud speech
 | Sense | `scan` | `from_deg?`, `to_deg?`, `step_deg?`, `face?` | `profile` `[[deg, cm], …]`, `best_deg`, `best_cm`, `turned_deg` |
 | Sense | `wait_for` | `event` (list in `docs/protocol.md`), `timeout_s` | `event`, `data` or `reason:"timeout"` |
 | Sense | `list_robots` | none | name, online, battery, color per robot |
-| Express | `set_leds` | `color` or `pattern` | `ok` |
+| Express | `set_leds` | `color` | `ok` |
+| Express | `led_effect` | `name`, `color?`, `color2?`, `value?`, `speed?`, `seconds?` | `ok` |
 | Express | `show_text` | `text`, at most 60 characters | `ok` |
 | Express | `gesture` | `kind`: `nod`, `shake`, `spin` | `ok` |
 | Express | `identify` | none | `ok` |
 | Talk | `ask_human` | `question` (at most 40 characters), `seconds?` (5..60, 20) | `answer`: `a`, `b`, `timeout` or `stopped` |
-| Talk | `say` | `to`, `text` up to 60 characters, `emotion?` | `delivered` |
+| Talk | `say` | `to`, `text` up to 60 characters, `emotion?` (`fröhlich`, `traurig`, `genervt`, `neugierig`, `stolz`) | `delivered` |
 | Talk | `tell_team` | `text` | `ok` |
 | Remember | `remember` | `text` | `note_id` |
 | Remember | `forget` | `note_id` | `ok` |
@@ -76,8 +77,18 @@ animations (`led.play`, the ultrasonic sensor's emotion effects), cloud speech
   The agent waits like with `wait_for`; the robot does not. The robot stands meanwhile; a motion
   command to it ends the question with `stopped`. A longer question is refused, not cut, so the
   agent rephrases it. Uses: confirm before something risky, ask for help, games with hints.
-- **`say` is a bundle:** text on the speaker's display, light, sound, optional gesture, and the
-  message lands in the recipient's inbox. `to` is an agent name or `"all"`.
+- **`led_effect` runs on the robot:** the robot computes each frame in its loop from the time
+  since the effect started, also while it drives, and the tool returns at once. Effects:
+  `breathe`, `fade`, `chase`, `blink_left`, `blink_right`, `rainbow`, `gradient`, `level`,
+  `heartbeat`, `off`. The server turns color names, `#rrggbb` and `speed` (`slow`, `normal`,
+  `fast`) into numbers. An effect wins over the "thinking" pulse and the plain color; identify,
+  a lost connection and a free robot still win over it. It ends after `seconds`, with
+  `set_leds`, with the next effect or when the robot gets a new team.
+- **`say` is a bundle:** text on the speaker's display, a mood light for 5 seconds when
+  `emotion` is given, and the message lands in the recipient's inbox. `to` is an agent name or
+  `"all"`. No sound: the built-in sounds block. Moods: `fröhlich` rainbow (fast), `traurig`
+  blue breathing (slow), `genervt` red heartbeat, `neugierig` yellow chase, `stolz` gradient
+  green to white (`server/internal/tools/leds.go`).
 - **`finish` delivers the report** that the team later compares with the log.
 - **Several robots at once:** the tool calls of one model answer that act on different robots
   run at the same time, so the agent moves several robots by calling a motion tool for each in

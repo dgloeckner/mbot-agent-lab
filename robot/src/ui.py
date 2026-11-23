@@ -2,10 +2,19 @@
 # Nothing here may block the main loop: no sounds, no vendor animations.
 
 from compat import ticks_ms, ticks_diff
-from hw import hw_leds, hw_show_lines
+from hw import hw_led, hw_show_lines, COLOR_RGB
+from fx import fx_frame, FX_OFF
 
 UI_DISPLAY_MIN_MS = 200
-UI_LED_PERIOD_MS = 100
+UI_LED_PERIOD_MS = 100  # plain colors
+UI_FX_MS = 40           # an effect while standing ...
+UI_FX_MOVING_MS = 75    # ... and while driving: every third loop, the loop has more to do
+
+
+def ui_solid(color, brightness=100):
+    r, g, b = COLOR_RGB.get(color, COLOR_RGB["white"])
+    k = brightness / 100
+    return [(int(r * k), int(g * k), int(b * k))] * 5
 
 
 class Ui:
@@ -18,6 +27,10 @@ class Ui:
         self.question = None  # ask_human: shown instead of the text, with the keys
         self.color = "white"
         self.led = None  # agent's set_leds color; loop clears it when the team changes
+        self.fx = None   # agent's led_effect (the command's args); wins over led and the thinking pulse
+        self.fx_t0 = 0
+        self.fx_start = None
+        self.frame = None  # the five colors last set
         self.agent = "waiting"
         self.identify_until = 0
         self.finding = False  # identify is running: blink and say so on the display
@@ -45,13 +58,36 @@ class Ui:
         self.question = text
         self.dirty = True
 
+    def set_color(self, color):
+        """set_leds: a plain color ends a running effect."""
+        self.led = color
+        self.fx = None
+
+    def set_effect(self, fx, now):
+        self.fx = fx
+        self.fx_t0 = now
+        self.fx_start = self.frame or [FX_OFF] * 5
+
+    def show(self, frame):
+        """Set the LEDs to frame, touching only what changed: each call costs loop time."""
+        old = self.frame
+        if frame == old:
+            return
+        if frame.count(frame[0]) == 5:
+            hw_led(frame[0])
+        else:
+            for i in range(5):
+                if old is None or frame[i] != old[i]:
+                    hw_led(frame[i], i)
+        self.frame = frame
+
     def set_agent(self, agent):
         self.agent = agent
 
     def identify(self, ms=3000):
         self.identify_until = ticks_ms() + ms
 
-    def tick(self, now):
+    def tick(self, now, moving=False):
         finding = ticks_diff(self.identify_until, now) > 0
         if finding != self.finding:
             self.finding = finding
@@ -69,19 +105,27 @@ class Ui:
             else:
                 lines.append("Hier bin ich!" if finding else self.text)
             hw_show_lines(lines)
-        if ticks_diff(now, self.last_led) < UI_LED_PERIOD_MS:
+        fx = self.fx
+        period = UI_LED_PERIOD_MS if fx is None else UI_FX_MOVING_MS if moving else UI_FX_MS
+        if ticks_diff(now, self.last_led) < period:
             return
         self.last_led = now
+        t = ticks_diff(now, self.fx_t0)
+        if fx is not None and fx.get("ms") and t >= fx["ms"]:
+            self.fx = fx = None
+        # Priority: identify, connection, free robot, the agent's effect, thinking, plain color.
         if finding:
-            hw_leds("white" if (now // 250) % 2 == 0 else "off")
+            self.show(ui_solid("white" if (now // 250) % 2 == 0 else "off"))
         elif self.conn != "verbunden":
-            hw_leds("orange", 30)
+            self.show(ui_solid("orange", 30))
         elif not self.owner:
-            hw_leds("white", 10)
+            self.show(ui_solid("white", 10))
+        elif fx is not None:
+            self.show(fx_frame(fx, t, self.fx_start))
         elif self.agent == "thinking":
             # Triangle wave between 10 and 100 % brightness, period 1 s.
             phase = now % 1000
             level = phase if phase < 500 else 1000 - phase
-            hw_leds(self.led or self.color, 10 + level * 90 // 500)
+            self.show(ui_solid(self.led or self.color, 10 + level * 90 // 500))
         else:
-            hw_leds(self.led or self.color)
+            self.show(ui_solid(self.led or self.color))
