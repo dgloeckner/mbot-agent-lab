@@ -1,13 +1,13 @@
 # mBot2 Agent Lab
 
-A lab in which teams of 15-year-olds instruct AI agents that drive real robots.
+A lab in which teams of students instruct AI agents that drive real robots.
 
 Each team writes and deploys the prompt of its agent. The agent runs as a loop inside the server,
 controls the team's Makeblock mBot2 through a small set of tools and reacts to messages from the
 robot, from its team and from other agents. Students only need a browser.
 
 Learning goals: instructing precisely, recognising failures and limits of agents, designing
-tools, understanding attacks such as prompt injection, and treating tokens as a cost.
+tools and treating tokens as a cost.
 
 > Repository, code and technical docs are in English. Lab material and the student-facing UI are
 > in German; example prompts exist in both languages.
