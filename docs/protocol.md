@@ -138,11 +138,20 @@ Sent immediately on change, otherwise two to five times per second.
   at the start counts only after they have left it (a robot in the red start field can drive back
   to red). Same for `drive_until`, `drive_arc` and `follow_line_until`.
 - **Filtered sensors:** every decision on the robot uses filtered readings (`robot/src/sense.py`):
-  distance as the median of the last 5 valid readings (dropouts below 2 cm ignored), the floor
+  distance as the median of the last 7 valid readings (dropouts below 2 cm ignored; 10 dropouts
+  in a row mean the sensor is blind, and the distance reads 0), the floor
   pattern only after 3 equal readings in a row, tilt with hysteresis (on above 45°, off below 30°)
   and a minimum duration. Stop conditions must hold for several loop iterations. `state` and
   `event` carry the same filtered values. The emergency stop distance grows with speed
-  (6 cm + 0.05 cm per RPM).
+  (8 cm + 0.05 cm per RPM).
+- **Obstacles:** the ultrasonic sensor looks forward in a cone of about 30°. Every forward motion
+  (`drive`, `drive_until`, `drive_arc`, `follow_line_until`, the drives of `retrace_path`) ends
+  with `obstacle` once something is nearer than the emergency stop distance, and does not start
+  when it already is; the 2 cm above the 6 cm of the handoff keep the front corners off a wall met
+  at a slant down to about 30° (`sim/tests/test_safety.py`). The robot cannot see behind or
+  beside itself: `drive` with negative `cm` is blind, which the agent has to know; turns on the
+  spot do not check; a wall grazed at a flatter angle can be touched. `retrace_path` decides its
+  moves itself and therefore never drives backwards.
 - **`calibrate_colors`** is maintenance for the control room, not an agent tool. The robot stands
   right before the reference strip and drives across it; it finds the black field itself, so the
   start position needs no precision. The references apply at once and are lost on restart until
@@ -160,8 +169,8 @@ back through earlier runs; a robot that is offline then keeps its log.
 `retrace_path` works the log off from the end:
 
 - A turn at the end of the log is folded into the robot's extra rotation; nothing moves yet.
-- Before a drive the robot turns until it faces back (extra rotation 180°), then drives the
-  logged distance forward. The forward-looking obstacle reflex stays active the whole way.
+- Before a drive the robot turns until it faces back (extra rotation 180°; 0° for a drive that
+  went backwards), then drives the logged distance forward. The forward-looking obstacle reflex stays active the whole way.
   So the logged turns come out negated and the robot ends at the start, facing the way it came.
 - Drives go straight and turns go through the same turn skill as `turn`. Lines are not
   followed; turns at the end of a log with no drive before them do not move the robot.

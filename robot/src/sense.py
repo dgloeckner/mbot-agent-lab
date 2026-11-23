@@ -12,9 +12,10 @@
 from hw import (hw_distance_cm, hw_probe_rgb, hw_probe_name, hw_line_offset, hw_yaw,
                 hw_tilt, hw_battery, hw_button, hw_loudness, PROBES)
 
-SN_DIST_WINDOW = 5      # median over the last valid distance readings
+SN_DIST_WINDOW = 7      # median over the last valid distance readings: 4 ghost echoes to fool it
 SN_DIST_MIN = 2         # readings below are dropouts (the sensor reports 0 on errors)
 SN_DIST_MAX = 300       # the sensor's range; nothing in sight reads as this
+SN_DIST_BLIND = 10      # dropouts in a row: blind (too close, unplugged), reads 0. VERIFY: open space reads 300, not 0
 SN_FLOOR_STEADY = 3     # equal floor patterns in a row before the pattern changes
 SN_TILT_ON_DEG = 45     # tilted when pitch or roll goes beyond this ...
 SN_TILT_OFF_DEG = 30    # ... and level again only when both are below this
@@ -119,6 +120,7 @@ class Sense:
     def __init__(self):
         self.dist_window = []
         self.dist_raw = SN_DIST_MAX
+        self.dropouts = 0
         self.refs = None          # per probe: [(letter, feature, rgb)], None = built-in names
         self.floor = Steady(SN_FLOOR_STEADY)
         self.color = "white"
@@ -148,14 +150,24 @@ class Sense:
         return "".join(sn_classify(hw_probe_rgb(p), self.refs[i]) for i, p in enumerate(PROBES))
 
     def distance(self, raw):
-        """Median of the last valid readings; dropouts do not count."""
+        """Median of the last valid readings; single dropouts do not count.
+
+        Many dropouts in a row (also right after the start) mean the sensor
+        sees nothing usable: then the distance reads 0, so forward motions
+        stop instead of trusting an old or missing reading.
+        """
         self.dist_raw = raw
         if raw >= SN_DIST_MIN:
+            self.dropouts = 0
             self.dist_window.append(min(raw, SN_DIST_MAX))
             if len(self.dist_window) > SN_DIST_WINDOW:
                 self.dist_window.pop(0)
+        else:
+            self.dropouts += 1
+            if self.dropouts >= SN_DIST_BLIND:
+                self.dist_window = []
         if not self.dist_window:
-            return SN_DIST_MAX
+            return SN_DIST_MAX if self.dropouts < SN_DIST_BLIND else 0
         return int(sn_median(self.dist_window))
 
     def tilt(self, pitch, roll):
