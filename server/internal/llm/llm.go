@@ -1,7 +1,8 @@
-// Package llm is a thin client for OpenAI-compatible /chat/completions with
-// tools. Mistral, Ollama and other compatible services differ only in their
-// configuration. The Client limits parallel calls, retries transient errors,
-// falls back to a second provider and computes the cost of every call.
+// Package llm is a thin client for chat models with tools. OpenAI-compatible
+// services (Mistral, Ollama, ...) differ only in their configuration; Claude
+// has its own provider on the official Anthropic SDK. Messages use the OpenAI
+// format throughout. The Client limits parallel calls, retries transient
+// errors, falls back to a second provider and computes the cost of every call.
 package llm
 
 import (
@@ -31,6 +32,11 @@ type Message struct {
 	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string     `json:"tool_call_id,omitempty"`
 	Name       string     `json:"name,omitempty"` // tool name on tool results (required by Mistral)
+
+	// Native is the provider's own form of an assistant message, replayed
+	// unchanged by the same kind of provider (Claude's thinking blocks must
+	// go back as they came). Other providers ignore it.
+	Native any `json:"-"`
 }
 
 // ToolCall is a function call requested by the model.
@@ -61,8 +67,23 @@ type Request struct {
 
 // Usage counts tokens of one call.
 type Usage struct {
-	PromptTokens     int `json:"prompt_tokens"`
+	PromptTokens     int `json:"prompt_tokens"` // all input tokens, cached ones included
 	CompletionTokens int `json:"completion_tokens"`
+	CacheReadTokens  int `json:"-"` // part of PromptTokens served from the prompt cache
+	CacheWriteTokens int `json:"-"` // part of PromptTokens written to the prompt cache
+}
+
+// Prompt cache prices relative to the normal input price (Claude, 5-minute cache).
+const (
+	cacheReadFactor  = 0.1
+	cacheWriteFactor = 1.25
+)
+
+// cost in micro-EUR, with prices in EUR per million tokens.
+func (u Usage) cost(priceIn, priceOut float64) int64 {
+	plain := u.PromptTokens - u.CacheReadTokens - u.CacheWriteTokens
+	in := float64(plain) + cacheReadFactor*float64(u.CacheReadTokens) + cacheWriteFactor*float64(u.CacheWriteTokens)
+	return int64(math.Round(in*priceIn + float64(u.CompletionTokens)*priceOut))
 }
 
 // Response is the model's answer.
@@ -99,7 +120,7 @@ func retryable(err error) bool {
 	if errors.As(err, &se) {
 		return se.Status == 429 || se.Status >= 500
 	}
-	return !errors.Is(err, context.Canceled)
+	return !errors.Is(err, context.Canceled) && !errors.Is(err, ErrRefused)
 }
 
 type entry struct {
@@ -141,6 +162,8 @@ func New(cfg config.LLM, log *slog.Logger) *Client {
 			if model == "" {
 				model = "testmodell"
 			}
+		case config.ProviderAnthropic:
+			prov = NewAnthropic(p.BaseURL, p.APIKey, p.Model, p.Effort)
 		default:
 			prov = NewOpenAI(p.BaseURL, p.APIKey, p.Model)
 		}
@@ -186,7 +209,7 @@ func (c *Client) Chat(ctx context.Context, req Request) (Response, Call, error) 
 			resp, err := e.provider.Chat(ctx, req)
 			if err == nil {
 				call := Call{Provider: name, Model: e.model, Usage: resp.Usage, Duration: time.Since(start)}
-				call.CostMicroEUR = int64(math.Round(float64(resp.Usage.PromptTokens)*e.priceIn + float64(resp.Usage.CompletionTokens)*e.priceOut))
+				call.CostMicroEUR = resp.Usage.cost(e.priceIn, e.priceOut)
 				return resp, call, nil
 			}
 			lastErr = err
