@@ -87,3 +87,31 @@ Notes on the hwcheck run of 2026-11-23:
 RAM is not the limit: 80 KB of source leave about 1166 KB free. The limit is the size the CyberPi
 still starts, somewhere between 80 and 120 KB. The budget is 60 000 bytes: 25 % below the largest
 bundle known to start, and about 20 KB more than the bundle had then (40 134 B).
+
+## Calls and sensors: what the new tools may use
+
+The handoff "Neue Tools im mBot2 Agent Lab" names vendor calls whose behaviour the documentation
+leaves open. `robot/tools/measure.py` measures them. Upload it alone (wheels in the air), follow
+the display (clap, cover the light, lift, shake, move the joystick) and paste the serial log.
+`MS DIR` lines list what each vendor module really offers.
+
+A call counts as blocking when it takes longer than 20 ms to return. A blocking call is not used
+in the robot script; the tool that needs it is not built.
+
+| Measurement | Decides | Value | Date |
+| --- | --- | --- | --- |
+| `audio.play_tone(440, 0.5)` returns after | `beep` | | |
+| `audio.play_drum(…)` returns after | rhythm via `beep` | | |
+| `audio.record()` / `stop_record()` return after | `record_sound` | | |
+| `audio.play_record()` returns after | `play_recording` | | |
+| `led.on` all / one LED, `led.show`, `led.set_bri` (ms each) | `led_effect` update rate | | |
+| `ultrasonic2.set_bri`, `led_show` (ms, signature that works) | `eyes` | | |
+| Eye LED order (which LED is 1 … 8) | `eyes` patterns | | |
+| `display.show_label`, `display.clear` (ms) | `show`, `ask_human` | | |
+| `get_bri` with LEDs off / white / red / covered | `light_up`/`light_down`, suppression during effects | | |
+| `get_loudness` quiet / motors / clapping | `clap` thresholds | | |
+| `get_acc` quiet / motors / bump; `acc_z` when lifted | `bumped`, `lifted` | | |
+| `is_shake`, `get_shakeval` while shaking | `shake` | | |
+| `is_freefall` exists, value when lifted | `lifted` | | |
+| Joystick key names for `controller.is_press` | `joystick` | | |
+| `get_firmware_version`, `get_name`, `set_name`, `restart` exist | `hello`, `set_name`, `restart` | | |
