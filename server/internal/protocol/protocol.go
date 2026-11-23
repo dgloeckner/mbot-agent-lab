@@ -68,6 +68,7 @@ const (
 	ReasonMaxDeg     Reason = "max_deg"   // turn_until_clear turned as far as allowed
 	ReasonLineLost   Reason = "line_lost" // follow_line_until: the line ended or was lost
 	ReasonCrossing   Reason = "crossing"  // follow_line_until reached a crossing
+	ReasonEmpty      Reason = "empty"     // retrace_path: the trip log was empty
 )
 
 // Cmd is sent from the server to a robot on lab/<id>/cmd.

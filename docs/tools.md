@@ -12,8 +12,8 @@ the way is clear", "follow the line to blue"), the robot closes the loop with fi
 its 40 Hz main loop and reports a structured result. The ultrasonic sensor only looks forward, so
 the goals are about driving, turning and scanning, not about following walls on the side.
 
-Not offered to agents yet, because the robot does not implement them: `retrace_path`,
-`play_melody`, `gesture`. The team page lists them as "kommt bald". `set_leds`
+Not offered to agents yet, because the robot does not implement them: `play_melody`,
+`gesture`. The team page lists them as "kommt bald". `set_leds`
 takes a color only, no pattern.
 
 | Group | Tool | Parameters | Result |
@@ -23,7 +23,7 @@ takes a color only, no pattern.
 | Move | `drive_until` | `max_cm`, `stop_below_cm?`, `stop_on_color?` | `driven_cm`, `reason`, `distance_cm`, `color`, `floor`, `min_distance_cm` |
 | Move | `turn_until_clear` | `direction`, `min_cm?`, `min_deg?`, `max_deg?` | `turned_deg`, `reason` (`clear`, `max_deg`), `distance_cm`, `floor` |
 | Move | `follow_line_until` | `max_cm`, `stop_on_color?`, `stop_at_crossing?` | `driven_cm`, `reason` (`color`, `crossing`, `line_lost`, `max_cm`), `color`, `floor` |
-| Move | `retrace_path` | none | `segments`, `reason` |
+| Move | `retrace_path` | none | `segments`, `reason` (`done`, `empty`, `obstacle`, `stopped`, `timeout`), `distance_cm` |
 | Move | `stop` | none | `ok` |
 | Sense | `read_sensors` | none | `distance_cm`, `floor` (current pattern), `color`, `line`, `yaw`, `battery`, `tilted` |
 | Sense | `scan` | `from_deg?`, `to_deg?`, `step_deg?`, `face?` | `profile` `[[deg, cm], …]`, `best_deg`, `best_cm`, `turned_deg` |
@@ -56,6 +56,9 @@ takes a color only, no pattern.
   `Träger`; by default the sticker color, e.g. `rot`), never `mbot-2`. Devices can be swapped
   without changing prompts as long as the new robot gets the same name. `all` and `alle` are
   reserved and cannot be robot names.
+- **`retrace_path` turns around:** it drives the way back forward, so the obstacle reflex
+  stays on, and ends at the start facing the way it came. After an abort the rest stays in the
+  trip log and the next call continues (details in `docs/protocol.md`, "Trip log").
 - **`say` is a bundle:** text on the speaker's display, light, sound, optional gesture, and the
   message lands in the recipient's inbox. `to` is an agent name or `"all"`.
 - **`finish` delivers the report** that the team later compares with the log.

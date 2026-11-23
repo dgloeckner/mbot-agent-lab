@@ -124,7 +124,7 @@ class Robot:
             if name == "calibrate_colors":
                 skill = CalibrateColorsSkill(args, self.sense)
             else:
-                skill = make_motion_skill(name, args)
+                skill = make_motion_skill(name, args, self.trip_log)
         except NotImplementedError:
             self.reply(cmd_id, False, "error", error="not implemented: %s" % name)
             return
