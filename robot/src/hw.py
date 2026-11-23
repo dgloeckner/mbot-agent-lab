@@ -58,7 +58,12 @@ def hw_wheels_deg():
 
 
 def hw_yaw():
-    return cyberpi.get_yaw()  # VERIFY: degrees, sign (positive = right?)
+    """Heading in degrees, positive = right (clockwise seen from above).
+
+    The CyberPi counts yaw the other way round: on the robot a right turn by
+    90 degrees read -100 (checked 2026-11-23).
+    """
+    return -cyberpi.get_yaw()
 
 
 def hw_yaw_reset():

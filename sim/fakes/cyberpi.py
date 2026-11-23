@@ -62,7 +62,8 @@ def get_mac_address():
 
 
 def get_yaw():
-    return simstate.world.yaw()
+    # Like the real CyberPi: counterclockwise positive (the world uses right = positive).
+    return -simstate.world.yaw()
 
 
 def reset_yaw():
