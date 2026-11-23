@@ -109,6 +109,10 @@ tests what changed compared to `main`.
 
 3. Upload `robot/dist/main.py` to the CyberPi with mBlock in upload mode.
 
+On a new robot or firmware, first upload `robot/tools/hwcheck.py` alone (wheels in the air). It
+tries every vendor call the script uses and prints `HW OK …` or `HW ERR …` per call to the display
+and the serial log.
+
 All vendor API calls live in `robot/src/hw.py` and are marked `VERIFY` until checked on hardware.
 
 ## Repository layout
