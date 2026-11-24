@@ -4,6 +4,9 @@ Material für die Lab-Leitung. Das Lab-Material ist auf Deutsch; Aufgaben gibt e
 Englisch mit gleichem Dateinamen.
 
 - `aufgaben/de/`, `aufgaben/en/`: fertige Aufgaben zum Importieren in den Leitstand.
+- `werkzeuge.md`: Leitfaden für den Lernpfad mit eigenen Werkzeugen (Stufen 1 bis 5), Rollen im
+  Team, die Labyrinth-Challenge, ihre Wertung, Nachbesprechung, Aufbau des Labyrinths und ein
+  Zeitplan.
 - `feld/`: Bauplan und Aufbau des Linienfelds.
 
 ## Wie ein Lab-Tag mit Aufgaben läuft
@@ -78,3 +81,23 @@ lassen.
 | `zwei-roboter.md` | Zu zweit suchen | Arena oder Labyrinth, zwei Roboter pro Team |
 | `linienfeld.md` | Linienfeld – fahr zur Kreuzung (2,3) | Linienfeld (`feld/`), ein Roboter |
 | `verhandeln.md` | Die Engstelle | mehrere Teams; Übung zu Prompt-Injection |
+| `werkzeuge-1-konsole.md` | Werkzeuge 1: Selbst steuern | Arena oder Labyrinth; Rollen im Team, Werkzeuge von Hand |
+| `werkzeuge-2-wiederholen.md` | Werkzeuge 2: Wiederholen | Arena; erstes eigenes Werkzeug, Schleifen |
+| `werkzeuge-3-entscheiden.md` | Werkzeuge 3: Entscheiden | Labyrinth (`labyrinth_rechts`); Bedingungen, Sonderfälle |
+| `werkzeuge-4-agent.md` | Werkzeuge 4: Euer Agent bekommt eure Werkzeuge | Labyrinth (`labyrinth_rechts`); Beschreibung, Prompt, Deploy |
+| `werkzeuge-5-challenge.md` | Werkzeuge 5: Challenge Labyrinth | `labyrinth_rechts`, dann `labyrinth_gestoert`; `agent_tools: team_tools` |
+
+Die Werkzeug-Aufgaben gehören zusammen; wie man sie durchführt, steht in `werkzeuge.md`.
+
+## Welten im Simulator
+
+Zum Ausprobieren ohne Roboter: `npx nx run sim:run --robots=2 --world=sim/worlds/<welt>.json`.
+
+| Welt | Was |
+| --- | --- |
+| `arena.json` | offene Arena 200 × 200 cm mit farbigen Feldern in den Ecken und einer Linie quer durch |
+| `labyrinth.json` | kleines Labyrinth, 200 × 200 cm, Gänge 50 cm, blaues Zielfeld |
+| `labyrinth_rechts.json` | einfaches Labyrinth (200 × 200 cm, Gänge 50 cm): hoch, rechts, runter zum blauen Feld; „an jeder Wand rechts“ kommt an |
+| `labyrinth_gestoert.json` | dasselbe gestört: Kiste im oberen Gang, Umweg durch die Mitte, blaues Feld im Seitengang; „an jeder Wand rechts“ kommt nicht mehr an, „der rechten Wand Feld für Feld folgen“ schon |
+| `linie.json` | Linie mit Kurven, endet auf einem blauen Feld |
+| `gitter.json` | das Linienfeld (`feld/`); erzeugt von `sim/grid.py` |

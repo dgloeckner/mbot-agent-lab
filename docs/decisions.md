@@ -81,8 +81,8 @@ and goes here, not into `CLAUDE.md`. How the system works today: `architecture.m
 ## Team tools
 
 Teams build their own tools from blocks in the browser, run them by hand and hand them to their
-agent with the prompt. How it works: `architecture.md` and, from the interpreter on,
-`programs.md`.
+agent with the prompt. How it works: `architecture.md` and `programs.md`; how a lab day uses
+them: `lab/werkzeuge.md`.
 
 | Topic | Decision | Why |
 | --- | --- | --- |
@@ -95,7 +95,7 @@ agent with the prompt. How it works: `architecture.md` and, from the interpreter
 | Versions | one deploy freezes the prompt and all team tools of the pair under one version; "zurück" restores both; the agent version stays `prompts.id` and covers the team tools | a run points at one version; comparison and rollback stay whole |
 | History | what changed in a team tool between two versions is shown as the old and the new blocks side by side, with marks | teams explain their changes in the debrief |
 | No driver, no pause | by-hand calls and "Ausführen" work only while no run is active; a team tool the agent calls runs inside that call; the robot answers a second motion command with `busy`; stop always works | one rule instead of a driver role and a pause state |
-| One writer per team | saving a team tool is "last write wins": no version check, no conflict dialog, no lock; other open PCs of the team reload what changed; the lab material recommends roles | a team coordinates among its people; several PCs stay useful for reading along |
+| One writer per team | saving a team tool is "last write wins": no version check, no conflict dialog, no lock; other open PCs of the team reload what changed; the lab material recommends roles (`lab/werkzeuge.md`) | a team coordinates among its people; several PCs stay useful for reading along |
 | By hand is a property of the tool | the registry flags which built-in tools a person or a team tool may use; a new tool is agent-only until flagged; console, blocks and interpreter read the registry and keep no tool list | one place decides, nothing drifts |
 | Console | the "Werkzeuge" tab is the console; by-hand calls appear in the protocol as "Ihr" | no new tab; the team sees its own actions next to the agent's |
 | The browser never runs anything | it shows and sends states; the server checks every rule | rules hold for every PC and every client |
