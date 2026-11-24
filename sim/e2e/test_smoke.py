@@ -354,6 +354,24 @@ class SmokeTest(unittest.TestCase):
             if "tool by hand" in line:
                 print("e2e: server: " + line, file=sys.stderr)
 
+    def test_save_team_tool(self):
+        """A team saves the quadrat example over the API and reads it back as valid."""
+        self.request("POST", "/admin/api/login", {"password": self.admin_password}, expect=(204,))
+        team = self.request("POST", "/api/join", {"code": self.lab_code, "name": "Baumeister"},
+                            opener=urllib.request.build_opener(), expect=(201,))
+        self.give_task(team, "Eigene Werkzeuge")
+        example = json.loads((ROOT / "docs" / "examples" / "programs" / "quadrat.json").read_text(encoding="utf-8"))
+        saved = self.team_request(team, "POST", "/programs", {"name": "quadrat", "description": "Fährt ein Quadrat.",
+                                                               "blockly": example["blockly"]}, expect=(201,))
+        self.assertTrue(saved["valid"], saved)
+        back = self.team_request(team, "GET", "/programs/%s" % saved["id"])
+        self.assertEqual(back["blockly"], example["blockly"])
+        listed = self.team_request(team, "GET", "/programs")
+        self.assertEqual([(p["name"], p["valid"]) for p in listed], [("quadrat", True)])
+        for line in self.server_log.read_text(encoding="utf-8").splitlines():
+            if "team tool saved" in line:
+                print("e2e: server: " + line, file=sys.stderr)
+
     def test_two_tasks_and_a_switch(self):
         """A team works in two tasks and switches between them: prompt, notes
         and runs always belong to the active task. Starting before accepting a

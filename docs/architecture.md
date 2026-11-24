@@ -143,6 +143,7 @@ its data is not migrated.
 tasks ──< team_tasks >── teams
               │
               ├──< prompts      (agent versions, numbered per (team, task))
+              ├──< programs     (team tools: working state)
               ├──< notes
               └──< runs ──< messages, tool_calls (robot), llm_calls
 active_tasks: one row per team, points at an assigned team_task
@@ -150,7 +151,7 @@ robots: every robot the lab knows, so runs can reference it
 ```
 
 **The key of everything a team produces is the pair (team, task)**, `(team_id, task_id)`.
-`prompts`, `notes` and `runs` carry both columns with a composite foreign key to `team_tasks`, so
+`prompts`, `notes`, `programs` and `runs` carry both columns with a composite foreign key to `team_tasks`, so
 queries per pair need no join and the database refuses rows for a pair that was never assigned.
 In Go the pair is one type, `store.TeamTask{Team, Task}`; every team-scoped store function takes
 it (`SavePrompt(ctx, tt, text)`, `ListNotes(ctx, tt)`, `LastRun(ctx, tt)`, …). Finer scopes:
@@ -172,6 +173,7 @@ model next to it.
 | `tool_calls` | run, sequence, name, arguments, result, duration, robot ID and alias at that moment |
 | `llm_calls` | run, provider, model, tokens in and out, duration, cost |
 | `notes` | (team, task), text, origin run and message, author (`agent` or `team`), time |
+| `programs` | team tools of a (team, task): stable id, name (unique per pair), description, Blockly state, derived tree and problems, update time |
 | `settings` | lab-wide settings: lab code, released models, conversations on or off |
 | `events` | the event log: kind, actor, scope (team, task, robot, prompt, run) as real columns, small JSON data; see `events.md` |
 
@@ -204,7 +206,7 @@ The control room prepares tasks and assigns them to teams; the rules live in `in
 - **Accepting** (team, `lab/teamtasks.go`): the team accepts an assigned, open task and it
   becomes active. The chosen start prompt becomes version 1 of the new pair: the task's starter
   prompt (`starter`; no version if it has none), nothing (`empty`), or the newest prompt of
-  another task the team accepted (`copy`).
+  another task the team accepted (`copy`); `copy` also copies that task's team tools.
 - **The active task** (`active_tasks`) is owned by the server, so all PCs of a team follow a
   switch. A team switches between accepted tasks; switching and accepting are refused while a
   run is active, and an open conversation ends (`agent.Manager.TaskActivated`).
@@ -237,9 +239,11 @@ a closed task writes answer 409 and reads work. Stop always works.
 | `GET prompts`, `GET prompts/{version}`, `POST prompt` | prompt versions; deploy, optionally with restart |
 | `POST start`, `POST stop` | start or stop a run; stop also cancels a running by-hand call; start answers 409 while one runs |
 | `POST tools/{name}` | run one by-hand tool (body: its arguments, `robot` with several robots) and answer its result as the agent would get it; 409 while a run is active |
+| `GET programs`, `GET programs/{id}` | team tools of the active task (name, description, valid, problems); one with its Blockly state |
+| `POST programs`, `PUT programs/{id}`, `DELETE programs/{id}` | create, replace (last write wins) or delete a team tool: `{name, description, blockly}`; the server derives tree and problems, stores invalid tools too and answers the problems per block; at most 12 per task |
 | `GET blocks` | Blockly block definitions and toolbox of the tool editor, built from the registry (`programs.md`, "Blocks") |
 | `POST message`, `POST conversation/new` | message to the own agent; start a new conversation |
-| `GET events` | SSE: `log`, `robots`, `agent`, `totals`, `models`, `task` (active task changed), `tasks` (assigned, withdrawn, accepted or closed); `Last-Event-ID` catches up |
+| `GET events` | SSE: `log`, `robots`, `agent`, `totals`, `models`, `task` (active task changed), `tasks` (assigned, withdrawn, accepted or closed), `programs` (a team tool was saved or deleted; `id`); `Last-Event-ID` catches up |
 | `GET/POST notes`, `PUT/DELETE notes/{id}` | notes |
 | `PUT name`, `PUT model` | rename the team, choose the model |
 | `PUT robots/{robot}/alias`, `POST robots/{robot}/identify` | rename a robot, make it blink and beep |

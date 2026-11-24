@@ -87,7 +87,9 @@ func newTestServerBus(t *testing.T, bus robots.Bus) *testLab {
 	}
 	models := llm.New(cfg.LLM, log)
 	budgets := config.Budgets{MaxStepsPerWakeup: 3, MaxRunMinutes: 5, MaxHistoryMessages: 40, MaxAgentMessagesPerMinute: 5, MaxConversationMessagesPerMinute: 3}
-	agents := agent.NewManager(agent.Deps{Store: st, Robots: reg, Hub: hub, LLM: models, Tools: tools.NewRegistry(reg, st, hub, budgets), Budgets: budgets, Log: log,
+	toolReg := tools.NewRegistry(reg, st, hub, budgets)
+	svc.Tools = toolReg
+	agents := agent.NewManager(agent.Deps{Store: st, Robots: reg, Hub: hub, LLM: models, Tools: toolReg, Budgets: budgets, Log: log,
 		TeamProvider: svc.TeamProvider, Conversations: svc.ConversationEnabled})
 	runCtx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)

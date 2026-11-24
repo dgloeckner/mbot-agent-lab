@@ -535,7 +535,11 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, team store.Team)
 			if e.Signal == live.SignalTask {
 				task = e.Task
 			}
-			b, _ := json.Marshal(map[string]string{"task_id": e.Task})
+			data := map[string]string{"task_id": e.Task}
+			if e.Ref != "" {
+				data["id"] = e.Ref
+			}
+			b, _ := json.Marshal(data)
 			_, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", e.Signal, b)
 			return err
 		}

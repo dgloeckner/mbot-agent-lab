@@ -111,6 +111,22 @@ The observer gets `{phase, step, block, kind, tool, args, round, result, ms}` fo
 `before` and `after` each call (`kind: call`) and sensor reading (`kind: sense`), and `wait` in
 single step. `round` is the round of the innermost loop, from 1.
 
+## Working state
+
+A team tool belongs to a (team, task) pair like prompts and notes (table `programs`): a stable
+id, its name (unique per pair), description, the Blockly state the team edits, and the tree and
+problems the server derived from it. At most 12 per pair. Accepting a task with the prompt
+choice `copy` copies the team tools of the other task too, with new ids.
+
+- **Team routes** (`docs/architecture.md`): list, read, create, replace, delete. The browser sends
+  `{name, description, blockly}` and never a tree; the server converts and validates (see
+  "Blocks"), stores the tool even when it is invalid and answers the problems per block.
+- **Last write wins.** A team has one writer and coordinates among its people (`decisions.md`):
+  no version check, no conflict answer, no lock. Every save or delete sends the SSE event
+  `programs` with the tool's id, so other open PCs of the team reload it.
+- Without an active task the routes answer 409; in a closed task reads work and writes answer 409.
+- The server logs `team tool saved` (team, task, id, name, valid, problems) and `team tool deleted`.
+
 ## Blocks
 
 Two representations, one source: the browser stores the **Blockly state** of a team tool, the
