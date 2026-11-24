@@ -77,6 +77,12 @@ type Service struct {
 	// OnTaskClosed, if set, ends running runs and open conversations in a
 	// task that the control room closed.
 	OnTaskClosed func(taskID string)
+	// RunActive, if set, reports whether a team's agent is in a run. A team
+	// cannot switch tasks then.
+	RunActive func(teamID string) bool
+	// OnTaskActivated, if set, ends the team's open conversation when its
+	// active task changes.
+	OnTaskActivated func(teamID, taskID string)
 
 	mu        sync.Mutex // serializes changes to teams, assignments and model choices
 	labCode   string
@@ -114,6 +120,14 @@ func (s *Service) Start(ctx context.Context) error {
 		if err := s.Store.SeeRobot(ctx, r.ID); err != nil {
 			return err
 		}
+	}
+
+	active, err := s.Store.ActiveTasks(ctx)
+	if err != nil {
+		return err
+	}
+	for team, task := range active {
+		s.Hub.SetTask(team, task)
 	}
 
 	teams, err := s.teamMap(ctx)
@@ -179,9 +193,6 @@ func (s *Service) Join(ctx context.Context, code, name string) (store.Team, erro
 		return store.Team{}, err
 	}
 	s.Record(ctx, store.Event{Kind: store.EventTeamJoined, Actor: store.ActorTeam, Team: t.ID, Data: map[string]string{"name": t.Name}})
-	if err := s.bridgeDefaultTask(ctx, t.ID); err != nil {
-		return store.Team{}, err
-	}
 	s.Log.Info("team joined", "team", t.ID, "name", t.Name)
 	return t, nil
 }

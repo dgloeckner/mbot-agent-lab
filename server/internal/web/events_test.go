@@ -40,10 +40,26 @@ func TestHTTPRoutesLeaveEvents(t *testing.T) {
 	if e, ok := findEvent(evs, store.EventTeamJoined, team); !ok || e.Task != "" || e.Actor != store.ActorTeam {
 		t.Errorf("team.joined = %+v, %v", e, ok)
 	}
-	// Until teams accept tasks themselves, joining assigns, accepts and activates the default task.
-	for _, kind := range []string{store.EventTaskAssigned, store.EventTaskAccepted, store.EventTaskActivated} {
-		if e, ok := findEvent(evs, kind, team); !ok || e.Task == "" {
-			t.Errorf("%s = %+v, %v", kind, e, ok)
+	// Assigning in the control room and accepting on the team page.
+	c := adminClient(t, srv)
+	code, task := adminCall(t, c, srv, "POST", "/admin/api/tasks", `{"title":"Labyrinth","body":"Findet den Ausgang."}`)
+	if code != http.StatusCreated {
+		t.Fatalf("create task: %d", code)
+	}
+	id := field(task, "id").(string)
+	adminCall(t, c, srv, "POST", "/admin/api/tasks/"+id+"/publish", "")
+	if code, _ := adminCall(t, c, srv, "POST", "/admin/api/tasks/"+id+"/assign", `{"teams":["`+team+`"]}`); code != http.StatusOK {
+		t.Fatalf("assign: %d", code)
+	}
+	if code, body := do(t, srv, "POST", "/t/"+body["token"].(string)+"/tasks/"+id+"/accept", `{"prompt":"empty"}`); code != http.StatusOK {
+		t.Fatalf("accept: %d %v", code, body)
+	}
+	evs = kinds(t, srv.st)
+	for _, c := range []struct{ kind, actor string }{
+		{store.EventTaskAssigned, store.ActorAdmin}, {store.EventTaskAccepted, store.ActorTeam}, {store.EventTaskActivated, store.ActorTeam},
+	} {
+		if e, ok := findEvent(evs, c.kind, team); !ok || e.Task != id || e.Actor != c.actor {
+			t.Errorf("%s = %+v, %v", c.kind, e, ok)
 		}
 	}
 
@@ -57,7 +73,6 @@ func TestHTTPRoutesLeaveEvents(t *testing.T) {
 	if code, _ := do(t, srv, "DELETE", "/t/tok-rot/notes/"+strconv.Itoa(int(note["id"].(float64))), ""); code != http.StatusNoContent && code != http.StatusOK {
 		t.Fatalf("delete note: %d", code)
 	}
-	c := adminClient(t, srv)
 	if code := adminDo(t, c, srv, "POST", "/admin/api/assign", `{"robot":"mbot-3","team":"rot"}`); code != http.StatusNoContent {
 		t.Fatalf("assign: %d", code)
 	}

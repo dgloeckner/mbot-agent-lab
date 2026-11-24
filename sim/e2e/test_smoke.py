@@ -226,6 +226,16 @@ class SmokeTest(unittest.TestCase):
 
     # --- the chain -------------------------------------------------------------
 
+    def give_task(self, team, title):
+        """The control room prepares a task and assigns it; the team accepts it."""
+        task = self.request("POST", "/admin/api/tasks", {"title": title, "body": "Erkundet die Arena."}, expect=(201,))
+        self.request("POST", "/admin/api/tasks/%s/publish" % task["id"])
+        self.request("POST", "/admin/api/tasks/%s/assign" % task["id"], {"teams": [team["id"]]})
+        accepted = self.request("POST", "/t/%s/tasks/%s/accept" % (team["token"], task["id"]), {"prompt": "empty"},
+                                opener=urllib.request.build_opener())
+        self.assertEqual(accepted["status"], "active", accepted)
+        return task
+
     def robot_online(self, robot):
         def probe():
             st = self.request("GET", "/admin/api/state")
@@ -244,6 +254,7 @@ class SmokeTest(unittest.TestCase):
         team = self.request("POST", "/api/join", {"code": self.lab_code, "name": "Testteam"},
                             opener=urllib.request.build_opener(), expect=(201,))
         token = team["token"]
+        self.give_task(team, "Arena")
         self.request("POST", "/admin/api/assign", {"robot": ROBOT, "team": team["id"]}, expect=(204,))
         self.follow_team_log(token)
 
@@ -313,6 +324,7 @@ class SmokeTest(unittest.TestCase):
         team = self.request("POST", "/api/join", {"code": self.lab_code, "name": "Duo"},
                             opener=urllib.request.build_opener(), expect=(201,))
         token = team["token"]
+        self.give_task(team, "Zu zweit")
         for robot in (ROBOT, ROBOT2):
             self.request("POST", "/admin/api/assign", {"robot": robot, "team": team["id"]}, expect=(204,))
         self.follow_team_log(token)

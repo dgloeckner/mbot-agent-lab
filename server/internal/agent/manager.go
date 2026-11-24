@@ -252,6 +252,14 @@ func (m *Manager) TaskClosed(taskID string) {
 	}
 }
 
+// TaskActivated ends the team's open conversation when the team switches to
+// another task. Switching is refused while a run is active.
+func (m *Manager) TaskActivated(teamID, taskID string) {
+	if a := m.actor(teamID, false); a != nil {
+		a.ctrl <- control{kind: ctrlTaskSwitched, task: taskID}
+	}
+}
+
 // RemoveTeam ends the team's run and its actor.
 func (m *Manager) RemoveTeam(teamID string) {
 	m.mu.Lock()

@@ -167,3 +167,59 @@ func (s *Server) adminWithdrawTask(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// --- team routes ---------------------------------------------------------------
+
+// teamTasks lists the team's tasks without their text, and which one is active.
+func (s *Server) teamTasks(w http.ResponseWriter, r *http.Request, team store.Team) {
+	tasks, err := s.Lab.TeamTasks(r.Context(), team.ID)
+	if err != nil {
+		s.serverError(w, err)
+		return
+	}
+	active := ""
+	for i := range tasks {
+		if tasks[i].Status == store.TeamTaskActive {
+			active = tasks[i].ID
+		}
+		tasks[i].Body, tasks[i].Starter = "", ""
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tasks": tasks, "active": active})
+}
+
+// teamTask returns one of the team's tasks with its text, for the "Aufgabe" tab.
+func (s *Server) teamTask(w http.ResponseWriter, r *http.Request, team store.Team) {
+	t, err := s.Lab.TeamTask(r.Context(), team.ID, r.PathValue("id"))
+	if err != nil {
+		s.taskError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, t)
+}
+
+// acceptTask accepts and activates a task: {"prompt": "starter" | "empty" | "copy", "from_task": "…"}.
+func (s *Server) acceptTask(w http.ResponseWriter, r *http.Request, team store.Team) {
+	var req struct {
+		Prompt   string `json:"prompt"`
+		FromTask string `json:"from_task"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	t, err := s.Lab.AcceptTask(r.Context(), team.ID, r.PathValue("id"), req.Prompt, req.FromTask)
+	if err != nil {
+		s.taskError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, t)
+}
+
+// activateTask switches to another accepted task.
+func (s *Server) activateTask(w http.ResponseWriter, r *http.Request, team store.Team) {
+	t, err := s.Lab.ActivateTask(r.Context(), team.ID, r.PathValue("id"))
+	if err != nil {
+		s.taskError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, t)
+}

@@ -163,6 +163,42 @@ func (s *Store) teamTasks(ctx context.Context, filter string, args ...any) (map[
 	return out, rows.Err()
 }
 
+// TaskTeams returns the teams a task is assigned to (withdrawn ones left out).
+func (s *Store) TaskTeams(ctx context.Context, task string) ([]string, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT team_id FROM team_tasks WHERE task_id = ? AND withdrawn_at IS NULL ORDER BY team_id`, task)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// ActiveTasks returns the active task of every team that has one.
+func (s *Store) ActiveTasks(ctx context.Context) (map[string]string, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT team_id, task_id FROM active_tasks`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var team, task string
+		if err := rows.Scan(&team, &task); err != nil {
+			return nil, err
+		}
+		out[team] = task
+	}
+	return out, rows.Err()
+}
+
 // Tasks returns all tasks, oldest first.
 func (s *Store) Tasks(ctx context.Context) ([]Task, error) {
 	rows, err := s.DB.QueryContext(ctx, `SELECT `+taskColumns+` FROM tasks ORDER BY created_at, id`)

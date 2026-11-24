@@ -28,11 +28,11 @@ protocol (`messages`, `tool_calls`, `llm_calls`) stays the detailed record per r
 | `team.joined` | team | team | `name` | `lab.Join` |
 | `task.published` | admin | task | `title` | `lab.PublishTask` |
 | `task.closed` | admin | task | — | `lab.CloseTask` |
-| `task.assigned` | admin, system | team, task | — | `lab.AssignTask` (only teams that got the task now), default-task bridge on join (`lab/bridge.go`) |
+| `task.assigned` | admin | team, task | — | `lab.AssignTask` (only teams that got the task now) |
 | `task.withdrawn` | admin | team, task | — | `lab.WithdrawTask` |
-| `task.accepted` | team, system | team, task | — | default-task bridge on join |
-| `task.activated` | team, system | team, task | — | default-task bridge on join |
-| `prompt.deployed` | team | team, task, prompt | `version`, `chars`, `restart` | team route `POST prompt` |
+| `task.accepted` | team | team, task | `prompt` (`starter`, `empty`, `copy`) | `lab.AcceptTask` |
+| `task.activated` | team | team, task | — | `lab.AcceptTask`, `lab.ActivateTask` |
+| `prompt.deployed` | team | team, task, prompt | `version`, `chars`, `restart`; on accept also `source` (`starter`, `copy`) and `from_task` | team route `POST prompt`, `lab.AcceptTask` |
 | `run.started` | team | team, task, prompt, run | `model`, `provider` | not written yet (agent) |
 | `run.ended` | team, agent, system | team, task, prompt, run | `reason`, `tokens_in`, `tokens_out`, `cost_micro_eur` | not written yet (agent) |
 | `run.finished` | agent | team, task, prompt, run | `report` (the agent's claim, not a result) | not written yet (agent) |

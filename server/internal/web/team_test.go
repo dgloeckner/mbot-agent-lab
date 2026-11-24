@@ -67,6 +67,7 @@ func newTestServer(t *testing.T) *testLab {
 			t.Fatal(err)
 		}
 		activateTestTask(t, st, tm.ID)
+		hub.SetTask(tm.ID, testTask)
 	}
 	if err := svc.AssignRobot(ctx, "mbot-1", "rot"); err != nil {
 		t.Fatal(err)
@@ -82,6 +83,8 @@ func newTestServer(t *testing.T) *testLab {
 	t.Cleanup(cancel)
 	go agents.Run(runCtx)
 	svc.OnTaskClosed = agents.TaskClosed
+	svc.OnTaskActivated = agents.TaskActivated
+	svc.RunActive = func(teamID string) bool { return agents.Status(teamID).Running }
 	s := &Server{Config: cfg, Robots: reg, Store: st, Hub: hub, Lab: svc, Agents: agents, Log: log}
 	srv := httptest.NewServer(s.Handler())
 	t.Cleanup(srv.Close)

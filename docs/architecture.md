@@ -182,11 +182,6 @@ Kinds, scope and data fields: [`events.md`](events.md).
 disappears from the control room and its link stops working; its tasks, prompts, notes and runs
 stay, so results and history stay consistent. Its name is free again.
 
-**Temporary bridge:** until teams accept tasks themselves, `lab` creates a shared task `default`
-("Freies Arbeiten") and assigns, accepts and activates it for every team that joins
-(`server/internal/lab/bridge.go`). Team routes and the agent work in the team's active task; a
-team without one gets 409 "Eurem Team ist noch keine Aufgabe zugewiesen."
-
 ### Tasks
 
 The control room prepares tasks and assigns them to teams; the rules live in `internal/lab`
@@ -205,6 +200,16 @@ The control room prepares tasks and assigns them to teams; the rules live in `in
 - **IDs:** `"a"` + 6 random characters, like team IDs.
 - **Board:** the control room state lists all tasks (without text) and, per team, its assigned
   tasks with their status: `assigned`, `accepted` or `active`.
+- **Accepting** (team, `lab/teamtasks.go`): the team accepts an assigned, open task and it
+  becomes active. The chosen start prompt becomes version 1 of the new pair: the task's starter
+  prompt (`starter`; no version if it has none), nothing (`empty`), or the newest prompt of
+  another task the team accepted (`copy`).
+- **The active task** (`active_tasks`) is owned by the server, so all PCs of a team follow a
+  switch. A team switches between accepted tasks; switching and accepting are refused while a
+  run is active, and an open conversation ends (`agent.Manager.TaskActivated`).
+- **No task, nothing works:** a team that joins has no task. Without an active task the team
+  routes that act on one answer 409 "Eurem Team ist noch keine Aufgabe zugewiesen."; robots can
+  still be assigned. In a closed task reads work and writes answer 409.
 
 ### HTTP routes
 
@@ -216,16 +221,22 @@ Pages and joining:
 | `GET /assets/…` | embedded team page and control room build |
 | `GET /healthz` | health check |
 
-Team routes (`/t/{token}/…`, the token is the secret part of the team link):
+Team routes (`/t/{token}/…`, the token is the secret part of the team link). Prompts, notes,
+runs, conversations and the log act on the team's active task: without one they answer 409, in
+a closed task writes answer 409 and reads work. Stop always works.
 
 | Route | Purpose |
 | --- | --- |
 | `GET /t/{token}` | team page |
-| `GET api/session` | team, robots, models, current state |
+| `GET api/session` | team, active task (with text), task list, robots, models, prompt, versions, notes, state; works without a task |
+| `GET tasks` | assigned tasks with title, state, status, assigned and accepted time, and the active one |
+| `GET tasks/{id}` | one assigned task with its text (the "Aufgabe" tab) |
+| `POST tasks/{id}/accept` | accept and activate: `{prompt: "starter" \| "empty" \| "copy", from_task?}` |
+| `POST tasks/{id}/activate` | switch to another accepted task; 409 while a run is active |
 | `GET prompts`, `GET prompts/{version}`, `POST prompt` | prompt versions; deploy, optionally with restart |
 | `POST start`, `POST stop` | start or stop a run |
 | `POST message`, `POST conversation/new` | message to the own agent; start a new conversation |
-| `GET events` | SSE: log, state, usage; `Last-Event-ID` catches up |
+| `GET events` | SSE: `log`, `robots`, `agent`, `totals`, `models`, `task` (active task changed), `tasks` (assigned, withdrawn, accepted or closed); `Last-Event-ID` catches up |
 | `GET/POST notes`, `PUT/DELETE notes/{id}` | notes |
 | `PUT name`, `PUT model` | rename the team, choose the model |
 | `PUT robots/{robot}/alias`, `POST robots/{robot}/identify` | rename a robot, make it blink and beep |
@@ -319,6 +330,15 @@ at its token budget. The control room can switch conversations off for the lab.
 
 `say(to, text)` puts a message into the recipient's inbox and wakes its agent; the text also
 shows on the speaker's display. Agent messages are rate limited per minute.
+
+### Live log
+
+`live.Hub` keeps a backlog of log entries per team and fans them out to the team's SSE
+connections. It knows each team's active task (`SetTask`, loaded at startup and set on every
+accept or switch) and stamps it on every entry (`task_id`). A reconnecting page gets only the
+backlog of the active task, and a stream never forwards entries of another task. When the active
+task changes, every page of the team gets the SSE event `task` and reloads prompt, notes, log and
+conversation; `tasks` tells it to reload the task list.
 
 ## Web UI
 

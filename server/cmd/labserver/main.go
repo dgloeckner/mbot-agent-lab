@@ -125,6 +125,8 @@ func run(configPath string, log *slog.Logger) error {
 		agents.Deliver(teamID, agent.Message{From: agent.SourceSystem, Kind: kind, Text: text})
 	}
 	labSvc.OnTaskClosed = agents.TaskClosed
+	labSvc.OnTaskActivated = agents.TaskActivated
+	labSvc.RunActive = func(teamID string) bool { return agents.Status(teamID).Running }
 
 	ui := &web.Server{Config: cfg, Robots: reg, Store: db, Hub: hub, Lab: labSvc, Agents: agents, Log: log}
 	go ui.Run(ctx)

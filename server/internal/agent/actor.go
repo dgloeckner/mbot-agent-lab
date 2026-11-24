@@ -23,6 +23,7 @@ const (
 	ctrlRestart
 	ctrlRemove
 	ctrlTaskClosed
+	ctrlTaskSwitched
 	ctrlNewConversation
 )
 
@@ -158,6 +159,10 @@ func (a *actor) loop(ctx context.Context) {
 				if a.conv != nil && a.conv.task.Task == c.task {
 					a.endConversation("task_closed")
 					a.talkInfo("Die Lab-Leitung hat die Aufgabe geschlossen. Das Gespräch ist zu Ende.")
+				}
+			case ctrlTaskSwitched:
+				if a.conv != nil && a.conv.task.Task != c.task {
+					a.endConversation("task_switched")
 				}
 			case ctrlRemove:
 				end("team_deleted", "")

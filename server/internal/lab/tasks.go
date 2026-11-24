@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/live"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/store"
 )
 
@@ -152,6 +153,13 @@ func (s *Service) CloseTask(ctx context.Context, id string) (store.Task, error) 
 		return store.Task{}, err
 	}
 	s.Record(ctx, store.Event{Kind: store.EventTaskClosed, Actor: store.ActorAdmin, Task: id})
+	teams, err := s.Store.TaskTeams(ctx, id)
+	if err != nil {
+		s.Log.Error("teams of a closed task", "task", id, "err", err)
+	}
+	for _, team := range teams {
+		s.Hub.Signal(team, live.SignalTasks)
+	}
 	s.mu.Unlock()
 	s.Log.Info("task closed", "task", id)
 	if s.OnTaskClosed != nil {
@@ -222,6 +230,7 @@ func (s *Service) AssignTask(ctx context.Context, id string, teams []string) ([]
 		got = append(got, team)
 		s.Record(ctx, store.Event{Kind: store.EventTaskAssigned, Actor: store.ActorAdmin, Team: team, Task: id})
 		s.notify(team, "task_assigned", "Ihr habt eine neue Aufgabe bekommen: „"+t.Title+"“.", map[string]string{"task": id, "title": t.Title})
+		s.Hub.Signal(team, live.SignalTasks)
 	}
 	if len(got) > 0 {
 		s.Log.Info("task assigned", "task", id, "teams", got)
@@ -253,5 +262,6 @@ func (s *Service) WithdrawTask(ctx context.Context, id, team string) error {
 	}
 	s.Record(ctx, store.Event{Kind: store.EventTaskWithdrawn, Actor: store.ActorAdmin, Team: team, Task: id})
 	s.notify(team, "task_withdrawn", "Die Lab-Leitung hat eine Aufgabe zurückgenommen.", map[string]string{"task": id})
+	s.Hub.Signal(team, live.SignalTasks)
 	return nil
 }
