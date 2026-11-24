@@ -41,6 +41,13 @@ type testLab struct {
 
 func newTestServer(t *testing.T) *testLab {
 	t.Helper()
+	return newTestServerBus(t, nopBus{})
+}
+
+// newTestServerBus is newTestServer with robots on the given bus. A
+// *robotBus answers commands: the robots are online.
+func newTestServerBus(t *testing.T, bus robots.Bus) *testLab {
+	t.Helper()
 	ctx := context.Background()
 	cfg := &config.Config{
 		Server: config.Server{AdminPassword: "pw", LabCode: "TEST"},
@@ -56,7 +63,10 @@ func newTestServer(t *testing.T) *testLab {
 	}
 	t.Cleanup(func() { st.Close() })
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	reg := robots.New(nopBus{}, []robots.Spec{{ID: "mbot-1", Color: "red"}, {ID: "mbot-2", Color: "blue"}, {ID: "mbot-3", Color: "green"}}, log)
+	reg := robots.New(bus, []robots.Spec{{ID: "mbot-1", Color: "red"}, {ID: "mbot-2", Color: "blue"}, {ID: "mbot-3", Color: "green"}}, log)
+	if rb, ok := bus.(*robotBus); ok {
+		rb.online(t, reg)
+	}
 	hub := live.NewHub()
 	svc := &lab.Service{Store: st, Robots: reg, Hub: hub, Config: cfg, Log: log}
 	if err := svc.Start(ctx); err != nil {

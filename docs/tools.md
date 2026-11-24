@@ -54,6 +54,11 @@ takes a color only, no pattern.
   both from the registry and keep no tool list of their own. `Registry.CallManual` refuses an
   agent-only tool with `ok: false` and a German message. The team page gets, per tool, whether it
   is by hand and its JSON schema (`GET api/session`, `tools[]`), the same schema the model sees.
+  A team runs a by-hand tool with `POST /t/{token}/tools/{name}` while no run is active
+  (`architecture.md`, "By hand").
+- **Arguments are checked** against the tool's schema before a call: type, enum and range of
+  every argument given; unknown keys are ignored, long texts are clamped. A mistake comes back as
+  `ok: false` with a German message naming the argument.
 - **Structured results with a reason:** every motion tool returns `reason`. The agent's ability
   to decide depends on it.
 - **Floor trace instead of a scan tool:** every motion tool except `scan` returns `floor`, what

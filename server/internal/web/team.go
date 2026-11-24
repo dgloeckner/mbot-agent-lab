@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -270,6 +271,33 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request, team store.Team) 
 		return
 	}
 	writeJSON(w, http.StatusAccepted, s.Agents.Status(team.ID))
+}
+
+// runTool runs one built-in tool by hand ("Werkzeuge" tab): the body holds its
+// arguments. It answers the tool result as the agent would get it; mistakes
+// in the arguments come back as "ok": false. 409 without an active, open task
+// and while a run is active.
+func (s *Server) runTool(w http.ResponseWriter, r *http.Request, team store.Team) {
+	if _, ok := s.writableTask(w, r, team); !ok {
+		return
+	}
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<10))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "Die Anfrage war ungültig.")
+		return
+	}
+	result, err := s.Agents.Manual(r.Context(), team.ID, r.PathValue("name"), string(raw))
+	if err != nil {
+		var se *agent.StartError
+		if errors.As(err, &se) {
+			writeError(w, http.StatusConflict, se.Msg)
+			return
+		}
+		s.serverError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_, _ = w.Write(result)
 }
 
 // agentNotice tells the team why its agent could not (re)start.

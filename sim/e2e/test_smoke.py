@@ -322,6 +322,38 @@ class SmokeTest(unittest.TestCase):
                          "the conversation started a run")
         print("e2e: conversation answer %r after %s" % (answer[0].get("text"), tools), file=sys.stderr)
 
+    def test_drive_by_hand(self):
+        """Stage 1: the team is the agent. It drives its robot by hand with
+        one tool; the call shows up in the log. During a run it is refused."""
+        self.request("POST", "/admin/api/login", {"password": self.admin_password}, expect=(204,))
+        self.robot_online(ROBOT)
+        start_pose = self.wait_for(lambda: self.poses()[:1], "sim pose trace")[0]
+        team = self.request("POST", "/api/join", {"code": self.lab_code, "name": "Handbetrieb"},
+                            opener=urllib.request.build_opener(), expect=(201,))
+        self.give_task(team, "Konsole")
+        self.request("POST", "/admin/api/assign", {"robot": ROBOT, "team": team["id"]}, expect=(204,))
+        self.follow_team_log(team["token"])
+        self.wait_for(lambda: any(r["online"] for r in self.team_request(team, "GET", "/api/session")["robots"]), "robot assigned")
+
+        res = self.team_request(team, "POST", "/tools/drive", {"cm": 20})
+        self.assertTrue(res["ok"], res)
+        self.assertEqual(res["reason"], "done", res)
+        self.assertGreater(res["driven_cm"], 15, res)
+        self.wait_for(lambda: self.log_entries(lambda e: e.get("kind") == "tool" and e.get("source") == "team"), "the by-hand call in the log")
+        end = self.poses()[-1]
+        moved = ((end[0] - start_pose[0]) ** 2 + (end[1] - start_pose[1]) ** 2) ** 0.5
+        self.assertGreater(moved, 15, (start_pose, end))
+        print("e2e: by hand drive %s -> %s (%.1f cm)" % (start_pose, end, moved), file=sys.stderr)
+
+        self.team_request(team, "POST", "/prompt", {"text": "Warte."}, expect=(201,))
+        self.team_request(team, "POST", "/start", expect=(202,))
+        refused = self.team_request(team, "POST", "/tools/drive", {"cm": 20}, expect=(409,))
+        self.assertEqual(refused["error"], "Erst anhalten: Euer Agent fährt gerade.")
+        self.team_request(team, "POST", "/stop")
+        for line in self.server_log.read_text(encoding="utf-8").splitlines():
+            if "tool by hand" in line:
+                print("e2e: server: " + line, file=sys.stderr)
+
     def test_two_tasks_and_a_switch(self):
         """A team works in two tasks and switches between them: prompt, notes
         and runs always belong to the active task. Starting before accepting a

@@ -29,6 +29,9 @@ type Run struct {
 const (
 	KindRun          = "run"
 	KindConversation = "conversation"
+	// KindManual holds what a team did by hand in a task (console calls,
+	// runs of team tools) between two runs. No tokens, no cost.
+	KindManual = "manual"
 )
 
 // Totals sums the runs and conversations of a team. Tokens and cost include
@@ -108,6 +111,41 @@ func (s *Store) create(ctx context.Context, kind string, tt TeamTask, promptID i
 		return 0, err
 	}
 	return res.LastInsertId()
+}
+
+// ManualRun returns the open manual row of the pair and creates one if there
+// is none. It ends when a run starts or the task is switched or closed.
+func (s *Store) ManualRun(ctx context.Context, tt TeamTask) (int64, error) {
+	var id int64
+	err := s.DB.QueryRowContext(ctx, `SELECT id FROM runs WHERE team_id = ? AND task_id = ? AND kind = 'manual' AND ended_at IS NULL ORDER BY id DESC LIMIT 1`,
+		tt.Team, tt.Task).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return s.create(ctx, KindManual, tt, 0, "")
+	}
+	return id, err
+}
+
+// EndManualRuns ends the open manual rows of a team (any task).
+func (s *Store) EndManualRuns(ctx context.Context, team, reason string) error {
+	_, err := s.DB.ExecContext(ctx, `UPDATE runs SET ended_at = ?, end_reason = ? WHERE team_id = ? AND kind = 'manual' AND ended_at IS NULL`,
+		now(), reason, team)
+	return err
+}
+
+// EndManualRunsOfTask ends the open manual rows of every team in a task.
+func (s *Store) EndManualRunsOfTask(ctx context.Context, task, reason string) error {
+	_, err := s.DB.ExecContext(ctx, `UPDATE runs SET ended_at = ?, end_reason = ? WHERE task_id = ? AND kind = 'manual' AND ended_at IS NULL`,
+		now(), reason, task)
+	return err
+}
+
+// NextSeq returns the next free sequence number of a run's protocol
+// (messages and tool calls share it).
+func (s *Store) NextSeq(ctx context.Context, run int64) (int, error) {
+	var seq int
+	err := s.DB.QueryRowContext(ctx, `SELECT MAX(COALESCE((SELECT MAX(seq) FROM messages WHERE run_id = ?), 0),
+		COALESCE((SELECT MAX(seq) FROM tool_calls WHERE run_id = ?), 0)) + 1`, run, run).Scan(&seq)
+	return seq, err
 }
 
 // EndRun records why and when a run (or conversation) ended, and the agent's report.

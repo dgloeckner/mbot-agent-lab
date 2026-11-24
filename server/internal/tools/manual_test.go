@@ -117,3 +117,24 @@ func TestCatalogFor(t *testing.T) {
 		t.Errorf("schema differs from the model's:\n%v\n%v", def, drive)
 	}
 }
+
+func TestCallChecksArgumentsAgainstTheSchema(t *testing.T) {
+	r, _, _ := setup(t, map[string]string{"mbot-1": "Scout"})
+	env := &Env{TeamID: "rot"}
+	for _, c := range []struct{ tool, args, want string }{
+		{"drive", `{"cm":"weit"}`, `"cm" muss eine Zahl sein`},
+		{"drive", `{"cm":400}`, `zwischen -300 und 300`},
+		{"drive_until", `{"max_cm":50,"stop_on_color":"lila"}`, `eines davon sein: white`},
+		{"follow_line_until", `{"max_cm":50,"stop_at_crossing":"ja"}`, `true oder false`},
+		{"forget", `{"note_id":1.5}`, `ganze Zahl`},
+	} {
+		got := schemaOf(t, r.Call(context.Background(), env, c.tool, c.args))
+		if got["ok"] != false || !strings.Contains(got["error"].(string), c.want) {
+			t.Errorf("%s %s = %v, want %q", c.tool, c.args, got, c.want)
+		}
+	}
+	// Long texts are clamped for the agent, not refused; unknown keys are ignored.
+	if got := schemaOf(t, r.Call(context.Background(), env, "show_text", `{"text":"`+strings.Repeat("x", 70)+`","farbe":"rot"}`)); got["ok"] != true {
+		t.Errorf("show_text with a long text = %v", got)
+	}
+}

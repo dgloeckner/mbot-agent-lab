@@ -166,7 +166,7 @@ model next to it.
 | `robots` | device ID (stable across renames), first seen; every configured robot is registered at startup |
 | `assignments` | robot → owner (`team:<id>`), alias (unique per owner) |
 | `prompts` | (team, task), version (from 1 per pair), text, time |
-| `runs` | (team, task), kind (`run` or `conversation`), prompt (agent version), model, start, end, end reason, tokens, cost, report |
+| `runs` | (team, task), kind (`run`, `conversation` or `manual`), prompt (agent version), model, start, end, end reason, tokens, cost, report |
 | `messages` | run, sequence, source, kind, text, data, robot ID and alias at that moment, time |
 | `tool_calls` | run, sequence, name, arguments, result, duration, robot ID and alias at that moment |
 | `llm_calls` | run, provider, model, tokens in and out, duration, cost |
@@ -234,7 +234,8 @@ a closed task writes answer 409 and reads work. Stop always works.
 | `POST tasks/{id}/accept` | accept and activate: `{prompt: "starter" \| "empty" \| "copy", from_task?}` |
 | `POST tasks/{id}/activate` | switch to another accepted task; 409 while a run is active |
 | `GET prompts`, `GET prompts/{version}`, `POST prompt` | prompt versions; deploy, optionally with restart |
-| `POST start`, `POST stop` | start or stop a run |
+| `POST start`, `POST stop` | start or stop a run; stop also cancels a running by-hand call; start answers 409 while one runs |
+| `POST tools/{name}` | run one by-hand tool (body: its arguments, `robot` with several robots) and answer its result as the agent would get it; 409 while a run is active |
 | `POST message`, `POST conversation/new` | message to the own agent; start a new conversation |
 | `GET events` | SSE: `log`, `robots`, `agent`, `totals`, `models`, `task` (active task changed), `tasks` (assigned, withdrawn, accepted or closed); `Last-Event-ID` catches up |
 | `GET/POST notes`, `PUT/DELETE notes/{id}` | notes |
@@ -340,6 +341,25 @@ a run's and its tokens count into the team totals. The context has conversation 
 as text, the team, prompt and notes, and the numbered protocol of the last run. Only
 `read_sensors` and `remember` can be called. It ends when a run starts, with "Neues Gespräch" or
 at its token budget. The control room can switch conversations off for the lab.
+
+### By hand
+
+Stage 1 of the learning path: the team is the agent. `POST tools/{name}` runs one tool the
+registry flags as by hand (`docs/tools.md`) on one of the team's robots, without a language
+model (`agent.Manager.Manual`, through `tools.Registry.CallManual`). Unknown and agent-only tools
+answer `ok: false` like any mistake; arguments are checked against the tool's schema.
+
+- **No driver, no pause:** by-hand calls work only while no run is active (409 "Erst anhalten:
+  Euer Agent fährt gerade."), and a run cannot start while a by-hand call runs. An open
+  conversation does not block: the agent moves no robot there. Two PCs of a team are not
+  locked against each other; the robot answers a second motion command with `busy`.
+- **Stop** cancels a running by-hand call (its result ends with `stopped`) and stops the robots.
+- **Storage:** by-hand calls are stored like the agent's tool calls, under a `runs` row of kind
+  `manual` of the (team, task): no model, no tokens, no cost. It ends when a run starts, the team
+  switches tasks or the task is closed; the next by-hand call opens a new one.
+- **Log:** one live log entry per call with source `team` and kind `tool`, in the shape of the
+  agent's tool entries; the server writes one `INFO` line `tool by hand` (team, task, robot,
+  tool, reason), and `tool by hand refused` during a run.
 
 ### Talking between agents
 

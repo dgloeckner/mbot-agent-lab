@@ -260,6 +260,11 @@ func (r *Registry) call(ctx context.Context, env *Env, name, rawArgs string) any
 			return fail("Es fehlt das Argument %q.", req)
 		}
 	}
+	if t.props != nil {
+		if err := checkArgs(t.props(env), args, false); err != nil {
+			return fail("%s", err.Error())
+		}
+	}
 	c := &call{r: r, env: env, args: args, team: r.Robots.TeamRobots(env.TeamID)}
 	if t.robot != robotNone {
 		targets, err := c.resolveRobots(t.robot == robotAll)
@@ -400,6 +405,9 @@ func (c *call) command(ctx context.Context, rb robots.Robot, name string, args m
 		return out
 	case errors.Is(err, robots.ErrTimeout):
 		out["ok"], out["reason"], out["error"] = false, "timeout", rb.Alias+" hat nicht rechtzeitig geantwortet."
+		return out
+	case errors.Is(err, context.Canceled):
+		out["ok"], out["reason"], out["error"] = false, "stopped", rb.Alias+" wurde angehalten."
 		return out
 	case err != nil:
 		out["ok"], out["error"] = false, err.Error()

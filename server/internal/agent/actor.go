@@ -238,6 +238,7 @@ func (a *actor) startRun(ctx context.Context) (*run, error) {
 	}
 	provider = a.m.LLM.Resolve(provider)
 	model := a.m.LLM.Model(provider)
+	a.m.endManual(a.team, "run_start") // by-hand work before the run stays in its own row
 	id, err := a.m.Store.CreateRun(ctx, task, p.ID, model)
 	if err != nil {
 		return nil, err
