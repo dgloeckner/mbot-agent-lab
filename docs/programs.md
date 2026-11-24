@@ -33,8 +33,9 @@ A **condition** (`cond`) is one comparison, optionally negated (`not`), with its
 
 There is no `and` and no `or`. A missing field never matches.
 
-Examples, read by the tests: `docs/examples/programs/` (`quadrat`, `labyrinth`,
-`wand_ausweichen`). Each file holds `{"program": …}`.
+Examples, read by the tests: `docs/examples/programs/` (`quadrat`, `labyrinth`, `wand`). Each
+file holds the Blockly state of the tool (`blockly`) and the tree the server derives from it
+(`program`); see "Blocks".
 
 ```json
 {"id": "l_loop", "type": "repeat_until",
@@ -109,3 +110,55 @@ block the program ended at in the words of the editor; `last` is the last tool's
 The observer gets `{phase, step, block, kind, tool, args, round, result, ms}` for every step:
 `before` and `after` each call (`kind: call`) and sensor reading (`kind: sense`), and `wait` in
 single step. `round` is the round of the innermost loop, from 1.
+
+## Blocks
+
+Two representations, one source: the browser stores the **Blockly state** of a team tool, the
+server turns it into the tree (`programs.Convert`, with the validation above) and runs only the
+tree. The browser never sends a tree.
+
+- **Blockly:** version 13.4.0, pinned in `package.json`. License Apache-2.0. The project belongs to
+  the Raspberry Pi Foundation (repository `RaspberryPiFoundation/blockly`, previously Google). It is
+  part of the web build; nothing is loaded from another host.
+- **Definitions:** `GET /t/{token}/blocks` answers Blockly's JSON block definitions and the
+  toolbox (`programs.Blocks`). Tool blocks are built from the registry (by-hand tools, their
+  schemas) and the block text table in `server/internal/tools/blocks.go` (`docs/tools.md`, "Block
+  texts"); control and condition blocks are fixed in `server/internal/programs/blocks.go`. Block
+  texts are German; block and field names in JSON stay English. A block has no robot field: the
+  robot is chosen when the program runs.
+- **Toolbox:** Fahren, Sensoren, Licht und Anzeige (tool blocks by group), Wiederholen
+  (`wiederhole n mal`, `wiederhole … bis`), Entscheiden (`wenn`, `wenn … sonst`, the conditions,
+  `nicht`, `gib zurück`).
+
+| Block | Type | Becomes |
+| --- | --- | --- |
+| Wenn das Werkzeug startet | `program_start` | the start; the program is the chain below it |
+| a tool's sentence, e.g. "fahre %1 cm" | `tool_<name>` | `call`; "rechts"/"links" set the sign of `degrees`; "egal", "zur Kreuzung" leave an argument out |
+| wiederhole %1 mal | `repeat_times` | `repeat` |
+| wiederhole … bis %1 | `repeat_until` | `repeat_until` |
+| wenn … dann | `if` | `if` without `else` |
+| wenn … dann … sonst | `if_else` | `if` with `else` |
+| gib zurück: … des letzten Ergebnisses / gib zurück: Text | `return_field`, `return_text` | `return` |
+| Grund ist / ist nicht … | `cond_reason` | result `reason` `eq`/`ne` |
+| Ergebnis: Feld < > = ≠ Zahl | `cond_result_number` | result number comparison |
+| Bodenfarbe im Ergebnis ist … | `cond_result_color` | result `color` |
+| Bodenspur im Ergebnis enthält … | `cond_result_floor` | result `floor` `contains` |
+| Abstand nach vorn jetzt … cm | `cond_sensor_distance` | sensor `distance_cm` |
+| Bodenfarbe jetzt ist … | `cond_sensor_color` | sensor `color` |
+| Boden jetzt enthält … | `cond_sensor_floor` | sensor `floor` `contains` |
+| Linie jetzt ist … | `cond_sensor_line` | sensor `line` |
+| nicht … | `cond_not` | toggles `not` of the condition inside |
+
+**Conversion** refuses, each at its block: an unknown block type, an agent-only tool as a block,
+blocks that hang on nothing beside the program, and more than one start. Values out of range are
+refused by the validation, also at their block. Block ids become node ids, so problems and the
+running block are marked in the editor.
+
+**Shared examples:** `docs/examples/programs/blocks.json` pins the served definitions (a Go test
+compares it; `UPDATE_GOLDEN=1 go test ./internal/programs` rewrites it). A `vitest` test defines
+those blocks in a headless Blockly workspace, loads each example state and checks that Blockly
+saves exactly the stored state; the Go tests convert the same states into the stored trees. So
+the Go tests convert real Blockly output.
+
+**Words in results:** `at` names a tool block by its sentence with its values ("fahre 30 cm",
+"drehe 90 Grad nach links"; `programs.Describer`).

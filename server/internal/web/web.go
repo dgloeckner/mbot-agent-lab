@@ -92,6 +92,7 @@ func (s *Server) Handler() http.Handler {
 	team("POST /t/{token}/start", s.start)
 	team("POST /t/{token}/stop", s.stop)
 	team("POST /t/{token}/tools/{name}", s.runTool)
+	team("GET /t/{token}/blocks", s.blocks)
 	team("GET /t/{token}/events", s.events)
 	team("GET /t/{token}/notes", s.listNotes)
 	team("POST /t/{token}/notes", s.addNote)

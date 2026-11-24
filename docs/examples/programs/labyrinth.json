@@ -1,19 +1,138 @@
 {
+  "blockly": {
+    "blocks": {
+      "languageVersion": 0,
+      "blocks": [
+        {
+          "type": "program_start",
+          "id": "l_start",
+          "x": 20,
+          "y": 20,
+          "next": {
+            "block": {
+              "type": "repeat_until",
+              "id": "l_loop",
+              "inputs": {
+                "DO": {
+                  "block": {
+                    "type": "tool_drive_until",
+                    "id": "l_drive",
+                    "fields": {
+                      "max_cm": 300,
+                      "stop_below_cm": 15,
+                      "stop_on_color": "blue"
+                    },
+                    "next": {
+                      "block": {
+                        "type": "if",
+                        "id": "l_if",
+                        "inputs": {
+                          "COND": {
+                            "block": {
+                              "type": "cond_reason",
+                              "id": "l_wall",
+                              "fields": {
+                                "OP": "eq",
+                                "VALUE": "wall"
+                              }
+                            }
+                          },
+                          "DO": {
+                            "block": {
+                              "type": "tool_turn",
+                              "id": "l_turn",
+                              "fields": {
+                                "degrees": 90,
+                                "dir": "right"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "UNTIL": {
+                  "block": {
+                    "type": "cond_reason",
+                    "id": "l_until",
+                    "fields": {
+                      "OP": "eq",
+                      "VALUE": "color"
+                    }
+                  }
+                }
+              },
+              "next": {
+                "block": {
+                  "type": "return_field",
+                  "id": "l_return",
+                  "fields": {
+                    "FIELD": "color"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
   "program": {
     "name": "labyrinth",
     "description": "Fährt bis zur nächsten Wand und biegt dort rechts ab, bis der Boden blau ist.",
     "body": [
-      {"id": "l_loop", "type": "repeat_until",
-       "cond": {"id": "l_until", "source": "result", "field": "reason", "op": "eq", "value": "color"},
-       "body": [
-        {"id": "l_drive", "type": "call", "tool": "drive_until", "args": {"max_cm": 300, "stop_below_cm": 15, "stop_on_color": "blue"}},
-        {"id": "l_if", "type": "if",
-         "cond": {"id": "l_wall", "source": "result", "field": "reason", "op": "eq", "value": "wall"},
-         "body": [
-          {"id": "l_turn", "type": "call", "tool": "turn", "args": {"degrees": 90}}
-         ]}
-      ]},
-      {"id": "l_return", "type": "return", "return": {"field": "color"}}
+      {
+        "id": "l_loop",
+        "type": "repeat_until",
+        "cond": {
+          "id": "l_until",
+          "source": "result",
+          "field": "reason",
+          "op": "eq",
+          "value": "color"
+        },
+        "body": [
+          {
+            "id": "l_drive",
+            "type": "call",
+            "tool": "drive_until",
+            "args": {
+              "max_cm": 300,
+              "stop_below_cm": 15,
+              "stop_on_color": "blue"
+            }
+          },
+          {
+            "id": "l_if",
+            "type": "if",
+            "cond": {
+              "id": "l_wall",
+              "source": "result",
+              "field": "reason",
+              "op": "eq",
+              "value": "wall"
+            },
+            "body": [
+              {
+                "id": "l_turn",
+                "type": "call",
+                "tool": "turn",
+                "args": {
+                  "degrees": 90
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "l_return",
+        "type": "return",
+        "return": {
+          "field": "color"
+        }
+      }
     ]
   }
 }

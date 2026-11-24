@@ -16,6 +16,7 @@ import (
 
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/agent"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/live"
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/programs"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/protocol"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/store"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/tools"
@@ -298,6 +299,12 @@ func (s *Server) runTool(w http.ResponseWriter, r *http.Request, team store.Team
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, _ = w.Write(result)
+}
+
+// blocks answers the Blockly block definitions and the toolbox of the tool
+// editor, built from the tool registry. No block has a robot field.
+func (s *Server) blocks(w http.ResponseWriter, _ *http.Request, _ store.Team) {
+	writeJSON(w, http.StatusOK, programs.Blocks(s.Agents.Tools))
 }
 
 // agentNotice tells the team why its agent could not (re)start.

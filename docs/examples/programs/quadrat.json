@@ -1,12 +1,74 @@
 {
+  "blockly": {
+    "blocks": {
+      "languageVersion": 0,
+      "blocks": [
+        {
+          "type": "program_start",
+          "id": "q_start",
+          "x": 20,
+          "y": 20,
+          "next": {
+            "block": {
+              "type": "repeat_times",
+              "id": "q_repeat",
+              "fields": {
+                "TIMES": 4
+              },
+              "inputs": {
+                "DO": {
+                  "block": {
+                    "type": "tool_drive",
+                    "id": "q_drive",
+                    "fields": {
+                      "cm": 30
+                    },
+                    "next": {
+                      "block": {
+                        "type": "tool_turn",
+                        "id": "q_turn",
+                        "fields": {
+                          "degrees": 90,
+                          "dir": "right"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
   "program": {
     "name": "quadrat",
     "description": "Fährt ein Quadrat mit 30 cm Seitenlänge und steht danach wieder am Start.",
     "body": [
-      {"id": "q_repeat", "type": "repeat", "times": 4, "body": [
-        {"id": "q_drive", "type": "call", "tool": "drive", "args": {"cm": 30}},
-        {"id": "q_turn", "type": "call", "tool": "turn", "args": {"degrees": 90}}
-      ]}
+      {
+        "id": "q_repeat",
+        "type": "repeat",
+        "times": 4,
+        "body": [
+          {
+            "id": "q_drive",
+            "type": "call",
+            "tool": "drive",
+            "args": {
+              "cm": 30
+            }
+          },
+          {
+            "id": "q_turn",
+            "type": "call",
+            "tool": "turn",
+            "args": {
+              "degrees": 90
+            }
+          }
+        ]
+      }
     ]
   }
 }

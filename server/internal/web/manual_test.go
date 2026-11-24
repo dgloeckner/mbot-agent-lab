@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -112,5 +113,35 @@ func waitRunning(t *testing.T, srv *testLab, token string, want bool) {
 			t.Fatalf("running did not become %v", want)
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestBlocksRoute(t *testing.T) {
+	srv := newTestServer(t)
+	code, body := do(t, srv, "GET", "/t/tok-rot/blocks", "")
+	defs, _ := body["definitions"].([]any)
+	if code != http.StatusOK || len(defs) < 20 || body["toolbox"] == nil {
+		t.Fatalf("blocks: %d %d definitions", code, len(defs))
+	}
+	types := map[string]bool{}
+	for _, d := range defs {
+		types[d.(map[string]any)["type"].(string)] = true
+	}
+	for _, want := range []string{"tool_drive", "tool_turn", "repeat_times", "repeat_until", "if_else", "return_field", "cond_reason"} {
+		if !types[want] {
+			t.Errorf("missing block %s", want)
+		}
+	}
+	if types["tool_finish"] || types["tool_say"] {
+		t.Error("agent-only tools must not be blocks")
+	}
+	// With two robots the blocks still have no robot field.
+	if err := srv.lab.AssignRobot(context.Background(), "mbot-3", "rot"); err != nil {
+		t.Fatal(err)
+	}
+	_, body = do(t, srv, "GET", "/t/tok-rot/blocks", "")
+	raw, _ := json.Marshal(body)
+	if strings.Contains(string(raw), `"name":"robot"`) {
+		t.Error("a block has a robot field")
 	}
 }

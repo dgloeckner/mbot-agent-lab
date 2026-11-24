@@ -1,18 +1,107 @@
 {
+  "blockly": {
+    "blocks": {
+      "languageVersion": 0,
+      "blocks": [
+        {
+          "type": "program_start",
+          "id": "w_start",
+          "x": 20,
+          "y": 20,
+          "next": {
+            "block": {
+              "type": "repeat_times",
+              "id": "w_repeat",
+              "fields": {
+                "TIMES": 5
+              },
+              "inputs": {
+                "DO": {
+                  "block": {
+                    "type": "if_else",
+                    "id": "w_if",
+                    "inputs": {
+                      "COND": {
+                        "block": {
+                          "type": "cond_sensor_distance",
+                          "id": "w_near",
+                          "fields": {
+                            "OP": "lt",
+                            "VALUE": 25
+                          }
+                        }
+                      },
+                      "DO": {
+                        "block": {
+                          "type": "tool_turn",
+                          "id": "w_turn",
+                          "fields": {
+                            "degrees": 90,
+                            "dir": "left"
+                          }
+                        }
+                      },
+                      "ELSE": {
+                        "block": {
+                          "type": "tool_drive",
+                          "id": "w_drive",
+                          "fields": {
+                            "cm": 20
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
   "program": {
     "name": "wand_ausweichen",
     "description": "Schaut fünfmal nach vorn: kommt eine Wand, biegt er nach links ab, sonst fährt er 20 cm weiter.",
     "body": [
-      {"id": "w_repeat", "type": "repeat", "times": 5, "body": [
-        {"id": "w_if", "type": "if",
-         "cond": {"id": "w_near", "source": "sensor", "field": "distance_cm", "op": "lt", "value": 25},
-         "body": [
-          {"id": "w_turn", "type": "call", "tool": "turn", "args": {"degrees": -90}}
-         ],
-         "else": [
-          {"id": "w_drive", "type": "call", "tool": "drive", "args": {"cm": 20}}
-         ]}
-      ]}
+      {
+        "id": "w_repeat",
+        "type": "repeat",
+        "times": 5,
+        "body": [
+          {
+            "id": "w_if",
+            "type": "if",
+            "cond": {
+              "id": "w_near",
+              "source": "sensor",
+              "field": "distance_cm",
+              "op": "lt",
+              "value": 25
+            },
+            "body": [
+              {
+                "id": "w_turn",
+                "type": "call",
+                "tool": "turn",
+                "args": {
+                  "degrees": -90
+                }
+              }
+            ],
+            "else": [
+              {
+                "id": "w_drive",
+                "type": "call",
+                "tool": "drive",
+                "args": {
+                  "cm": 20
+                }
+              }
+            ]
+          }
+        ]
+      }
     ]
   }
 }

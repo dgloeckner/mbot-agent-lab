@@ -1,0 +1,1221 @@
+{
+  "definitions": [
+    {
+      "args0": [
+        {
+          "max": 300,
+          "min": -300,
+          "name": "cm",
+          "precision": 1,
+          "type": "field_number",
+          "value": 20
+        }
+      ],
+      "colour": "#2b6cee",
+      "message0": "fahre %1 cm",
+      "nextStatement": null,
+      "previousStatement": null,
+      "tooltip": "drive: Fährt eine Strecke geradeaus, negativ heißt rückwärts.",
+      "type": "tool_drive"
+    },
+    {
+      "args0": [
+        {
+          "max": 720,
+          "min": 0,
+          "name": "degrees",
+          "precision": 1,
+          "type": "field_number",
+          "value": 90
+        },
+        {
+          "name": "dir",
+          "options": [
+            [
+              "rechts",
+              "right"
+            ],
+            [
+              "links",
+              "left"
+            ]
+          ],
+          "type": "field_dropdown"
+        }
+      ],
+      "colour": "#2b6cee",
+      "message0": "drehe %1 Grad nach %2",
+      "nextStatement": null,
+      "previousStatement": null,
+      "tooltip": "turn: Dreht auf der Stelle, positiv ist rechts.",
+      "type": "tool_turn"
+    },
+    {
+      "args0": [
+        {
+          "name": "dir",
+          "options": [
+            [
+              "rechts",
+              "right"
+            ],
+            [
+              "links",
+              "left"
+            ]
+          ],
+          "type": "field_dropdown"
+        },
+        {
+          "max": 200,
+          "min": 10,
+          "name": "radius_cm",
+          "precision": 1,
+          "type": "field_number",
+          "value": 30
+        },
+        {
+          "max": 720,
+          "min": 0,
+          "name": "degrees",
+          "precision": 1,
+          "type": "field_number",
+          "value": 90
+        }
+      ],
+      "colour": "#2b6cee",
+      "message0": "fahre eine Kurve nach %1 mit Radius %2 cm, %3 Grad weit",
+      "nextStatement": null,
+      "previousStatement": null,
+      "tooltip": "drive_arc: Fährt eine Kurve oder einen Kreis, positiv ist rechts, auf Wunsch bis zu einer Farbe.",
+      "type": "tool_drive_arc"
+    },
+    {
+      "args0": [
+        {
+          "max": 300,
+          "min": 1,
+          "name": "max_cm",
+          "precision": 1,
+          "type": "field_number",
+          "value": 100
+        },
+        {
+          "max": 100,
+          "min": 3,
+          "name": "stop_below_cm",
+          "precision": 1,
+          "type": "field_number",
+          "value": 15
+        },
+        {
+          "name": "stop_on_color",
+          "options": [
+            [
+              "egal",
+              "none"
+            ],
+            [
+              "weiß",
+              "white"
+            ],
+            [
+              "schwarz",
+              "black"
+            ],
+            [
+              "rot",
+              "red"
+            ],
+            [
+              "gelb",
+              "yellow"
+            ],
+            [
+              "grün",
+              "green"
+            ],
+            [
+              "blau",
+              "blue"
+            ],
+            [
+              "irgendeine Farbe",
+              "any"
+            ]
+          ],
+          "type": "field_dropdown"
+        }
+      ],
+      "colour": "#2b6cee",
+      "message0": "fahre geradeaus, höchstens %1 cm, bis eine Wand näher als %2 cm ist oder der Boden %3 ist",
+      "nextStatement": null,
+      "previousStatement": null,
+      "tooltip": "drive_until: Fährt, bis eine Wand nah ist, eine Farbe kommt oder die Strecke erreicht ist.",
+      "type": "tool_drive_until"
+    },
+    {
+      "args0": [
+        {
+          "name": "direction",
+          "options": [
+            [
+              "links",
+              "left"
+            ],
+            [
+              "rechts",
+              "right"
+            ]
+          ],
+          "type": "field_dropdown"
+        },
+        {
+          "max": 200,
+          "min": 10,
+          "name": "min_cm",
+          "precision": 1,
+          "type": "field_number",
+          "value": 40
+        }
+      ],
+      "colour": "#2b6cee",
+      "message0": "drehe nach %1, bis vorne %2 cm frei sind",
+      "nextStatement": null,
+      "previousStatement": null,
+      "tooltip": "turn_until_clear: Dreht sich, bis vorne genug Platz ist.",
+      "type": "tool_turn_until_clear"
+    },
+    {
+      "args0": [
+        {
+          "name": "stop_on_color",
+          "options": [
+            [
+              "zur Kreuzung",
+              "none"
+            ],
+            [
+              "weiß",
+              "white"
+            ],
+            [
+              "schwarz",
+              "black"
+            ],
+            [
+              "rot",
+              "red"
+            ],
+            [
+              "gelb",
+              "yellow"
+            ],
+            [
+              "grün",
+              "green"
+            ],
+            [
+              "blau",
+              "blue"
+            ],
+            [
+              "irgendeine Farbe",
+              "any"
+            ]
+          ],
+          "type": "field_dropdown"
+        },
+        {
+          "max": 300,
+          "min": 1,
+          "name": "max_cm",
+          "precision": 1,
+          "type": "field_number",
+          "value": 100
+        }
+      ],
+      "colour": "#2b6cee",
+      "message0": "folge der Linie bis %1, höchstens %2 cm",
+      "nextStatement": null,
+      "previousStatement": null,
+      "tooltip": "follow_line_until: Folgt einer Linie bis zu einer Farbe, einer Kreuzung oder ihrem Ende.",
+      "type": "tool_follow_line_until"
+    },
+    {
+      "colour": "#2b6cee",
+      "message0": "fahre den Weg zurück zum Anfang",
+      "nextStatement": null,
+      "previousStatement": null,
+      "tooltip": "retrace_path: Fährt den bisherigen Weg zurück zum Anfang.",
+      "type": "tool_retrace_path"
+    },
+    {
+      "args0": [
+        {
+          "max": 180,
+          "min": -180,
+          "name": "from_deg",
+          "precision": 1,
+          "type": "field_number",
+          "value": -90
+        },
+        {
+          "max": 180,
+          "min": -180,
+          "name": "to_deg",
+          "precision": 1,
+          "type": "field_number",
+          "value": 90
+        },
+        {
+          "name": "face",
+          "options": [
+            [
+              "in die freieste Richtung",
+              "best"
+            ],
+            [
+              "wieder nach vorn",
+              "start"
+            ]
+          ],
+          "type": "field_dropdown"
+        }
+      ],
+      "colour": "#1f9d55",
+      "message0": "schau dich um von %1 bis %2 Grad und schau dann %3",
+      "nextStatement": null,
+      "previousStatement": null,
+      "tooltip": "scan: Dreht sich und misst rundum, dann schaut er in die freieste Richtung.",
+      "type": "tool_scan"
+    },
+    {
+      "colour": "#1f9d55",
+      "message0": "lies die Sensoren",
+      "nextStatement": null,
+      "previousStatement": null,
+      "tooltip": "read_sensors: Liest Abstand, Bodenfarbe, Linie, Richtung und Akku.",
+      "type": "tool_read_sensors"
+    },
+    {
+      "args0": [
+        {
+          "name": "event",
+          "options": [
+            [
+              "ein Hindernis",
+              "obstacle_near"
+            ],
+            [
+              "freien Weg",
+              "obstacle_clear"
+            ],
+            [
+              "eine neue Bodenfarbe",
+              "color_changed"
+            ],
+            [
+              "Umkippen",
+              "tilted"
+            ],
+            [
+              "Knopf A",
+              "button_a"
+            ],
+            [
+              "Knopf B",
+              "button_b"
+            ],
+            [
+              "Klatschen",
+              "clap"
+            ],
+            [
+              "schwachen Akku",
+              "battery_low"
+            ]
+          ],
+          "type": "field_dropdown"
+        },
+        {
+          "max": 60,
+          "min": 1,
+          "name": "timeout_s",
+          "precision": 1,
+          "type": "field_number",
+          "value": 10
+        }
+      ],
+      "colour": "#1f9d55",
+      "message0": "warte auf %1, höchstens %2 Sekunden",
+      "nextStatement": null,
+      "previousStatement": null,
+      "tooltip": "wait_for: Wartet auf ein Ereignis, etwa einen Knopfdruck.",
+      "type": "tool_wait_for"
+    },
+    {
+      "args0": [
+        {
+          "name": "color",
+          "options": [
+            [
+              "rot",
+              "red"
+            ],
+            [
+              "grün",
+              "green"
+            ],
+            [
+              "blau",
+              "blue"
+            ],
+            [
+              "gelb",
+              "yellow"
+            ],
+            [
+              "lila",
+              "purple"
+            ],
+            [
+              "türkis",
+              "cyan"
+            ],
+            [
+              "weiß",
+              "white"
+            ],
+            [
+              "orange",
+              "orange"
+            ],
+            [
+              "aus",
+              "off"
+            ]
+          ],
+          "type": "field_dropdown"
+        }
+      ],
+      "colour": "#8a4fff",
+      "message0": "Licht %1",
+      "nextStatement": null,
+      "previousStatement": null,
+      "tooltip": "set_leds: Schaltet die Lichter in einer Farbe.",
+      "type": "tool_set_leds"
+    },
+    {
+      "args0": [
+        {
+          "maxLength": 60,
+          "name": "text",
+          "text": "Hallo",
+          "type": "field_input"
+        }
+      ],
+      "colour": "#8a4fff",
+      "message0": "zeige %1",
+      "nextStatement": null,
+      "previousStatement": null,
+      "tooltip": "show_text: Zeigt bis zu 60 Zeichen auf dem Display.",
+      "type": "tool_show_text"
+    },
+    {
+      "args0": [
+        {
+          "name": "name",
+          "options": [
+            [
+              "hello",
+              "hello"
+            ],
+            [
+              "yeah",
+              "yeah"
+            ],
+            [
+              "wow",
+              "wow"
+            ],
+            [
+              "laugh",
+              "laugh"
+            ],
+            [
+              "sad",
+              "sad"
+            ],
+            [
+              "surprised",
+              "surprised"
+            ],
+            [
+              "beeps",
+              "beeps"
+            ]
+          ],
+          "type": "field_dropdown"
+        }
+      ],
+      "colour": "#8a4fff",
+      "message0": "spiele den Ton %1",
+      "nextStatement": null,
+      "previousStatement": null,
+      "tooltip": "play_sound: Spielt einen Ton.",
+      "type": "tool_play_sound"
+    },
+    {
+      "colour": "#8a4fff",
+      "message0": "blinke und piepe",
+      "nextStatement": null,
+      "previousStatement": null,
+      "tooltip": "identify: Blinkt und piept, damit ihr euren Roboter findet.",
+      "type": "tool_identify"
+    },
+    {
+      "colour": "#5c6675",
+      "message0": "Wenn das Werkzeug startet",
+      "nextStatement": null,
+      "tooltip": "Hier beginnt euer Werkzeug. Hängt die Blöcke darunter.",
+      "type": "program_start"
+    },
+    {
+      "args0": [
+        {
+          "max": 20,
+          "min": 1,
+          "name": "TIMES",
+          "precision": 1,
+          "type": "field_number",
+          "value": 4
+        }
+      ],
+      "args1": [
+        {
+          "name": "DO",
+          "type": "input_statement"
+        }
+      ],
+      "colour": "#d9480f",
+      "message0": "wiederhole %1 mal",
+      "message1": "%1",
+      "nextStatement": null,
+      "previousStatement": null,
+      "tooltip": "Macht die Blöcke darin n-mal, 1 bis 20.",
+      "type": "repeat_times"
+    },
+    {
+      "args0": [
+        {
+          "name": "DO",
+          "type": "input_statement"
+        }
+      ],
+      "args1": [
+        {
+          "check": "Condition",
+          "name": "UNTIL",
+          "type": "input_value"
+        }
+      ],
+      "colour": "#d9480f",
+      "message0": "wiederhole %1",
+      "message1": "bis %1",
+      "nextStatement": null,
+      "previousStatement": null,
+      "tooltip": "Macht die Blöcke darin und prüft danach die Bedingung, höchstens 50 Runden.",
+      "type": "repeat_until"
+    },
+    {
+      "args0": [
+        {
+          "check": "Condition",
+          "name": "COND",
+          "type": "input_value"
+        }
+      ],
+      "args1": [
+        {
+          "name": "DO",
+          "type": "input_statement"
+        }
+      ],
+      "colour": "#0b7285",
+      "message0": "wenn %1",
+      "message1": "dann %1",
+      "nextStatement": null,
+      "previousStatement": null,
+      "tooltip": "Macht die Blöcke darin nur, wenn die Bedingung stimmt.",
+      "type": "if"
+    },
+    {
+      "args0": [
+        {
+          "check": "Condition",
+          "name": "COND",
+          "type": "input_value"
+        }
+      ],
+      "args1": [
+        {
+          "name": "DO",
+          "type": "input_statement"
+        }
+      ],
+      "args2": [
+        {
+          "name": "ELSE",
+          "type": "input_statement"
+        }
+      ],
+      "colour": "#0b7285",
+      "message0": "wenn %1",
+      "message1": "dann %1",
+      "message2": "sonst %1",
+      "nextStatement": null,
+      "previousStatement": null,
+      "tooltip": "Stimmt die Bedingung, macht es die Blöcke bei „dann“, sonst die bei „sonst“.",
+      "type": "if_else"
+    },
+    {
+      "args0": [
+        {
+          "name": "FIELD",
+          "options": [
+            [
+              "den Grund",
+              "reason"
+            ],
+            [
+              "die Bodenfarbe",
+              "color"
+            ],
+            [
+              "die gefahrenen cm",
+              "driven_cm"
+            ],
+            [
+              "die gedrehten Grad",
+              "turned_deg"
+            ],
+            [
+              "den Abstand",
+              "distance_cm"
+            ],
+            [
+              "die Bodenspur",
+              "floor"
+            ],
+            [
+              "die freieste Richtung",
+              "best_deg"
+            ]
+          ],
+          "type": "field_dropdown"
+        }
+      ],
+      "colour": "#0b7285",
+      "message0": "gib zurück: %1 des letzten Ergebnisses",
+      "previousStatement": null,
+      "tooltip": "Beendet das Werkzeug und meldet diesen Wert.",
+      "type": "return_field"
+    },
+    {
+      "args0": [
+        {
+          "maxLength": 200,
+          "name": "TEXT",
+          "text": "fertig",
+          "type": "field_input"
+        }
+      ],
+      "colour": "#0b7285",
+      "message0": "gib zurück: %1",
+      "previousStatement": null,
+      "tooltip": "Beendet das Werkzeug und meldet diesen Text.",
+      "type": "return_text"
+    },
+    {
+      "args0": [
+        {
+          "name": "OP",
+          "options": [
+            [
+              "ist",
+              "eq"
+            ],
+            [
+              "ist nicht",
+              "ne"
+            ]
+          ],
+          "type": "field_dropdown"
+        },
+        {
+          "name": "VALUE",
+          "options": [
+            [
+              "Wand",
+              "wall"
+            ],
+            [
+              "Farbe",
+              "color"
+            ],
+            [
+              "Hindernis",
+              "obstacle"
+            ],
+            [
+              "Strecke erreicht",
+              "max_cm"
+            ],
+            [
+              "fertig",
+              "done"
+            ],
+            [
+              "frei",
+              "clear"
+            ],
+            [
+              "kein freier Weg",
+              "max_deg"
+            ],
+            [
+              "Kreuzung",
+              "crossing"
+            ],
+            [
+              "Linie verloren",
+              "line_lost"
+            ],
+            [
+              "kein Weg gespeichert",
+              "empty"
+            ],
+            [
+              "Zeit abgelaufen",
+              "timeout"
+            ],
+            [
+              "umgekippt",
+              "tilted"
+            ]
+          ],
+          "type": "field_dropdown"
+        }
+      ],
+      "colour": "#0b7285",
+      "message0": "Grund %1 %2",
+      "output": "Condition",
+      "tooltip": "Prüft das Ergebnis des letzten Werkzeugs.",
+      "type": "cond_reason"
+    },
+    {
+      "args0": [
+        {
+          "name": "FIELD",
+          "options": [
+            [
+              "gefahrene cm",
+              "driven_cm"
+            ],
+            [
+              "gedrehte Grad",
+              "turned_deg"
+            ],
+            [
+              "Abstand cm",
+              "distance_cm"
+            ],
+            [
+              "kleinster Abstand cm",
+              "min_distance_cm"
+            ],
+            [
+              "freieste Richtung",
+              "best_deg"
+            ]
+          ],
+          "type": "field_dropdown"
+        },
+        {
+          "name": "OP",
+          "options": [
+            [
+              "\u003c",
+              "lt"
+            ],
+            [
+              "\u003e",
+              "gt"
+            ],
+            [
+              "=",
+              "eq"
+            ],
+            [
+              "≠",
+              "ne"
+            ]
+          ],
+          "type": "field_dropdown"
+        },
+        {
+          "name": "VALUE",
+          "type": "field_number",
+          "value": 20
+        }
+      ],
+      "colour": "#0b7285",
+      "message0": "Ergebnis: %1 %2 %3",
+      "output": "Condition",
+      "tooltip": "Prüft das Ergebnis des letzten Werkzeugs.",
+      "type": "cond_result_number"
+    },
+    {
+      "args0": [
+        {
+          "name": "OP",
+          "options": [
+            [
+              "ist",
+              "eq"
+            ],
+            [
+              "ist nicht",
+              "ne"
+            ]
+          ],
+          "type": "field_dropdown"
+        },
+        {
+          "name": "VALUE",
+          "options": [
+            [
+              "weiß",
+              "white"
+            ],
+            [
+              "schwarz",
+              "black"
+            ],
+            [
+              "rot",
+              "red"
+            ],
+            [
+              "gelb",
+              "yellow"
+            ],
+            [
+              "grün",
+              "green"
+            ],
+            [
+              "blau",
+              "blue"
+            ]
+          ],
+          "type": "field_dropdown"
+        }
+      ],
+      "colour": "#0b7285",
+      "message0": "Bodenfarbe im Ergebnis %1 %2",
+      "output": "Condition",
+      "tooltip": "Prüft das Ergebnis des letzten Werkzeugs.",
+      "type": "cond_result_color"
+    },
+    {
+      "args0": [
+        {
+          "name": "VALUE",
+          "options": [
+            [
+              "schwarz",
+              "k"
+            ],
+            [
+              "rot",
+              "r"
+            ],
+            [
+              "gelb",
+              "y"
+            ],
+            [
+              "grün",
+              "g"
+            ],
+            [
+              "blau",
+              "b"
+            ],
+            [
+              "weiß",
+              "w"
+            ]
+          ],
+          "type": "field_dropdown"
+        }
+      ],
+      "colour": "#0b7285",
+      "message0": "Bodenspur im Ergebnis enthält %1",
+      "output": "Condition",
+      "tooltip": "Prüft das Ergebnis des letzten Werkzeugs.",
+      "type": "cond_result_floor"
+    },
+    {
+      "args0": [
+        {
+          "name": "OP",
+          "options": [
+            [
+              "\u003c",
+              "lt"
+            ],
+            [
+              "\u003e",
+              "gt"
+            ],
+            [
+              "=",
+              "eq"
+            ],
+            [
+              "≠",
+              "ne"
+            ]
+          ],
+          "type": "field_dropdown"
+        },
+        {
+          "max": 400,
+          "min": 0,
+          "name": "VALUE",
+          "type": "field_number",
+          "value": 20
+        }
+      ],
+      "colour": "#0b7285",
+      "message0": "Abstand nach vorn jetzt %1 %2 cm",
+      "output": "Condition",
+      "tooltip": "Liest die Sensoren jetzt und prüft den Wert. Zählt als Schritt.",
+      "type": "cond_sensor_distance"
+    },
+    {
+      "args0": [
+        {
+          "name": "OP",
+          "options": [
+            [
+              "ist",
+              "eq"
+            ],
+            [
+              "ist nicht",
+              "ne"
+            ]
+          ],
+          "type": "field_dropdown"
+        },
+        {
+          "name": "VALUE",
+          "options": [
+            [
+              "weiß",
+              "white"
+            ],
+            [
+              "schwarz",
+              "black"
+            ],
+            [
+              "rot",
+              "red"
+            ],
+            [
+              "gelb",
+              "yellow"
+            ],
+            [
+              "grün",
+              "green"
+            ],
+            [
+              "blau",
+              "blue"
+            ]
+          ],
+          "type": "field_dropdown"
+        }
+      ],
+      "colour": "#0b7285",
+      "message0": "Bodenfarbe jetzt %1 %2",
+      "output": "Condition",
+      "tooltip": "Liest die Sensoren jetzt und prüft den Wert. Zählt als Schritt.",
+      "type": "cond_sensor_color"
+    },
+    {
+      "args0": [
+        {
+          "name": "VALUE",
+          "options": [
+            [
+              "schwarz",
+              "k"
+            ],
+            [
+              "rot",
+              "r"
+            ],
+            [
+              "gelb",
+              "y"
+            ],
+            [
+              "grün",
+              "g"
+            ],
+            [
+              "blau",
+              "b"
+            ],
+            [
+              "weiß",
+              "w"
+            ]
+          ],
+          "type": "field_dropdown"
+        }
+      ],
+      "colour": "#0b7285",
+      "message0": "Boden jetzt enthält %1",
+      "output": "Condition",
+      "tooltip": "Liest die Sensoren jetzt und prüft den Wert. Zählt als Schritt.",
+      "type": "cond_sensor_floor"
+    },
+    {
+      "args0": [
+        {
+          "name": "OP",
+          "options": [
+            [
+              "ist",
+              "eq"
+            ],
+            [
+              "ist nicht",
+              "ne"
+            ]
+          ],
+          "type": "field_dropdown"
+        },
+        {
+          "name": "VALUE",
+          "options": [
+            [
+              "keine",
+              "none"
+            ],
+            [
+              "links",
+              "left"
+            ],
+            [
+              "in der Mitte",
+              "center"
+            ],
+            [
+              "rechts",
+              "right"
+            ],
+            [
+              "überall",
+              "all"
+            ]
+          ],
+          "type": "field_dropdown"
+        }
+      ],
+      "colour": "#0b7285",
+      "message0": "Linie jetzt %1 %2",
+      "output": "Condition",
+      "tooltip": "Liest die Sensoren jetzt und prüft den Wert. Zählt als Schritt.",
+      "type": "cond_sensor_line"
+    },
+    {
+      "args0": [
+        {
+          "check": "Condition",
+          "name": "COND",
+          "type": "input_value"
+        }
+      ],
+      "colour": "#0b7285",
+      "message0": "nicht %1",
+      "output": "Condition",
+      "tooltip": "Dreht die Bedingung um.",
+      "type": "cond_not"
+    }
+  ],
+  "toolbox": {
+    "contents": [
+      {
+        "colour": "#2b6cee",
+        "contents": [
+          {
+            "kind": "block",
+            "type": "tool_drive"
+          },
+          {
+            "kind": "block",
+            "type": "tool_turn"
+          },
+          {
+            "kind": "block",
+            "type": "tool_drive_arc"
+          },
+          {
+            "kind": "block",
+            "type": "tool_drive_until"
+          },
+          {
+            "kind": "block",
+            "type": "tool_turn_until_clear"
+          },
+          {
+            "kind": "block",
+            "type": "tool_follow_line_until"
+          },
+          {
+            "kind": "block",
+            "type": "tool_retrace_path"
+          }
+        ],
+        "kind": "category",
+        "name": "Fahren"
+      },
+      {
+        "colour": "#1f9d55",
+        "contents": [
+          {
+            "kind": "block",
+            "type": "tool_scan"
+          },
+          {
+            "kind": "block",
+            "type": "tool_read_sensors"
+          },
+          {
+            "kind": "block",
+            "type": "tool_wait_for"
+          }
+        ],
+        "kind": "category",
+        "name": "Sensoren"
+      },
+      {
+        "colour": "#8a4fff",
+        "contents": [
+          {
+            "kind": "block",
+            "type": "tool_set_leds"
+          },
+          {
+            "kind": "block",
+            "type": "tool_show_text"
+          },
+          {
+            "kind": "block",
+            "type": "tool_play_sound"
+          },
+          {
+            "kind": "block",
+            "type": "tool_identify"
+          }
+        ],
+        "kind": "category",
+        "name": "Licht und Anzeige"
+      },
+      {
+        "colour": "#d9480f",
+        "contents": [
+          {
+            "kind": "block",
+            "type": "repeat_times"
+          },
+          {
+            "kind": "block",
+            "type": "repeat_until"
+          }
+        ],
+        "kind": "category",
+        "name": "Wiederholen"
+      },
+      {
+        "colour": "#0b7285",
+        "contents": [
+          {
+            "kind": "block",
+            "type": "if"
+          },
+          {
+            "kind": "block",
+            "type": "if_else"
+          },
+          {
+            "kind": "block",
+            "type": "cond_reason"
+          },
+          {
+            "kind": "block",
+            "type": "cond_result_number"
+          },
+          {
+            "kind": "block",
+            "type": "cond_result_color"
+          },
+          {
+            "kind": "block",
+            "type": "cond_result_floor"
+          },
+          {
+            "kind": "block",
+            "type": "cond_sensor_distance"
+          },
+          {
+            "kind": "block",
+            "type": "cond_sensor_color"
+          },
+          {
+            "kind": "block",
+            "type": "cond_sensor_floor"
+          },
+          {
+            "kind": "block",
+            "type": "cond_sensor_line"
+          },
+          {
+            "kind": "block",
+            "type": "cond_not"
+          },
+          {
+            "kind": "block",
+            "type": "return_field"
+          },
+          {
+            "kind": "block",
+            "type": "return_text"
+          }
+        ],
+        "kind": "category",
+        "name": "Entscheiden"
+      }
+    ],
+    "kind": "categoryToolbox"
+  }
+}

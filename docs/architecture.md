@@ -237,6 +237,7 @@ a closed task writes answer 409 and reads work. Stop always works.
 | `GET prompts`, `GET prompts/{version}`, `POST prompt` | prompt versions; deploy, optionally with restart |
 | `POST start`, `POST stop` | start or stop a run; stop also cancels a running by-hand call; start answers 409 while one runs |
 | `POST tools/{name}` | run one by-hand tool (body: its arguments, `robot` with several robots) and answer its result as the agent would get it; 409 while a run is active |
+| `GET blocks` | Blockly block definitions and toolbox of the tool editor, built from the registry (`programs.md`, "Blocks") |
 | `POST message`, `POST conversation/new` | message to the own agent; start a new conversation |
 | `GET events` | SSE: `log`, `robots`, `agent`, `totals`, `models`, `task` (active task changed), `tasks` (assigned, withdrawn, accepted or closed); `Last-Event-ID` catches up |
 | `GET/POST notes`, `PUT/DELETE notes/{id}` | notes |
