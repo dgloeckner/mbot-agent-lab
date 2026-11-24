@@ -47,6 +47,22 @@ export interface ToolInfo {
   params: string
   summary: string
   ready: boolean
+  /** A person can run it by hand in the console. */
+  manual: boolean
+  /** JSON schema of the arguments, the one the model sees; only for by-hand tools. */
+  schema?: JSONSchema
+}
+
+/** The subset of JSON Schema the tool registry uses. */
+export interface JSONSchema {
+  type?: string
+  properties?: Record<string, JSONSchema>
+  required?: string[]
+  enum?: string[]
+  minimum?: number
+  maximum?: number
+  maxLength?: number
+  description?: string
 }
 
 export interface LogEntry {

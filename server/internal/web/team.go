@@ -121,7 +121,7 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request, team store.Team
 		"prompt":          prompt,
 		"versions":        versions,
 		"notes":           notes,
-		"tools":           tools.Catalog,
+		"tools":           s.Agents.Tools.CatalogFor(&tools.Env{TeamID: team.ID}),
 		"limits": map[string]int{
 			"prompt_chars": MaxPromptChars, "message_chars": MaxMessageChars, "note_chars": MaxNoteChars,
 		},

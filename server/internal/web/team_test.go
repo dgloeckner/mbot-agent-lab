@@ -346,3 +346,36 @@ func activateTestTask(t *testing.T, st *store.Store, team string) {
 		}
 	}
 }
+
+func TestSessionToolsByHand(t *testing.T) {
+	srv := newTestServer(t)
+	tools := func() map[string]map[string]any {
+		_, sess := do(t, srv, "GET", "/t/tok-rot/api/session", "")
+		out := map[string]map[string]any{}
+		for _, x := range sess["tools"].([]any) {
+			info := x.(map[string]any)
+			out[info["name"].(string)] = info
+		}
+		return out
+	}
+	got := tools()
+	if got["drive"]["manual"] != true || got["drive"]["schema"] == nil {
+		t.Errorf("drive = %v", got["drive"])
+	}
+	if got["finish"]["manual"] != false || got["finish"]["schema"] != nil {
+		t.Errorf("finish = %v", got["finish"])
+	}
+	props := got["drive"]["schema"].(map[string]any)["properties"].(map[string]any)
+	if _, ok := props["robot"]; ok {
+		t.Errorf("one robot needs no robot parameter: %v", props)
+	}
+
+	if err := srv.lab.AssignRobot(context.Background(), "mbot-3", "rot"); err != nil {
+		t.Fatal(err)
+	}
+	props = tools()["drive"]["schema"].(map[string]any)["properties"].(map[string]any)
+	robot, ok := props["robot"].(map[string]any)
+	if !ok || len(robot["enum"].([]any)) != 2 {
+		t.Errorf("two robots: robot = %v", props["robot"])
+	}
+}

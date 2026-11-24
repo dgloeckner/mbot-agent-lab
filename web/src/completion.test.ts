@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { matchTools } from './completion'
 import type { ToolInfo } from './types'
 
-const tool = (name: string): ToolInfo => ({ name, group: 'Bewegen', params: '', summary: '', ready: true })
+const tool = (name: string): ToolInfo => ({ name, group: 'Bewegen', params: '', summary: '', ready: true, manual: false })
 const tools = ['drive', 'drive_until', 'turn', 'stop', 'scan', 'set_leds', 'show_text', 'say', 'finish'].map(tool)
 const names = (before: string, explicit = false) => matchTools(before, tools, explicit)?.tools.map((t) => t.name) ?? null
 
