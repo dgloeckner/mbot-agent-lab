@@ -66,6 +66,9 @@ test('drive by hand in the Werkzeuge tab, then the console is off during a run',
   const picker = page.locator('.robot-picker')
   await expect(picker.getByRole('button')).toHaveCount(2)
   await picker.getByRole('button').nth(1).click()
+  // The robot learns its new owner from the next heartbeat (once a second) and
+  // ends a command it got before with "reassigned"; give it that heartbeat.
+  await page.waitForTimeout(2500)
   await form.getByLabel('cm', { exact: true }).fill('10')
   await form.getByRole('button', { name: 'Ausführen' }).click()
   await expect(form.locator('.console-result p')).toHaveText(/Fertig/)
