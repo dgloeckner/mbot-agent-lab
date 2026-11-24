@@ -98,6 +98,8 @@ func (s *Server) Handler() http.Handler {
 	team("POST /t/{token}/programs", s.saveProgram)
 	team("PUT /t/{token}/programs/{id}", s.saveProgram)
 	team("DELETE /t/{token}/programs/{id}", s.deleteProgram)
+	team("POST /t/{token}/programs/{id}/run", s.runProgram)
+	team("POST /t/{token}/program-runs/{id}/continue", s.continueProgram)
 	team("GET /t/{token}/events", s.events)
 	team("GET /t/{token}/notes", s.listNotes)
 	team("POST /t/{token}/notes", s.addNote)

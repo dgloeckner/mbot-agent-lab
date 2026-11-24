@@ -1,5 +1,5 @@
 import { describe as group, expect, it } from 'vitest'
-import { describe, estimateTokens, formatCost, formatPrices, formatUsage, logGroup, onColor, relativeTime } from './format'
+import { describe, estimateTokens, programEnd, formatCost, formatPrices, formatUsage, logGroup, onColor, relativeTime } from './format'
 
 group('describe', () => {
   it('words robot events in German', () => {
@@ -59,3 +59,16 @@ it('words goal tools', () => {
   const cut = { ...trip, data: { ...trip.data, result: { ...trip.data.result, floor_truncated: true } } }
   expect(describe(cut)).toContain('(abgeschnitten)')
 })
+
+group('team tool lines', () => {
+  it('words the start and the end of a team tool', () => {
+    expect(describe({ id: 1, at: '', source: 'team', kind: 'program_start', data: { name: 'quadrat', robot: 'rot', step: true } } as any)).toBe(
+      'Werkzeug quadrat gestartet im Einzelschritt mit rot',
+    )
+    expect(programEnd('quadrat', { end: 'done', steps: 8, runtime_s: 15.9 })).toBe('Werkzeug quadrat: fertig nach 8 Schritten, 15,9 s')
+    expect(programEnd('labyrinth', { end: 'aborted', steps: 1, error: 'drive endete unerwartet mit obstacle.', at: 'fahre 50 cm' })).toBe(
+      'Werkzeug labyrinth: abgebrochen nach 1 Schritt. drive endete unerwartet mit obstacle. (bei „fahre 50 cm“)',
+    )
+  })
+})
+

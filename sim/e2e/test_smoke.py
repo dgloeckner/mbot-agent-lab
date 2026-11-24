@@ -70,7 +70,12 @@ def test_config(http_port, mqtt_port, db_path):
     return text
 
 
-class SmokeTest(unittest.TestCase):
+class LabCase(unittest.TestCase):
+    """A lab: labserver, simulated robots in WORLD and HTTP helpers. No tests."""
+
+    WORLD = WORLD
+    ROBOTS = 2
+
     def setUp(self):
         if not BINARY.exists():
             self.fail("%s missing: run `npx nx run server:build` (or set LABSERVER)" % BINARY)
@@ -102,8 +107,8 @@ class SmokeTest(unittest.TestCase):
         self.sim_log = self.tmp / "sim.log"
         self.spawn([str(BINARY), "-config", str(cfg), "-debug"], env, self.server_log)
         self.wait_for(self.healthy, "server /healthz")
-        self.spawn([sys.executable, str(ROOT / "sim" / "run.py"), "--robots", "2",
-                    "--port", str(mqtt_port), "--world", str(WORLD),
+        self.spawn([sys.executable, str(ROOT / "sim" / "run.py"), "--robots", str(self.ROBOTS),
+                    "--port", str(mqtt_port), "--world", str(self.WORLD),
                     "--trace", "0.2", "--seed", str(SEED)], env, self.sim_log)
 
         self.admin = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(CookieJar()))
@@ -252,6 +257,22 @@ class SmokeTest(unittest.TestCase):
             return None
         return self.wait_for(probe, "heartbeat of %s in the registry" % robot)
 
+    def run_team_tool(self, team, example, name):
+        """Saves an example team tool, runs it and waits for its end in the log."""
+        ex = json.loads((ROOT / "docs" / "examples" / "programs" / (example + ".json")).read_text(encoding="utf-8"))
+        saved = self.team_request(team, "POST", "/programs", {"name": name, "description": ex["program"]["description"],
+                                                               "blockly": ex["blockly"]}, expect=(201,))
+        self.assertTrue(saved["valid"], saved)
+        run = self.team_request(team, "POST", "/programs/%s/run" % saved["id"], {}, expect=(202,))["run"]
+        end = self.wait_for(lambda: self.log_entries(lambda e: e.get("kind") == "program_end" and (e.get("data") or {}).get("run") == run),
+                            "the end of team tool %s" % name)[0]
+        for line in self.server_log.read_text(encoding="utf-8").splitlines():
+            if "team tool" in line:
+                print("e2e: server: " + line, file=sys.stderr)
+        return end["data"]["result"]
+
+
+class SmokeTest(LabCase):
     def test_team_agent_drives_simulated_robot(self):
         self.request("POST", "/admin/api/login", {"password": self.admin_password}, expect=(204,))
         rb = self.robot_online(ROBOT)
@@ -371,6 +392,26 @@ class SmokeTest(unittest.TestCase):
         for line in self.server_log.read_text(encoding="utf-8").splitlines():
             if "team tool saved" in line:
                 print("e2e: server: " + line, file=sys.stderr)
+
+    def test_quadrat_brings_the_robot_back(self):
+        """Stage 2: a loop. The quadrat tool drives a square and ends near its start."""
+        self.request("POST", "/admin/api/login", {"password": self.admin_password}, expect=(204,))
+        self.robot_online(ROBOT)
+        team = self.request("POST", "/api/join", {"code": self.lab_code, "name": "Quadrat"},
+                            opener=urllib.request.build_opener(), expect=(201,))
+        self.give_task(team, "Wiederholen")
+        self.request("POST", "/admin/api/assign", {"robot": ROBOT, "team": team["id"]}, expect=(204,))
+        self.follow_team_log(team["token"])
+        self.wait_for(lambda: any(r["online"] for r in self.team_request(team, "GET", "/api/session")["robots"]), "robot assigned")
+        time.sleep(1.5)  # the robot learns its owner from the next heartbeat
+        start = self.poses()[-1]
+        result = self.run_team_tool(team, "quadrat", "quadrat")
+        self.assertEqual(result["end"], "done", result)
+        self.assertEqual(result["steps"], 8, result)
+        end = self.poses()[-1]
+        off = ((end[0] - start[0]) ** 2 + (end[1] - start[1]) ** 2) ** 0.5
+        print("e2e: quadrat %s -> %s, %.1f cm off" % (start, end, off), file=sys.stderr)
+        self.assertLess(off, 10, (start, end))
 
     def test_two_tasks_and_a_switch(self):
         """A team works in two tasks and switches between them: prompt, notes

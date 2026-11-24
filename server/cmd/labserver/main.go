@@ -121,6 +121,7 @@ func run(configPath string, log *slog.Logger) error {
 		Budgets: cfg.Budgets, Log: log,
 		TeamProvider:  labSvc.TeamProvider,
 		Conversations: labSvc.ConversationEnabled,
+		LoadProgram:   labSvc.LoadProgram,
 	})
 	go agents.Run(ctx)
 	labSvc.OnTeamEvent = func(teamID, kind, text string) {

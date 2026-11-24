@@ -540,6 +540,9 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, team store.Team)
 				data["id"] = e.Ref
 			}
 			b, _ := json.Marshal(data)
+			if e.Payload != nil {
+				b = e.Payload
+			}
 			_, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", e.Signal, b)
 			return err
 		}

@@ -26,7 +26,8 @@ type gate struct {
 	starting bool
 	manual   map[int64]context.CancelFunc // running by-hand calls
 	next     int64
-	seq      sync.Mutex // orders protocol rows of the team's manual run
+	prog     *programRun // the running team tool, if any
+	seq      sync.Mutex  // orders protocol rows of the team's manual run
 }
 
 func (m *Manager) gate(teamID string) *gate {

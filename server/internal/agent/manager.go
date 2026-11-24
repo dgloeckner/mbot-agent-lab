@@ -95,6 +95,9 @@ type Deps struct {
 	// Conversations reports whether the control room allows conversations
 	// (lab.Service.ConversationEnabled). Nil means allowed.
 	Conversations func() bool
+
+	// LoadProgram loads a team tool of the active task for "Ausführen".
+	LoadProgram ProgramLoader
 }
 
 // Manager owns the actors. Safe for concurrent use.
@@ -267,6 +270,7 @@ func (m *Manager) StopAll(by string) {
 // TaskClosed ends every run and conversation in a task the control room
 // closed (reason task_closed).
 func (m *Manager) TaskClosed(taskID string) {
+	m.cancelProgramsOfTask(taskID)
 	m.endManualOfTask(taskID)
 	m.mu.Lock()
 	actors := make([]*actor, 0, len(m.actors))
@@ -285,6 +289,7 @@ func (m *Manager) TaskClosed(taskID string) {
 // TaskActivated ends the team's open conversation when the team switches to
 // another task. Switching is refused while a run is active.
 func (m *Manager) TaskActivated(teamID, taskID string) {
+	m.cancelManual(teamID) // a team tool keeps the task it started in; leaving the task stops it
 	m.endManual(teamID, "task_switched")
 	if a := m.actor(teamID, false); a != nil {
 		a.ctrl <- control{kind: ctrlTaskSwitched, task: taskID}

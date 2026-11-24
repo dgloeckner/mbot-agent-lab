@@ -2,7 +2,10 @@ package web
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/agent"
 
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/store"
 )
@@ -60,4 +63,45 @@ func (s *Server) deleteProgram(w http.ResponseWriter, r *http.Request, team stor
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// runProgram starts a team tool ("Ausführen"): {robot?, step?}. It answers
+// the run id; the steps arrive as SSE "program" events. 409 during a run,
+// for an invalid tool and while another team tool runs.
+func (s *Server) runProgram(w http.ResponseWriter, r *http.Request, team store.Team) {
+	var req struct {
+		Robot string `json:"robot"`
+		Step  bool   `json:"step"`
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
+		writeError(w, http.StatusBadRequest, "Die Anfrage war ungültig.")
+		return
+	}
+	run, err := s.Agents.RunProgram(r.Context(), team.ID, r.PathValue("id"), req.Robot, req.Step)
+	if err != nil {
+		s.agentError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]string{"run": run})
+}
+
+// continueProgram lets a single-step run take its next call ("Weiter").
+func (s *Server) continueProgram(w http.ResponseWriter, r *http.Request, team store.Team) {
+	if err := s.Agents.ContinueProgram(team.ID, r.PathValue("id")); err != nil {
+		s.agentError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// agentError answers a refusal of the agent runtime with 409 and other
+// errors like the lab's.
+func (s *Server) agentError(w http.ResponseWriter, err error) {
+	var se *agent.StartError
+	if errors.As(err, &se) {
+		writeError(w, http.StatusConflict, se.Msg)
+		return
+	}
+	s.labError(w, err)
 }

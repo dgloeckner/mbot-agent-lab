@@ -90,7 +90,7 @@ func newTestServerBus(t *testing.T, bus robots.Bus) *testLab {
 	toolReg := tools.NewRegistry(reg, st, hub, budgets)
 	svc.Tools = toolReg
 	agents := agent.NewManager(agent.Deps{Store: st, Robots: reg, Hub: hub, LLM: models, Tools: toolReg, Budgets: budgets, Log: log,
-		TeamProvider: svc.TeamProvider, Conversations: svc.ConversationEnabled})
+		TeamProvider: svc.TeamProvider, Conversations: svc.ConversationEnabled, LoadProgram: svc.LoadProgram})
 	runCtx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
 	go agents.Run(runCtx)

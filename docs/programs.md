@@ -127,6 +127,33 @@ choice `copy` copies the team tools of the other task too, with new ids.
 - Without an active task the routes answer 409; in a closed task reads work and writes answer 409.
 - The server logs `team tool saved` (team, task, id, name, valid, problems) and `team tool deleted`.
 
+## Running a team tool
+
+"Ausführen": `POST /t/{token}/programs/{id}/run` with `{robot?, step?}` starts a run of the
+tool's tree on one of the team's robots and answers its run id (`agent.Manager.RunProgram`).
+
+- **Rules** (409 with a German message): not while an agent run is active, not for an invalid
+  tool, not while another team tool of the team runs; `POST start` answers 409 while a team tool
+  runs. With several robots `robot` is required. By-hand calls stay possible beside it; the robot
+  answers a second motion command with `busy`.
+- **Caller:** every step goes through `tools.Registry.CallManual`, so ownership, argument checks
+  and logging are the same as in the console. Display and sound tools are quiet; `offline`,
+  `reassigned`, `stopped` and a `timeout` that is not the tool's normal end are hard errors.
+- **Sensor conditions** wait (at most 2 s) for a robot `state` that arrived after the last result
+  (`robots.Registry.FreshState`), so a reading from before the last motion is never used.
+- **Stop:** `POST stop` cancels the run at once; the running command ends `stopped` and the robot
+  gets `stop`. Switching or closing the task stops a running team tool too.
+- **Single step:** with `step: true` the run halts before every call (event `wait`);
+  `POST /t/{token}/program-runs/{id}/continue` ("Weiter") lets it take the next call.
+- **SSE `program`:** `{run, program, phase, step, block, kind, tool, args, round, result, ms}` for
+  `start`, `wait`, `before`, `after` of every step, and `{run, program, phase: "end", result}` at
+  the end. The team page marks the running block and builds the "Ablauf" from these. Not kept in
+  the backlog.
+- **Log and storage:** start and end as "Ihr" lines (`program_start`, `program_end`) and every
+  step as a tool line with the tool's name (`data.program`). They are stored under the `manual`
+  row of the pair: start and end as messages, each step as a tool call that names the team tool
+  (`tool_calls.program`). `INFO` lines `team tool started`, `team tool step`, `team tool ended`.
+
 ## Blocks
 
 Two representations, one source: the browser stores the **Blockly state** of a team tool, the
