@@ -118,7 +118,8 @@ class Trace:
 
     At the edge of a stripe the probes rarely change together: one sees the
     color a few millimetres before the others. An entry that the next one
-    replaces within min_step (cm or degrees) is such a transition and dropped.
+    replaces within min_step (cm or degrees, inclusive: positions are rounded to
+    0.1) is such a transition and dropped.
     """
 
     def __init__(self, s, min_step=SK_FLOOR_MIN_CM):
@@ -137,7 +138,7 @@ class Trace:
 
     def add(self, pos, pattern):
         e = self.entries
-        if len(e) > 1 and abs(pos - e[-1][0]) < self.min_step:
+        if len(e) > 1 and abs(pos - e[-1][0]) <= self.min_step + 0.01:
             e.pop()  # the last entry was an edge transition
             if e[-1][1] == pattern:
                 return
