@@ -1,0 +1,19 @@
+{
+  "program": {
+    "name": "labyrinth",
+    "description": "Fährt bis zur nächsten Wand und biegt dort rechts ab, bis der Boden blau ist.",
+    "body": [
+      {"id": "l_loop", "type": "repeat_until",
+       "cond": {"id": "l_until", "source": "result", "field": "reason", "op": "eq", "value": "color"},
+       "body": [
+        {"id": "l_drive", "type": "call", "tool": "drive_until", "args": {"max_cm": 300, "stop_below_cm": 15, "stop_on_color": "blue"}},
+        {"id": "l_if", "type": "if",
+         "cond": {"id": "l_wall", "source": "result", "field": "reason", "op": "eq", "value": "wall"},
+         "body": [
+          {"id": "l_turn", "type": "call", "tool": "turn", "args": {"degrees": 90}}
+         ]}
+      ]},
+      {"id": "l_return", "type": "return", "return": {"field": "color"}}
+    ]
+  }
+}

@@ -10,8 +10,8 @@ with approved deviations on top).
 - Decisions in `docs/decisions.md` are binding. Propose deviations first; do not implement them
   silently. An approved deviation goes into `docs/decisions.md`, not into this file.
 - Long-term docs (`docs/architecture.md`, `docs/decisions.md`, `docs/protocol.md`,
-  `docs/tools.md`, `docs/events.md`) describe the current state, in English, without history. A
-  PR that changes behaviour updates them in the same PR.
+  `docs/tools.md`, `docs/events.md`, `docs/programs.md`) describe the current state, in English,
+  without history. A PR that changes behaviour updates them in the same PR.
 - Grid freedom: robot script, server and web UI know nothing about the line grid (no junction
   coordinates, pitch or color code). Tools report floor letters and never interpret them. Field
   geometry lives only in `sim/grid.py`, the world files and `sim/tests`; reading rules live in
@@ -32,7 +32,8 @@ with approved deviations on top).
   heartbeat, cmd/result, reassignment), store (SQLite via modernc, migrations in
   `store/migrations`), lab (joining, teams, assignments, robot names, lab code: the rules live
   here, web handlers stay thin), live (per-team log hub for SSE), web.
-  agent (one actor per team: inbox, wake rules, context, budgets, runs), tools (registry with
+  agent (one actor per team: inbox, wake rules, context, budgets, runs, by-hand calls), programs
+  (team tools: tree, validation, interpreter; knows no tool names), tools (registry with
   model-facing German descriptions and JSON schemas), llm (OpenAI-compatible client, Claude via
   the official Anthropic Go SDK, retries, fallback, cost; `Fake` scripted test model), memory
   (history trimming, notes formatting). Messages stay in the OpenAI format; a provider keeps its

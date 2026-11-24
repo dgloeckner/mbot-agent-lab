@@ -1,0 +1,12 @@
+{
+  "program": {
+    "name": "quadrat",
+    "description": "Fährt ein Quadrat mit 30 cm Seitenlänge und steht danach wieder am Start.",
+    "body": [
+      {"id": "q_repeat", "type": "repeat", "times": 4, "body": [
+        {"id": "q_drive", "type": "call", "tool": "drive", "args": {"cm": 30}},
+        {"id": "q_turn", "type": "call", "tool": "turn", "args": {"degrees": 90}}
+      ]}
+    ]
+  }
+}

@@ -2,7 +2,7 @@
 
 Current state of the mBot2 Agent Lab. This document describes the system as it is; a PR that
 changes behaviour updates it in the same PR. Why things are the way they are: `decisions.md`.
-MQTT: `protocol.md`. Tools: `tools.md`. Event log: `events.md`. The line field: `field.md`.
+MQTT: `protocol.md`. Tools: `tools.md`. Team tools: `programs.md`. Event log: `events.md`. The line field: `field.md`.
 
 ## Purpose
 
@@ -90,6 +90,7 @@ Skills, events, the trip log and the floor trace are specified in `protocol.md`.
 | `live` | per-team log hub for SSE, with a backlog for reconnecting browsers |
 | `agent` | one actor per team: inbox, wake rules, context, budgets, runs and conversations |
 | `tools` | tool registry: model-facing German descriptions, JSON schemas, handlers |
+| `programs` | team tools: tree format, validation and interpreter; knows no tool names, asks the registry |
 | `llm` | OpenAI-compatible client and Claude (official Anthropic Go SDK), retries, fallback, cost; `Fake` scripted test model |
 | `memory` | history trimming and notes formatting for the context |
 | `web` | HTTP handlers, SSE, admin session, embedded pages |

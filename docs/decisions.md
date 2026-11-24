@@ -113,6 +113,6 @@ agent with the prompt. How it works: `architecture.md` and, from the interpreter
 
 | Topic | Decision | Why |
 | --- | --- | --- |
-| Long-term docs | `architecture.md`, `decisions.md`, `protocol.md`, `tools.md`, `events.md` describe the current state; a PR that changes behaviour updates them | docs stay true without reading history |
+| Long-term docs | `architecture.md`, `decisions.md`, `protocol.md`, `tools.md`, `events.md`, `programs.md` describe the current state; a PR that changes behaviour updates them | docs stay true without reading history |
 | Protocol | `protocol.md` is the source of truth for MQTT; changing a message changes `docs/examples/protocol/*` too | server, robot and simulator test against the same examples |
 | Field | `field.md` is the original field handoff (German), kept as written with the approved deviations on top | record of the field design |
