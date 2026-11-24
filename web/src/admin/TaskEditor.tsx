@@ -4,6 +4,7 @@ import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { createMarkdownField } from '../editor'
+import { parseTaskFile, type TaskFile } from './taskfile'
 import { STATE_LABEL, type TaskDetail } from './tasks'
 
 export interface TaskEditorProps {
@@ -25,6 +26,37 @@ function MarkdownField(props: { value: string; label: string; placeholder: strin
   return <div class="task-field" ref={host} />
 }
 
+/** Fills a draft from a task file (docs/lab/aufgaben): upload or paste. */
+function Import({ onImport }: { onImport: (t: TaskFile) => void }) {
+  const [text, setText] = useState('')
+  const apply = (raw: string) => {
+    const t = parseTaskFile(raw)
+    if (!t.body) return
+    onImport(t)
+    setText('')
+  }
+  return (
+    <details class="task-import">
+      <summary>Aufgabendatei importieren</summary>
+      <p class="pool-sub">Eine Datei aus <code>docs/lab/aufgaben/</code> hochladen oder ihren Inhalt einfügen. Titel, Aufgabentext und Startprompt werden ersetzt.</p>
+      <input
+        type="file"
+        accept=".md,text/markdown,text/plain"
+        aria-label="Aufgabendatei hochladen"
+        onChange={async (e) => {
+          const f = e.currentTarget.files?.[0]
+          if (f) apply(await f.text())
+          e.currentTarget.value = ''
+        }}
+      />
+      <textarea rows={4} value={text} placeholder="---&#10;title: …&#10;---&#10;## Aufgabe …" aria-label="Aufgabendatei einfügen" onInput={(e) => setText(e.currentTarget.value)} />
+      <button class="btn btn-small" disabled={!text.trim()} onClick={() => apply(text)}>
+        Übernehmen
+      </button>
+    </details>
+  )
+}
+
 function Rendered({ text }: { text: string }) {
   if (!text.trim()) return <p class="pool-sub">Noch kein Text.</p>
   const html = DOMPurify.sanitize(marked.parse(text, { async: false, gfm: true, breaks: false }) as string)
@@ -39,6 +71,7 @@ export default function TaskEditor(p: TaskEditorProps) {
   const [starter, setStarter] = useState(p.task.starter)
   const [tab, setTab] = useState<'write' | 'preview'>(draft ? 'write' : 'preview')
   const [busy, setBusy] = useState(false)
+  const [imported, setImported] = useState(0) // remounts the fields after an import
   const dirty = title !== p.task.title || body !== p.task.body || starter !== p.task.starter
 
   useEffect(() => {
@@ -94,7 +127,15 @@ export default function TaskEditor(p: TaskEditorProps) {
       </div>
 
       {tab === 'write' ? (
-        <div class="task-fields">
+        <div class="task-fields" key={imported}>
+          <Import
+            onImport={(t) => {
+              if (t.title) setTitle(t.title)
+              setBody(t.body)
+              setStarter(t.starter)
+              setImported(imported + 1)
+            }}
+          />
           <section>
             <h3>Aufgabentext für das Team</h3>
             <p class="pool-sub">Markdown. Nur das Team sieht ihn, der Agent nie: Daraus einen Prompt zu machen, ist die Aufgabe des Teams.</p>

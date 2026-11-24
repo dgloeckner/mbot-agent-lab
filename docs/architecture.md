@@ -389,6 +389,9 @@ embed compiling without a build. No CDN assets. Rarely used views are lazy-loade
     starter prompt, both Markdown) with a preview as the team will see it, saved, published or
     deleted; a published task is shown read-only with "Duplizieren" and "Aufgabe schließen"
     (with confirmation: running runs end).
+    A draft can be filled from a task file (`docs/lab/aufgaben/{de,en}/*.md`: front matter with
+    `title`, sections `## Aufgabe`/`## Task` and `## Startprompt`/`## Starter prompt`) by upload
+    or paste; the browser parses it (`web/src/admin/taskfile.ts`), the server never reads files.
   - **Assigning:** drag an open task onto a team card, or pick a team or "An alle Teams" in the
     task's "Zuweisen …" menu (keyboard and screen readers, like robot assignment). Each team
     card lists its tasks with status (zugewiesen, angenommen, aktiv) and "Zurückziehen" while the

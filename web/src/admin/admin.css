@@ -708,3 +708,35 @@
 .danger-text {
   color: var(--stop);
 }
+
+.task-import {
+  padding: 10px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.task-import[open] {
+  display: grid;
+}
+
+.task-import summary {
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 14px;
+}
+
+.task-import textarea {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.task-import .btn {
+  justify-self: start;
+}

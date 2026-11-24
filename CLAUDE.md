@@ -15,10 +15,11 @@ with approved deviations on top).
 - Grid freedom: robot script, server and web UI know nothing about the line grid (no junction
   coordinates, pitch or color code). Tools report floor letters and never interpret them. Field
   geometry lives only in `sim/grid.py`, the world files and `sim/tests`; reading rules live in
-  `docs/lab/` and example prompts.
+  `docs/lab/` and the task files.
 - Language: repo docs, code and comments in English. Lab material (`docs/lab/`) and student-facing
-  UI text (web templates, robot display) in German. Example prompts in German and English, same
-  file name under `docs/lab/prompts/de/` and `docs/lab/prompts/en/`.
+  UI text (web templates, robot display) in German. Task files (task text and starter prompt)
+  in German and English, same file name under `docs/lab/aufgaben/de/` and `docs/lab/aufgaben/en/`;
+  a web test parses all of them.
 - `docs/protocol.md` is the source of truth for MQTT. Changing a message means changing
   `docs/examples/protocol/*` too; Go and Python tests read those files.
 - Secrets never go into YAML or the repo: config files only name environment variables

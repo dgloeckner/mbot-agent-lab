@@ -20,7 +20,7 @@ and goes here, not into `CLAUDE.md`. How the system works today: `architecture.m
 | Live data in the UI | Server-Sent Events | pass corporate proxies reliably |
 | Web assets | built with Vite and embedded, no CDN | lab PCs sit behind a corporate proxy |
 | Deployment | server on an Azure VM, robots in a guest Wi-Fi, PCs in the corporate network | the corporate network stays untouched |
-| Language | UI and lab material in German; code, comments and repo docs in English; example prompts in both | audience and common practice |
+| Language | UI and lab material in German; code, comments and repo docs in English; task files in both | audience and common practice |
 | Tasks | run through Nx (`nx:run-commands`), no Makefile | approved deviation: one cached task runner for Go, Python and web |
 
 ## Robots
