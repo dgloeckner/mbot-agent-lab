@@ -195,8 +195,8 @@
 }
 
 .team-card {
-  display: grid;
-  grid-template-rows: auto 1fr auto auto auto;
+  display: flex;
+  flex-direction: column;
   background: var(--surface);
   border: 1px solid var(--line);
   overflow: hidden;
@@ -451,4 +451,292 @@
   .side {
     position: static;
   }
+}
+
+.team-card > .robot-list {
+  flex: 1;
+}
+
+/* --- tasks ---------------------------------------------------------------- */
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.task-group h3 {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 10px 0 6px;
+}
+
+.task-group .count {
+  font-weight: 500;
+  color: var(--faint);
+}
+
+.task-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.task-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.task-item[data-state='open'] {
+  cursor: grab;
+  border-left: 4px solid var(--ok);
+}
+
+.task-item[data-state='draft'] {
+  border-style: dashed;
+}
+
+.task-item[data-state='closed'] {
+  opacity: 0.7;
+}
+
+.task-open {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.task-open:hover {
+  text-decoration: underline;
+}
+
+.task-item .chip-move {
+  max-width: 120px;
+}
+
+.team-tasks {
+  list-style: none;
+  margin: 0;
+  padding: 8px 12px 0;
+  display: grid;
+  gap: 4px;
+}
+
+.team-tasks li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13.5px;
+}
+
+.team-task-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.team-task-status {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.team-tasks li[data-status='active'] .team-task-status {
+  color: var(--ok);
+  font-weight: 700;
+}
+
+.team-tasks li[data-closed='true'] .team-task-title {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.team-tasks .btn-link {
+  margin-left: auto;
+}
+
+.team-tasks-empty {
+  padding: 8px 12px 0;
+  font-size: 13px;
+  color: var(--faint);
+}
+
+.task-dialog {
+  width: min(880px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.3);
+}
+
+.task-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.task-dialog::backdrop {
+  background: rgb(10 14 22 / 0.45);
+}
+
+.task-dialog-head,
+.task-dialog-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+}
+
+.task-dialog-head {
+  border-bottom: 1px solid var(--line);
+}
+
+.task-dialog-head h2 {
+  font-size: 19px;
+  font-weight: 740;
+}
+
+.task-dialog-foot {
+  border-top: 1px solid var(--line);
+}
+
+.task-dialog .spacer {
+  flex: 1;
+}
+
+.task-state {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.task-state-open {
+  color: var(--ok);
+  border-color: currentColor;
+}
+
+.task-title {
+  display: grid;
+  gap: 4px;
+  padding: 14px 18px 4px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+.task-title input {
+  font: inherit;
+  font-size: 17px;
+  font-weight: 650;
+  color: var(--ink);
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.task-dialog .tabs {
+  padding: 0 18px;
+}
+
+.task-fields,
+.task-preview {
+  overflow: auto;
+  padding: 12px 18px;
+  display: grid;
+  gap: 16px;
+}
+
+.task-fields h3 {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.task-field {
+  height: 200px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.task-preview-card {
+  padding: 14px 18px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.task-preview-card h3 {
+  font-size: 18px;
+  font-weight: 740;
+  margin-bottom: 8px;
+}
+
+.task-starter {
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--code-bg);
+}
+
+.danger-text {
+  color: var(--stop);
+}
+
+.task-import {
+  padding: 10px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.task-import[open] {
+  display: grid;
+}
+
+.task-import summary {
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 14px;
+}
+
+.task-import textarea {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.task-import .btn {
+  justify-self: start;
 }

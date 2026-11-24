@@ -13,6 +13,7 @@ import {
   editorBridge,
   keepDraft,
   prefs,
+  readOnly,
   remoteVersion,
   session,
   setDraft,
@@ -86,7 +87,7 @@ export function PromptPane() {
   const tab = useSignal<Tab>('write')
   const remote = remoteVersion.value
   const tooLong = draft.value.length > session.value!.limits.prompt_chars
-  const canDeploy = !busy.value && draft.value.trim() !== '' && !tooLong
+  const canDeploy = !busy.value && !readOnly.value && draft.value.trim() !== '' && !tooLong
   const tabs: [Tab, string][] = [
     ['write', 'Schreiben'],
     ['preview', 'Vorschau'],

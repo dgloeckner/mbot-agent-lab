@@ -226,6 +226,23 @@ class SmokeTest(unittest.TestCase):
 
     # --- the chain -------------------------------------------------------------
 
+    def open_task(self, team, title):
+        """The control room prepares a task and assigns it to the team."""
+        task = self.request("POST", "/admin/api/tasks", {"title": title, "body": "Erkundet die Arena."}, expect=(201,))
+        self.request("POST", "/admin/api/tasks/%s/publish" % task["id"])
+        self.request("POST", "/admin/api/tasks/%s/assign" % task["id"], {"teams": [team["id"]]})
+        return task
+
+    def team_request(self, team, method, path, body=None, expect=(200,)):
+        return self.request(method, "/t/%s%s" % (team["token"], path), body, opener=urllib.request.build_opener(), expect=expect)
+
+    def give_task(self, team, title):
+        """The control room prepares a task and assigns it; the team accepts it."""
+        task = self.open_task(team, title)
+        accepted = self.team_request(team, "POST", "/tasks/%s/accept" % task["id"], {"prompt": "empty"})
+        self.assertEqual(accepted["status"], "active", accepted)
+        return task
+
     def robot_online(self, robot):
         def probe():
             st = self.request("GET", "/admin/api/state")
@@ -244,6 +261,7 @@ class SmokeTest(unittest.TestCase):
         team = self.request("POST", "/api/join", {"code": self.lab_code, "name": "Testteam"},
                             opener=urllib.request.build_opener(), expect=(201,))
         token = team["token"]
+        self.give_task(team, "Arena")
         self.request("POST", "/admin/api/assign", {"robot": ROBOT, "team": team["id"]}, expect=(204,))
         self.follow_team_log(token)
 
@@ -304,6 +322,40 @@ class SmokeTest(unittest.TestCase):
                          "the conversation started a run")
         print("e2e: conversation answer %r after %s" % (answer[0].get("text"), tools), file=sys.stderr)
 
+    def test_two_tasks_and_a_switch(self):
+        """A team works in two tasks and switches between them: prompt, notes
+        and runs always belong to the active task. Starting before accepting a
+        task is refused."""
+        self.request("POST", "/admin/api/login", {"password": self.admin_password}, expect=(204,))
+        team = self.request("POST", "/api/join", {"code": self.lab_code, "name": "Wechsler"},
+                            opener=urllib.request.build_opener(), expect=(201,))
+        a = self.open_task(team, "Aufgabe A")
+        b = self.open_task(team, "Aufgabe B")
+        refused = self.team_request(team, "POST", "/start", expect=(409,))
+        self.assertIn("Aufgabe", refused["error"])
+
+        for task, text in ((a, "Prompt A"), (b, "Prompt B")):
+            self.team_request(team, "POST", "/tasks/%s/accept" % task["id"], {"prompt": "empty"})
+            self.team_request(team, "POST", "/prompt", {"text": text}, expect=(201,))
+            self.team_request(team, "POST", "/notes", {"text": "Notiz " + text[-1]}, expect=(201,))
+
+        self.team_request(team, "POST", "/tasks/%s/activate" % a["id"])
+        s = self.team_request(team, "GET", "/api/session")
+        self.assertEqual((s["task"]["id"], s["prompt"]["text"], [n["text"] for n in s["notes"]]), (a["id"], "Prompt A", ["Notiz A"]))
+        self.follow_team_log(team["token"])
+        status = self.team_request(team, "POST", "/start", expect=(202,))
+        start = self.wait_for(lambda: self.log_entries(lambda e: e.get("kind") == "run_start"), "run_start in task A")[0]
+        self.assertEqual(start.get("task_id"), a["id"], start)
+        self.assertEqual(status.get("task_id"), a["id"], status)
+        self.team_request(team, "POST", "/tasks/%s/activate" % b["id"], expect=(409,))  # not during a run
+        self.team_request(team, "POST", "/stop")
+        self.wait_for(lambda: not self.team_request(team, "GET", "/api/session")["agent"]["running"], "the run to stop")
+
+        self.team_request(team, "POST", "/tasks/%s/activate" % b["id"])
+        s = self.team_request(team, "GET", "/api/session")
+        self.assertEqual((s["task"]["id"], s["prompt"]["text"], [n["text"] for n in s["notes"]]), (b["id"], "Prompt B", ["Notiz B"]))
+        print("e2e: run in %s, switched to %s" % (a["title"], b["title"]), file=sys.stderr)
+
     def test_two_robots_move_at_once(self):
         """The scripted model moves every robot of the team in one answer; the
         server runs those calls at the same time."""
@@ -313,6 +365,7 @@ class SmokeTest(unittest.TestCase):
         team = self.request("POST", "/api/join", {"code": self.lab_code, "name": "Duo"},
                             opener=urllib.request.build_opener(), expect=(201,))
         token = team["token"]
+        self.give_task(team, "Zu zweit")
         for robot in (ROBOT, ROBOT2):
             self.request("POST", "/admin/api/assign", {"robot": robot, "team": team["id"]}, expect=(204,))
         self.follow_team_log(token)

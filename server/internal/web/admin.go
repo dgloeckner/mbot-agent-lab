@@ -31,6 +31,7 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 	admin("POST /admin/api/stop-all", s.adminStopAll)
 	admin("PUT /admin/api/models", s.adminSetModels)
 	admin("PUT /admin/api/conversation", s.adminSetConversation)
+	s.taskAdminRoutes(admin)
 }
 
 // AdminRobot is one robot as the control room sees it.
@@ -57,6 +58,8 @@ type AdminTeam struct {
 	Provider  string       `json:"provider"` // model provider of the team's next run
 	Agent     agent.Status `json:"agent"`    // current or last run
 	Total     store.Totals `json:"total"`    // all runs and conversations of the team
+	// Tasks assigned to the team and where it stands with each.
+	Tasks []AdminTeamTask `json:"tasks"`
 }
 
 type adminState struct {
@@ -66,6 +69,7 @@ type adminState struct {
 	Conversation bool         `json:"conversation"`
 	Teams        []AdminTeam  `json:"teams"`
 	Robots       []AdminRobot `json:"robots"`
+	Tasks        []AdminTask  `json:"tasks"`
 }
 
 func (s *Server) buildAdminState(ctx context.Context) (adminState, error) {
@@ -77,12 +81,29 @@ func (s *Server) buildAdminState(ctx context.Context) (adminState, error) {
 	if err != nil {
 		return adminState{}, err
 	}
-	st := adminState{LabCode: s.Lab.LabCode(), Models: s.Lab.Models(), Conversation: s.Lab.ConversationEnabled(), Teams: []AdminTeam{}, Robots: []AdminRobot{}}
+	teamTasks, err := s.Store.AllTeamTasks(ctx)
+	if err != nil {
+		return adminState{}, err
+	}
+	tasks, err := s.Store.Tasks(ctx)
+	if err != nil {
+		return adminState{}, err
+	}
+	st := adminState{LabCode: s.Lab.LabCode(), Models: s.Lab.Models(), Conversation: s.Lab.ConversationEnabled(),
+		Teams: []AdminTeam{}, Robots: []AdminRobot{}, Tasks: []AdminTask{}}
+	for _, t := range tasks {
+		st.Tasks = append(st.Tasks, adminTask(t))
+	}
 	for _, t := range teams {
-		st.Teams = append(st.Teams, AdminTeam{
+		at := AdminTeam{
 			ID: t.ID, Name: t.Name, Color: t.Color, Link: "/t/" + t.Token,
 			Connected: s.Hub.Connected(t.ID), CreatedAt: t.CreatedAt, Provider: s.Lab.Provider(t), Agent: s.Agents.Status(t.ID), Total: totals[t.ID],
-		})
+			Tasks: []AdminTeamTask{},
+		}
+		for _, i := range teamTasks[t.ID] {
+			at.Tasks = append(at.Tasks, AdminTeamTask{ID: i.ID, Title: i.Title, State: i.State, Status: i.Status})
+		}
+		st.Teams = append(st.Teams, at)
 	}
 	for _, rb := range s.Robots.Snapshot() {
 		st.Robots = append(st.Robots, AdminRobot{

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -35,6 +36,7 @@ type testLab struct {
 	*httptest.Server
 	lab *lab.Service
 	reg *robots.Registry
+	st  *store.Store
 }
 
 func newTestServer(t *testing.T) *testLab {
@@ -64,6 +66,8 @@ func newTestServer(t *testing.T) *testLab {
 		if _, err := st.CreateTeam(ctx, tm); err != nil {
 			t.Fatal(err)
 		}
+		activateTestTask(t, st, tm.ID)
+		hub.SetTask(tm.ID, testTask)
 	}
 	if err := svc.AssignRobot(ctx, "mbot-1", "rot"); err != nil {
 		t.Fatal(err)
@@ -78,10 +82,13 @@ func newTestServer(t *testing.T) *testLab {
 	runCtx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
 	go agents.Run(runCtx)
+	svc.OnTaskClosed = agents.TaskClosed
+	svc.OnTaskActivated = agents.TaskActivated
+	svc.RunActive = func(teamID string) bool { return agents.Status(teamID).Running }
 	s := &Server{Config: cfg, Robots: reg, Store: st, Hub: hub, Lab: svc, Agents: agents, Log: log}
 	srv := httptest.NewServer(s.Handler())
 	t.Cleanup(srv.Close)
-	return &testLab{Server: srv, lab: svc, reg: reg}
+	return &testLab{Server: srv, lab: svc, reg: reg, st: st}
 }
 
 func do(t *testing.T, srv *testLab, method, path, body string) (int, map[string]any) {
@@ -316,5 +323,26 @@ func TestMessageWithoutRunStartsConversation(t *testing.T) {
 	resp.Body.Close()
 	if state.Conversation {
 		t.Error("admin state still shows conversations on")
+	}
+}
+
+// testTask is the task every test team works in.
+const testTask = "a1"
+
+// activateTestTask assigns, accepts and activates testTask for team.
+func activateTestTask(t *testing.T, st *store.Store, team string) {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := st.Task(ctx, testTask); errors.Is(err, store.ErrNotFound) {
+		if _, err := st.CreateTask(ctx, store.Task{ID: testTask, Title: "Test", Body: "Aufgabe", State: store.TaskOpen}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tt := store.TeamTask{Team: team, Task: testTask}
+	assign := func(ctx context.Context, tt store.TeamTask) error { _, err := st.AssignTask(ctx, tt); return err }
+	for _, step := range []func(context.Context, store.TeamTask) error{assign, st.AcceptTask, st.ActivateTask} {
+		if err := step(ctx, tt); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

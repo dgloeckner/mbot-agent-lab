@@ -92,9 +92,8 @@ Sent immediately on change, otherwise two to five times per second.
 - `color`: team color for the LEDs. `agent`: `waiting`, `thinking` or `acting`; the LEDs pulse while
   the agent thinks.
 
-> **Addition to the handoff:** the handoff does not define the heartbeat payload. It carries owner
-> and agent state so that changes reach the robot even when single QoS 0 messages get lost.
-> A free robot shows "frei" and stands still.
+The heartbeat carries owner and agent state so that changes reach the robot even when single
+QoS 0 messages get lost. A free robot shows "frei" and stands still.
 
 ## Skills (`cmd.name`)
 
@@ -147,7 +146,7 @@ Sent immediately on change, otherwise two to five times per second.
 - **Obstacles:** the ultrasonic sensor looks forward in a cone of about 30°. Every forward motion
   (`drive`, `drive_until`, `drive_arc`, `follow_line_until`, the drives of `retrace_path`) ends
   with `obstacle` once something is nearer than the emergency stop distance, and does not start
-  when it already is; the 2 cm above the 6 cm of the handoff keep the front corners off a wall met
+  when it already is; the 2 cm above the original 6 cm keep the front corners off a wall met
   at a slant down to about 30° (`sim/tests/test_safety.py`). The robot cannot see behind or
   beside itself: `drive` with negative `cm` is blind, which the agent has to know; turns on the
   spot do not check; a wall grazed at a flatter angle can be touched. `retrace_path` decides its
@@ -155,7 +154,7 @@ Sent immediately on change, otherwise two to five times per second.
 - **`calibrate_colors`** is maintenance for the control room, not an agent tool. The robot stands
   right before the reference strip and drives across it; it finds the black field itself, so the
   start position needs no precision. The references apply at once and are lost on restart until
-  the server resends them (planned: a `config` message, field handoff G7).
+  the server resends them (planned: a `config` message, `field.md` step G7).
 
 ## Trip log
 

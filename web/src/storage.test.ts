@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LocalStore, MAX_SNAPSHOTS, changeSize, memoryKV, shouldAutoSnapshot, type KV } from './storage'
+import { LocalStore, MAX_SNAPSHOTS, changeSize, dropOldKeys, memoryKV, shouldAutoSnapshot, type KV } from './storage'
 
 describe('changeSize', () => {
   it('counts only the changed middle', () => {
@@ -27,13 +27,13 @@ describe('shouldAutoSnapshot', () => {
 describe('LocalStore', () => {
   it('keeps drafts per team', () => {
     const kv = memoryKV()
-    new LocalStore(kv, 'rot').saveDraft({ text: 'rot', base: 1, savedAt: 1 })
-    expect(new LocalStore(kv, 'blau').loadDraft()).toBeNull()
-    expect(new LocalStore(kv, 'rot').loadDraft()?.text).toBe('rot')
+    new LocalStore(kv, 'rot', 'a1').saveDraft({ text: 'rot', base: 1, savedAt: 1 })
+    expect(new LocalStore(kv, 'blau', 'a1').loadDraft()).toBeNull()
+    expect(new LocalStore(kv, 'rot', 'a1').loadDraft()?.text).toBe('rot')
   })
 
   it('adds snapshots newest first, skips duplicates and caps the list', () => {
-    const s = new LocalStore(memoryKV(), 'rot')
+    const s = new LocalStore(memoryKV(), 'rot', 'a1')
     s.addSnapshot('a', 'auto', undefined, 1)
     s.addSnapshot('a', 'auto', undefined, 2)
     expect(s.history()).toHaveLength(1)
@@ -55,7 +55,7 @@ describe('LocalStore', () => {
         inner.setItem(k, v)
       },
     }
-    const s = new LocalStore(limited, 'rot')
+    const s = new LocalStore(limited, 'rot', 'a1')
     for (let i = 0; i < 20; i++) s.addSnapshot('x'.repeat(30) + i, 'auto', undefined, i)
     const h = s.history()
     expect(h.length).toBeGreaterThan(0)
@@ -70,5 +70,33 @@ describe('LocalStore', () => {
     LocalStore.savePrefs(kv, { theme: 'dark', split: 5, fontSize: 99, sideTab: 'notes' })
     const p = LocalStore.loadPrefs(kv)
     expect(p).toMatchObject({ theme: 'dark', split: 0.8, fontSize: 22, sideTab: 'notes' })
+  })
+})
+
+describe('LocalStore per (team, task)', () => {
+  it('keeps drafts and snapshots of two tasks apart', () => {
+    const kv = memoryKV()
+    const a = new LocalStore(kv, 'rot', 'a1')
+    const b = new LocalStore(kv, 'rot', 'b2')
+    a.saveDraft({ text: 'Entwurf A', base: 2, savedAt: 1 })
+    a.addSnapshot('Stand A', 'manual', undefined, 1)
+    expect(b.loadDraft()).toBeNull()
+    expect(b.history()).toEqual([])
+    b.saveDraft({ text: 'Entwurf B', base: 0, savedAt: 2 })
+    // A draft in task A survives switching to B and back.
+    expect(new LocalStore(kv, 'rot', 'a1').loadDraft()?.text).toBe('Entwurf A')
+    expect(new LocalStore(kv, 'rot', 'a1').history()[0].text).toBe('Stand A')
+  })
+
+  it('drops drafts and snapshots from before tasks, keeps preferences', () => {
+    const kv = memoryKV()
+    kv.setItem('mbot-lab:v1:rot:draft', JSON.stringify({ text: 'alt', base: 1, savedAt: 1 }))
+    kv.setItem('mbot-lab:v1:rot:history', '[]')
+    LocalStore.savePrefs(kv, { theme: 'dark', split: 0.5, fontSize: 16, sideTab: 'notes' })
+    new LocalStore(kv, 'rot', 'a1').saveDraft({ text: 'neu', base: 0, savedAt: 2 })
+    dropOldKeys(kv)
+    expect(kv.keys().filter((k) => k.startsWith('mbot-lab:v1:rot'))).toEqual([])
+    expect(LocalStore.loadPrefs(kv).theme).toBe('dark')
+    expect(new LocalStore(kv, 'rot', 'a1').loadDraft()?.text).toBe('neu')
   })
 })

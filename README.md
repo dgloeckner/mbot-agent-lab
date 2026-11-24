@@ -10,7 +10,7 @@ Learning goals: instructing precisely, recognising failures and limits of agents
 tools and treating tokens as a cost.
 
 > Repository, code and technical docs are in English. Lab material and the student-facing UI are
-> in German; example prompts exist in both languages.
+> in German; task files for the lab exist in both languages.
 
 ## Architecture
 
@@ -70,6 +70,8 @@ npx nx run sim:run --robots=3 --world=sim/worlds/labyrinth.json
 2. Found a team: http://localhost:5173/join with code `DEV1` and a team name. The page then leads
    to the team page `/t/<token>`.
 3. In the control room, drag robots onto the team (or pick them from the list).
+4. In the control room, create a task (or import one from `docs/lab/aufgaben/`), publish it and
+   assign it to the team. The team accepts it on its page; only then can it deploy and start runs.
 
 Port 5173 is the Vite dev server with hot reload; http://127.0.0.1:8080 serves the embedded build
 as on the VM.
@@ -119,8 +121,8 @@ All vendor API calls live in `robot/src/hw.py` and are marked `VERIFY` until che
 
 | Path | Content |
 | --- | --- |
-| `docs/` | handoff, protocol, tool catalog, example messages |
-| `docs/lab/` | lab material (German), example prompts (German and English) |
+| `docs/` | architecture, decisions, protocol, tool catalog, field, example messages |
+| `docs/lab/` | lab material (German), task files to import (German and English) |
 | `robot/` | robot script sources, bundler, config example |
 | `sim/` | simulator: fakes, world, worlds, tests |
 | `server/` | Go server (`cmd/labserver`, `internal/*`) |
@@ -174,7 +176,7 @@ robot's LEDs show, and the color band pulses in the robot's rhythm while the age
   conversations, and the conversations' share.
 - **Model:** the model of the next run with its price per million tokens, as a choice when the
   control room released more than one.
-- **Browser storage** (`localStorage`, per team): the unsaved draft, up to 80 draft snapshots and
+- **Browser storage** (`localStorage`, per team and task): the unsaved draft, up to 80 draft snapshots and
   UI preferences (theme, split, font size). Deployed versions live on the server. If another PC of
   the team deploys while this draft has changes, the page offers to take over the new version.
 

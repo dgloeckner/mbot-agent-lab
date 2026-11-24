@@ -1,14 +1,21 @@
-# Example prompt: Two robots
-
-Scenario: arena or labyrinth, one team with two robots ("Links" and "Rechts"). Goal: find the blue
-field, both robots search at the same time.
-The prompt is deliberately incomplete. Teams discover what is missing while testing.
-
-Good to know: if the agent calls tools for different robots in one answer, the robots move at the
-same time. Calls for the same robot run one after another. The agent gets the results only when
-all calls of the answer have ended, so a fast robot waits for the slow one.
-
 ---
+title: Search in pairs
+---
+
+## Task
+
+Your team has **two robots**. Name them "Links" and "Rechts" on your page. Somewhere in the arena
+or the labyrinth there is a **blue field**.
+
+Find it with both robots at the same time. One robot on the blue field is enough.
+
+- When one has arrived, both stop.
+- Good to know: if the agent calls tools for both robots in one answer, they move at the same time.
+  It only gets the results when both are done, so a fast robot waits for the slow one.
+
+Your agent does not know this text. What it needs to know goes into your prompt.
+
+## Starter prompt
 
 You control two small robots, "Links" and "Rechts". They stand next to each other in a room with
 walls.

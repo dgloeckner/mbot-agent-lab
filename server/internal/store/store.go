@@ -1,11 +1,13 @@
-// Package store persists prompts, runs, messages, tool calls, LLM calls, notes
-// and robot assignments in SQLite (pure Go driver, no cgo).
+// Package store persists teams, tasks, prompts, runs, messages, tool calls,
+// LLM calls, notes and robot assignments in SQLite (pure Go driver, no cgo).
+// Everything a team produces is scoped by a (team, task) pair, TeamTask.
 package store
 
 import (
 	"context"
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"sort"
@@ -49,6 +51,10 @@ func (s *Store) Version(ctx context.Context) (int, error) {
 	return v, err
 }
 
+// ErrOldSchema is returned for a database from before the tasks reset. Its
+// data is not migrated: the lab starts with a fresh file.
+var ErrOldSchema = errors.New("store: the database is from an older version of the lab server and cannot be read; delete the file and start again")
+
 // migrate applies every migrations/NNNN_*.sql file whose number is above user_version.
 func (s *Store) migrate(ctx context.Context) error {
 	files, err := fs.Glob(migrations, "migrations/*.sql")
@@ -60,6 +66,16 @@ func (s *Store) migrate(ctx context.Context) error {
 	current, err := s.Version(ctx)
 	if err != nil {
 		return err
+	}
+	if current > 0 {
+		// Before the tasks reset, the schema had no team_tasks table.
+		var n int
+		if err := s.DB.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'team_tasks'`).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			return ErrOldSchema
+		}
 	}
 	for _, f := range files {
 		var n int

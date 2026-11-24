@@ -1,9 +1,24 @@
-# Example prompt: line field, level 2
-
-Scenario: line field (`docs/lab/feld/`), one robot. Goal: drive to junction (2,3).
-The prompt is deliberately incomplete. Teams discover what is missing while testing.
-
 ---
+title: Line field – drive to junction (2,3)
+---
+
+## Task
+
+The floor is a grid of black lines with 4 × 4 junctions, 30 cm apart.
+Between the junctions there are color stripes. They are a code:
+
+- red = 0, yellow = 1, green = 2, blue = 3
+- After a junction come two stripes: first x, then y of the junction you are leaving.
+- Before a junction come two stripes: first y, then x of the junction you are reaching.
+- (0,0) is bottom left. x grows to the east, y to the north.
+
+Your robot starts at a junction it does not know. **Get it to junction (2,3).** There it reports
+with `finish`.
+
+No tool tells the agent where it is. It only sees which colors passed under the robot. How it
+works out its position from that has to be in your prompt: your agent does not know this text.
+
+## Starter prompt
 
 # Field knowledge
 

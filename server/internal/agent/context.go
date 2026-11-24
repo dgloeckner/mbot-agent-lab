@@ -9,6 +9,7 @@ import (
 
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/llm"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/memory"
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/store"
 )
 
 // platformRules come first in every system message. The team prompt follows.
@@ -78,7 +79,7 @@ func (a *actor) addInbox(ctx context.Context, r *run, msgs []Message) {
 		if m.From == SourceRobot && m.Robot != "" {
 			source = SourceRobot + ":" + m.Robot // which robot, for the protocol of a conversation
 		}
-		if id := a.store(ctx, r, source, m.Kind, m.Text, m.Data); id != 0 {
+		if id := a.store(ctx, r, source, m.Kind, m.Text, m.Data, store.RobotRef{ID: m.RobotID, Alias: m.Robot}); id != 0 {
 			r.lastMsgID = id
 		}
 	}
@@ -109,11 +110,11 @@ func (a *actor) addInbox(ctx context.Context, r *run, msgs []Message) {
 // buildContext assembles one model request: platform rules, the team prompt
 // in its newest version, the notes, then the (trimmed) conversation.
 func (a *actor) buildContext(ctx context.Context, r *run) ([]llm.Message, error) {
-	prompt, err := a.m.Store.GetPrompt(ctx, a.team, 0)
+	prompt, err := a.m.Store.GetPrompt(ctx, r.task, 0)
 	if err != nil {
 		return nil, err
 	}
-	notes, err := a.m.Store.ListNotes(ctx, a.team)
+	notes, err := a.m.Store.ListNotes(ctx, r.task)
 	if err != nil {
 		return nil, err
 	}

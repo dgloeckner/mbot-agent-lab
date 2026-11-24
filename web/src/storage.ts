@@ -7,6 +7,7 @@ export interface KV {
   getItem(key: string): string | null
   setItem(key: string, value: string): void
   removeItem(key: string): void
+  keys(): string[]
 }
 
 export function memoryKV(): KV {
@@ -15,6 +16,7 @@ export function memoryKV(): KV {
     getItem: (k) => m.get(k) ?? null,
     setItem: (k, v) => void m.set(k, v),
     removeItem: (k) => void m.delete(k),
+    keys: () => [...m.keys()],
   }
 }
 
@@ -24,13 +26,22 @@ export function browserKV(): KV {
     const probe = '__mbot_probe__'
     ls.setItem(probe, '1')
     ls.removeItem(probe)
-    return ls
+    return {
+      getItem: (k) => ls.getItem(k),
+      setItem: (k, v) => ls.setItem(k, v),
+      removeItem: (k) => ls.removeItem(k),
+      keys: () => Object.keys(ls),
+    }
   } catch {
     return memoryKV()
   }
 }
 
-const NS = 'mbot-lab:v1'
+// Drafts and snapshots are kept per (team, task) under NS. Keys of older
+// namespaces are dropped (full reset with tasks). Preferences are per browser.
+const NS = 'mbot-lab:v2'
+const PREFS_KEY = 'mbot-lab:v1:prefs'
+const OLD_PREFIX = 'mbot-lab:v1:'
 
 export interface Draft {
   text: string
@@ -49,7 +60,7 @@ export interface Snapshot {
 }
 
 export type Theme = 'system' | 'light' | 'dark'
-export type SideTab = 'log' | 'conversation' | 'notes' | 'tools'
+export type SideTab = 'task' | 'log' | 'conversation' | 'notes' | 'tools'
 
 export interface Prefs {
   theme: Theme
@@ -100,14 +111,27 @@ export function shouldAutoSnapshot(newest: Snapshot | undefined, text: string, n
   return now - newest.at >= AUTO_MIN_GAP_MS || changeSize(newest.text, text) >= AUTO_MIN_CHANGE
 }
 
+/** Removes drafts and snapshots stored before tasks existed. Preferences stay. */
+export function dropOldKeys(kv: KV): void {
+  try {
+    for (const k of kv.keys()) {
+      if (k.startsWith(OLD_PREFIX) && k !== PREFS_KEY) kv.removeItem(k)
+    }
+  } catch {
+    // storage unavailable: nothing to drop
+  }
+}
+
+/** Draft and snapshots of one (team, task) pair in this browser. */
 export class LocalStore {
   constructor(
     private kv: KV,
     private teamId: string,
+    private taskId: string,
   ) {}
 
   private key(name: string) {
-    return `${NS}:${this.teamId}:${name}`
+    return `${NS}:${this.teamId}:${this.taskId}:${name}`
   }
 
   loadDraft(): Draft | null {
@@ -152,7 +176,7 @@ export class LocalStore {
   }
 
   static loadPrefs(kv: KV): Prefs {
-    const p = read<Partial<Prefs>>(kv, `${NS}:prefs`) ?? {}
+    const p = read<Partial<Prefs>>(kv, PREFS_KEY) ?? {}
     const merged = { ...defaultPrefs, ...p }
     merged.split = Math.min(0.8, Math.max(0.3, Number(merged.split) || defaultPrefs.split))
     merged.fontSize = Math.min(22, Math.max(12, Number(merged.fontSize) || defaultPrefs.fontSize))
@@ -160,6 +184,6 @@ export class LocalStore {
   }
 
   static savePrefs(kv: KV, p: Prefs): void {
-    write(kv, `${NS}:prefs`, p)
+    write(kv, PREFS_KEY, p)
   }
 }

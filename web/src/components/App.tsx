@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'preact/hooks'
 import { COLOR_HEX, onColor } from '../format'
-import { loadError, prefs, session, toast, updatePrefs } from '../state'
+import { lazyComponent } from '../lazy'
+import { pickerLists } from '../taskview'
+import { accepting, loadError, prefs, readOnly, session, task, tasks, toast, updatePrefs } from '../state'
 import { PromptPane } from './PromptPane'
 import { SidePane } from './SidePane'
 import { TeamBand } from './TeamBand'
@@ -40,6 +42,37 @@ function Splitter() {
   )
 }
 
+const AcceptDialog = lazyComponent(() => import('./AcceptDialog'))
+
+/** Without an active task: the team waits, or accepts its first task. */
+function Waiting() {
+  const { fresh } = pickerLists(tasks.value)
+  return (
+    <main class="waiting">
+      {fresh.length === 0 ? (
+        <div class="waiting-card">
+          <h2>Wartet auf eine Aufgabe von der Lab-Leitung</h2>
+          <p>Sobald ihr eine bekommt, erscheint sie hier. Eure Roboter seht ihr oben schon.</p>
+        </div>
+      ) : (
+        <div class="waiting-card">
+          <h2>{fresh.length === 1 ? 'Ihr habt eine Aufgabe bekommen' : `Ihr habt ${fresh.length} Aufgaben bekommen`}</h2>
+          <ul class="waiting-tasks">
+            {fresh.map((t) => (
+              <li key={t.id}>
+                <strong>{t.title}</strong>
+                <button class="btn btn-accent" onClick={() => (accepting.value = t)}>
+                  Ansehen und annehmen
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </main>
+  )
+}
+
 export function App() {
   const s = session.value
   const accent = s ? (COLOR_HEX[s.team.color] ?? COLOR_HEX.blue) : COLOR_HEX.blue
@@ -65,11 +98,23 @@ export function App() {
   return (
     <div class="app">
       <TeamBand />
-      <main class="main" style={{ '--split': prefs.value.split }}>
-        <PromptPane />
-        <Splitter />
-        <SidePane />
-      </main>
+      {task.value ? (
+        <>
+          {readOnly.value && (
+            <div class="banner banner-closed" role="status">
+              Die Lab-Leitung hat die Aufgabe „{task.value.title}“ geschlossen. Ihr könnt alles ansehen, aber nichts mehr deployen, starten oder ändern.
+            </div>
+          )}
+          <main class="main" style={{ '--split': prefs.value.split }}>
+            <PromptPane key={task.value.id} />
+            <Splitter />
+            <SidePane />
+          </main>
+        </>
+      ) : (
+        <Waiting />
+      )}
+      {accepting.value && <AcceptDialog key={accepting.value.id} task={accepting.value} />}
       {toast.value && (
         <div class={`toast toast-${toast.value.kind}`} role={toast.value.kind === 'error' ? 'alert' : 'status'}>
           {toast.value.text}

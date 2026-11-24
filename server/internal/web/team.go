@@ -48,21 +48,58 @@ func (s *Server) teamRobots(teamID string) []RobotView {
 	return out
 }
 
+// activeTask returns the pair the team works in, for reading. Without one it
+// answers 409 and returns false.
+func (s *Server) activeTask(w http.ResponseWriter, r *http.Request, team store.Team) (store.TeamTask, bool) {
+	tt, _, err := s.Lab.ActiveTask(r.Context(), team.ID)
+	if err != nil {
+		s.labError(w, err)
+		return tt, false
+	}
+	return tt, true
+}
+
+// writableTask returns the pair the team works in, for a change. Without an
+// active task, and in a closed task, it answers 409 and returns false.
+func (s *Server) writableTask(w http.ResponseWriter, r *http.Request, team store.Team) (store.TeamTask, bool) {
+	tt, err := s.Lab.WritableTask(r.Context(), team.ID)
+	if err != nil {
+		s.labError(w, err)
+		return tt, false
+	}
+	return tt, true
+}
+
 func (s *Server) session(w http.ResponseWriter, r *http.Request, team store.Team) {
 	ctx := r.Context()
+	tasks, err := s.Lab.TeamTasks(ctx, team.ID)
+	if err != nil {
+		s.serverError(w, err)
+		return
+	}
+	// Without an active task the page shows the team's robots and waits.
+	var task *store.TeamTaskInfo
+	tt := store.TeamTask{Team: team.ID}
+	for i := range tasks {
+		if tasks[i].Status == store.TeamTaskActive {
+			active := tasks[i]
+			task, tt.Task = &active, active.ID
+		}
+		tasks[i].Body, tasks[i].Starter = "", ""
+	}
 	var prompt *store.Prompt
-	if p, err := s.Store.GetPrompt(ctx, team.ID, 0); err == nil {
+	if p, err := s.Store.GetPrompt(ctx, tt, 0); err == nil {
 		prompt = &p
 	} else if !errors.Is(err, store.ErrNotFound) {
 		s.serverError(w, err)
 		return
 	}
-	versions, err := s.Store.ListPrompts(ctx, team.ID)
+	versions, err := s.Store.ListPrompts(ctx, tt)
 	if err != nil {
 		s.serverError(w, err)
 		return
 	}
-	notes, err := s.Store.ListNotes(ctx, team.ID)
+	notes, err := s.Store.ListNotes(ctx, tt)
 	if err != nil {
 		s.serverError(w, err)
 		return
@@ -74,6 +111,8 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request, team store.Team
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"team":            map[string]string{"id": team.ID, "name": team.Name, "color": team.Color},
+		"task":            task,
+		"tasks":           tasks,
 		"robots":          s.teamRobots(team.ID),
 		"agent":           s.Agents.Status(team.ID),
 		"total":           total,
@@ -90,7 +129,11 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request, team store.Team
 }
 
 func (s *Server) listPrompts(w http.ResponseWriter, r *http.Request, team store.Team) {
-	versions, err := s.Store.ListPrompts(r.Context(), team.ID)
+	tt, ok := s.activeTask(w, r, team)
+	if !ok {
+		return
+	}
+	versions, err := s.Store.ListPrompts(r.Context(), tt)
 	if err != nil {
 		s.serverError(w, err)
 		return
@@ -99,12 +142,16 @@ func (s *Server) listPrompts(w http.ResponseWriter, r *http.Request, team store.
 }
 
 func (s *Server) getPrompt(w http.ResponseWriter, r *http.Request, team store.Team) {
+	tt, ok := s.activeTask(w, r, team)
+	if !ok {
+		return
+	}
 	v, err := strconv.Atoi(r.PathValue("version"))
 	if err != nil || v < 1 {
 		writeError(w, http.StatusBadRequest, "Unbekannte Version.")
 		return
 	}
-	p, err := s.Store.GetPrompt(r.Context(), team.ID, v)
+	p, err := s.Store.GetPrompt(r.Context(), tt, v)
 	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("Version %d gibt es nicht.", v))
 		return
@@ -117,6 +164,10 @@ func (s *Server) getPrompt(w http.ResponseWriter, r *http.Request, team store.Te
 }
 
 func (s *Server) deployPrompt(w http.ResponseWriter, r *http.Request, team store.Team) {
+	tt, ok := s.writableTask(w, r, team)
+	if !ok {
+		return
+	}
 	var req struct {
 		Text    string `json:"text"`
 		Restart bool   `json:"restart"`
@@ -132,11 +183,13 @@ func (s *Server) deployPrompt(w http.ResponseWriter, r *http.Request, team store
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("Der Prompt hat %d Zeichen, erlaubt sind %d.", n, MaxPromptChars))
 		return
 	}
-	p, err := s.Store.SavePrompt(r.Context(), team.ID, req.Text)
+	p, err := s.Store.SavePrompt(r.Context(), tt, req.Text)
 	if err != nil {
 		s.serverError(w, err)
 		return
 	}
+	s.Lab.Record(r.Context(), store.Event{Kind: store.EventPromptDeployed, Actor: store.ActorTeam, Team: tt.Team, Task: tt.Task, Prompt: p.ID,
+		Data: map[string]any{"version": p.Version, "chars": p.Chars, "restart": req.Restart}})
 	data, _ := json.Marshal(map[string]any{"version": p.Version, "restart": req.Restart, "chars": p.Chars})
 	s.Hub.Publish(team.ID, live.LogEntry{Source: live.SourceTeam, Kind: "deploy", Data: data})
 	if req.Restart || s.Agents.Status(team.ID).Running {
@@ -148,6 +201,9 @@ func (s *Server) deployPrompt(w http.ResponseWriter, r *http.Request, team store
 }
 
 func (s *Server) message(w http.ResponseWriter, r *http.Request, team store.Team) {
+	if _, ok := s.writableTask(w, r, team); !ok {
+		return
+	}
 	var req struct {
 		Text string `json:"text"`
 	}
@@ -193,11 +249,17 @@ func (s *Server) message(w http.ResponseWriter, r *http.Request, team store.Team
 
 // newConversation ends the open conversation; the next message starts a new one.
 func (s *Server) newConversation(w http.ResponseWriter, r *http.Request, team store.Team) {
+	if _, ok := s.writableTask(w, r, team); !ok {
+		return
+	}
 	s.Agents.NewConversation(team.ID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) start(w http.ResponseWriter, r *http.Request, team store.Team) {
+	if _, ok := s.writableTask(w, r, team); !ok {
+		return
+	}
 	if err := s.Agents.Start(r.Context(), team.ID); err != nil {
 		var se *agent.StartError
 		if errors.As(err, &se) {
@@ -259,7 +321,11 @@ func (s *Server) stop(w http.ResponseWriter, r *http.Request, team store.Team) {
 }
 
 func (s *Server) listNotes(w http.ResponseWriter, r *http.Request, team store.Team) {
-	notes, err := s.Store.ListNotes(r.Context(), team.ID)
+	tt, ok := s.activeTask(w, r, team)
+	if !ok {
+		return
+	}
+	notes, err := s.Store.ListNotes(r.Context(), tt)
 	if err != nil {
 		s.serverError(w, err)
 		return
@@ -287,19 +353,29 @@ func noteText(w http.ResponseWriter, r *http.Request) (string, bool) {
 }
 
 func (s *Server) addNote(w http.ResponseWriter, r *http.Request, team store.Team) {
+	tt, ok := s.writableTask(w, r, team)
+	if !ok {
+		return
+	}
 	text, ok := noteText(w, r)
 	if !ok {
 		return
 	}
-	n, err := s.Store.AddNote(r.Context(), team.ID, text, "team")
+	n, err := s.Store.AddNote(r.Context(), tt, text, "team")
 	if err != nil {
 		s.serverError(w, err)
 		return
 	}
+	s.Lab.Record(r.Context(), store.Event{Kind: store.EventNoteAdded, Actor: store.ActorTeam, Team: tt.Team, Task: tt.Task,
+		Data: map[string]any{"note_id": n.ID, "author": "team"}})
 	writeJSON(w, http.StatusCreated, n)
 }
 
 func (s *Server) updateNote(w http.ResponseWriter, r *http.Request, team store.Team) {
+	tt, ok := s.writableTask(w, r, team)
+	if !ok {
+		return
+	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "Unbekannte Notiz.")
@@ -309,16 +385,25 @@ func (s *Server) updateNote(w http.ResponseWriter, r *http.Request, team store.T
 	if !ok {
 		return
 	}
-	s.noteResult(w, s.Store.UpdateNote(r.Context(), team.ID, id, text))
+	s.noteResult(w, s.Store.UpdateNote(r.Context(), tt, id, text))
 }
 
 func (s *Server) deleteNote(w http.ResponseWriter, r *http.Request, team store.Team) {
+	tt, ok := s.writableTask(w, r, team)
+	if !ok {
+		return
+	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "Unbekannte Notiz.")
 		return
 	}
-	s.noteResult(w, s.Store.DeleteNote(r.Context(), team.ID, id))
+	err = s.Store.DeleteNote(r.Context(), tt, id)
+	if err == nil {
+		s.Lab.Record(r.Context(), store.Event{Kind: store.EventNoteDeleted, Actor: store.ActorTeam, Team: tt.Team, Task: tt.Task,
+			Data: map[string]any{"note_id": id, "author": "team"}})
+	}
+	s.noteResult(w, err)
 }
 
 func (s *Server) noteResult(w http.ResponseWriter, err error) {
@@ -360,6 +445,8 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, team store.Team)
 	after, _ := strconv.ParseInt(r.Header.Get("Last-Event-ID"), 10, 64)
 	backlog, ch, cancel := s.Hub.Subscribe(team.ID, after)
 	defer cancel()
+	// The page shows one task: log entries of another task never reach it.
+	task := s.Hub.Task(team.ID)
 
 	var lastRobots, lastAgent, lastModels []byte
 	modelsGen := int64(-1)
@@ -409,6 +496,17 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, team store.Team)
 		return err
 	}
 	sendLog := func(e live.LogEntry) error {
+		if e.Signal != "" {
+			if e.Signal == live.SignalTask {
+				task = e.Task
+			}
+			b, _ := json.Marshal(map[string]string{"task_id": e.Task})
+			_, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", e.Signal, b)
+			return err
+		}
+		if e.Task != task {
+			return nil
+		}
 		b, _ := json.Marshal(e)
 		_, err := fmt.Fprintf(w, "id: %d\nevent: log\ndata: %s\n\n", e.ID, b)
 		return err

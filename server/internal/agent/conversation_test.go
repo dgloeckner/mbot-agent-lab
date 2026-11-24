@@ -107,7 +107,7 @@ func TestConversationAfterRun(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	runs, _ := f.st.Runs(ctx, "rot", 5)
+	runs, _ := f.st.Runs(ctx, pairOf("rot"), 5)
 	if len(runs) != 1 {
 		t.Errorf("runs = %+v, the conversation must not count as a run", runs)
 	}
@@ -144,7 +144,7 @@ func TestConversationOnlyNotesReachTheRun(t *testing.T) {
 	}
 	waitFor(t, "answer", func() bool { return len(f.model.calls()) == 2 && f.m.Status("rot").State == StateWaiting })
 	conv := f.m.Status("rot").ConversationID
-	notes, _ := f.st.ListNotes(context.Background(), "rot")
+	notes, _ := f.st.ListNotes(context.Background(), pairOf("rot"))
 	if len(notes) != 1 || notes[0].Author != "agent" {
 		t.Fatalf("notes = %+v", notes)
 	}

@@ -1,9 +1,25 @@
-# Beispielprompt: Linienfeld, Stufe 2
-
-Szenario: Linienfeld (`docs/lab/feld/`), ein Roboter. Ziel: zur Kreuzung (2,3) fahren.
-Der Prompt ist bewusst unvollständig. Was fehlt, finden die Teams beim Testen heraus.
-
 ---
+title: Linienfeld – fahr zur Kreuzung (2,3)
+---
+
+## Aufgabe
+
+Auf dem Boden liegt ein Gitter aus schwarzen Linien mit 4 × 4 Kreuzungen, 30 cm voneinander
+entfernt. Zwischen den Kreuzungen kleben Farbstreifen. Sie sind ein Code:
+
+- rot = 0, gelb = 1, grün = 2, blau = 3
+- Nach einer Kreuzung kommen zwei Streifen: erst x, dann y der Kreuzung, die man verlässt.
+- Vor einer Kreuzung kommen zwei Streifen: erst y, dann x der Kreuzung, die man erreicht.
+- (0,0) ist unten links. x wächst nach Osten, y nach Norden.
+
+Euer Roboter startet an einer Kreuzung, die er nicht kennt. **Bringt ihn zur Kreuzung (2,3).**
+Dort meldet er sich mit `finish`.
+
+Kein Werkzeug sagt dem Agenten, wo er ist. Er sieht nur, welche Farben unter dem Roboter
+vorbeigezogen sind. Wie er daraus seine Position berechnet, muss in eurem Prompt stehen: Euer
+Agent kennt diesen Text nicht.
+
+## Startprompt
 
 # Feldwissen
 

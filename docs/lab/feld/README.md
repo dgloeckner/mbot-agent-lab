@@ -67,7 +67,7 @@ Am Rand fehlt eine Seite der Querlinie: Dort meldet die Spur z. B. `kkkw` statt 
 | 2 | dazu Farbcode und Leseregeln | Position bestimmen, Ziele anfahren |
 | 3 | dazu ein Auftrag mit Koordinaten | Logistik, Treffpunkte, Wettlauf |
 
-Ein Beispiel für Stufe 2 steht in [`../prompts/de/linienfeld.md`](../prompts/de/linienfeld.md).
+Ein Beispiel für Stufe 2 steht in [`../aufgaben/de/linienfeld.md`](../aufgaben/de/linienfeld.md).
 
 Hinweis: Linie folgen, Kreuzungen erkennen und `find_line` kommen erst mit den nächsten Schritten
 (G4 bis G6). Bis dahin fährt der Agent mit `drive` und `turn` von Kreuzung zu Kreuzung.

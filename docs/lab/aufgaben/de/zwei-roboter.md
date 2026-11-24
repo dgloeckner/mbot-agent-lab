@@ -1,15 +1,22 @@
-# Beispielprompt: Zwei Roboter
-
-Szenario: Arena oder Labyrinth, ein Team mit zwei Robotern („Links“ und „Rechts“). Ziel: das blaue
-Feld finden, beide Roboter suchen gleichzeitig.
-Der Prompt ist bewusst unvollständig. Was fehlt, finden die Teams beim Testen heraus.
-
-Gut zu wissen: Ruft der Agent in einer Antwort Werkzeuge für verschiedene Roboter auf, fahren die
-Roboter gleichzeitig. Aufrufe für denselben Roboter laufen nacheinander. Die Ergebnisse bekommt der
-Agent erst, wenn alle Aufrufe der Antwort fertig sind: Ein schneller Roboter wartet also auf den
-langsamen.
-
 ---
+title: Zu zweit suchen
+---
+
+## Aufgabe
+
+Euer Team hat **zwei Roboter**. Nennt sie auf eurer Seite „Links“ und „Rechts“. Irgendwo in der
+Arena oder im Labyrinth klebt ein **blaues Feld**.
+
+Findet es mit beiden Robotern gleichzeitig. Ein Roboter auf dem blauen Feld reicht.
+
+- Wenn einer angekommen ist, halten beide an.
+- Gut zu wissen: Ruft der Agent in einer Antwort Werkzeuge für beide Roboter auf, fahren sie
+  gleichzeitig. Die Ergebnisse bekommt er aber erst, wenn beide fertig sind. Ein schneller Roboter
+  wartet also auf den langsamen.
+
+Euer Agent kennt diesen Text nicht. Was er wissen muss, steht in eurem Prompt.
+
+## Startprompt
 
 Du steuerst zwei kleine Roboter, „Links“ und „Rechts“. Sie stehen nebeneinander in einem Raum mit
 Wänden.

@@ -1,7 +1,7 @@
 // Package agent implements the per-team agent runtime. Every team has one
 // actor: a goroutine with an inbox that calls the model only when a message
 // wakes it. Everything that happens is a message: team instructions, robot
-// events, other agents, system notices. See docs/handoff.md, "Agent-Runtime".
+// events, other agents, system notices. See docs/architecture.md, "Agent runtime".
 package agent
 
 import (
@@ -32,13 +32,14 @@ const (
 
 // Message is one entry in an agent's inbox.
 type Message struct {
-	From  string // team | robot | agent:<name> | system
-	Robot string // robot name for robot messages
-	Kind  string // chat | event | info | ...
-	Text  string
-	Data  json.RawMessage
-	At    time.Time
-	Wake  bool // whether this message alone wakes the agent
+	From    string // team | robot | agent:<name> | system
+	Robot   string // robot name for robot messages
+	RobotID string // device ID for robot messages
+	Kind    string // chat | event | info | ...
+	Text    string
+	Data    json.RawMessage
+	At      time.Time
+	Wake    bool // whether this message alone wakes the agent
 }
 
 // Agent states, also shown by the robots' LEDs.
@@ -53,6 +54,7 @@ type Status struct {
 	State        string    `json:"state"`
 	Running      bool      `json:"running"`
 	RunID        int64     `json:"run_id,omitempty"`
+	Task         string    `json:"task_id,omitempty"`  // task of the current run
 	Provider     string    `json:"provider,omitempty"` // model provider of the current run
 	Model        string    `json:"model,omitempty"`
 	StartedAt    time.Time `json:"started_at,omitzero"`
@@ -134,7 +136,7 @@ func (m *Manager) Run(ctx context.Context) {
 			}
 			for _, rb := range m.Robots.Snapshot() {
 				if rb.ID == ev.RobotID && rb.Owner != "" {
-					m.Deliver(rb.Owner, Message{From: SourceRobot, Robot: rb.Alias, Kind: kind, Data: ev.Event.Data, At: ev.At, Wake: wakingEvents[kind]})
+					m.Deliver(rb.Owner, Message{From: SourceRobot, Robot: rb.Alias, RobotID: rb.ID, Kind: kind, Data: ev.Event.Data, At: ev.At, Wake: wakingEvents[kind]})
 				}
 			}
 		}
@@ -169,6 +171,40 @@ func (m *Manager) Status(teamID string) Status {
 // StartError is a reason why a run cannot start. Its text is German.
 type StartError struct{ Msg string }
 
+// Refusals to start a run or a conversation, in German.
+var (
+	ErrNoTask     = &StartError{"Eurem Team ist noch keine Aufgabe zugewiesen."}
+	ErrTaskClosed = &StartError{"Diese Aufgabe ist geschlossen. Ihr könnt alles ansehen, aber nichts mehr starten."}
+)
+
+// activeTask returns the task the team works in: ErrNoTask without one,
+// ErrTaskClosed when the control room closed it. A run or conversation keeps
+// the task it started in.
+func (m *Manager) activeTask(ctx context.Context, teamID string) (store.TeamTask, error) {
+	tt, err := m.Store.ActiveTask(ctx, teamID)
+	if errors.Is(err, store.ErrNotFound) {
+		return store.TeamTask{}, ErrNoTask
+	}
+	if err != nil {
+		return tt, err
+	}
+	t, err := m.Store.Task(ctx, tt.Task)
+	if err != nil {
+		return tt, err
+	}
+	if t.State == store.TaskClosed {
+		return tt, ErrTaskClosed
+	}
+	return tt, nil
+}
+
+// record writes an event after the fact; a failure is only logged.
+func (m *Manager) record(e store.Event) {
+	if err := m.Store.AddEvent(context.Background(), e); err != nil {
+		m.Log.Error("record event", "kind", e.Kind, "team", e.Team, "err", err)
+	}
+}
+
 func (e *StartError) Error() string { return e.Msg }
 
 // Start begins a new run for a team with its newest prompt.
@@ -176,7 +212,11 @@ func (m *Manager) Start(ctx context.Context, teamID string) error {
 	if !m.Available() {
 		return &StartError{"Es ist kein Sprachmodell eingerichtet. Sagt der Lab-Leitung Bescheid."}
 	}
-	if _, err := m.Store.GetPrompt(ctx, teamID, 0); errors.Is(err, store.ErrNotFound) {
+	task, err := m.activeTask(ctx, teamID)
+	if err != nil {
+		return err
+	}
+	if _, err := m.Store.GetPrompt(ctx, task, 0); errors.Is(err, store.ErrNotFound) {
 		return &StartError{"Deployt zuerst einen Prompt, dann kann euer Agent loslegen."}
 	} else if err != nil {
 		return err
@@ -215,6 +255,31 @@ func (m *Manager) StopAll(by string) {
 	m.mu.Unlock()
 	for _, id := range ids {
 		m.Stop(id, by)
+	}
+}
+
+// TaskClosed ends every run and conversation in a task the control room
+// closed (reason task_closed).
+func (m *Manager) TaskClosed(taskID string) {
+	m.mu.Lock()
+	actors := make([]*actor, 0, len(m.actors))
+	for _, a := range m.actors {
+		actors = append(actors, a)
+	}
+	m.mu.Unlock()
+	for _, a := range actors {
+		if a.getStatus().Task == taskID {
+			a.interrupt()
+		}
+		a.ctrl <- control{kind: ctrlTaskClosed, task: taskID}
+	}
+}
+
+// TaskActivated ends the team's open conversation when the team switches to
+// another task. Switching is refused while a run is active.
+func (m *Manager) TaskActivated(teamID, taskID string) {
+	if a := m.actor(teamID, false); a != nil {
+		a.ctrl <- control{kind: ctrlTaskSwitched, task: taskID}
 	}
 }
 

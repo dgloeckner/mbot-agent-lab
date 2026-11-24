@@ -170,3 +170,36 @@ export function createEditor(o: EditorOptions): PromptEditor {
     destroy: () => view.destroy(),
   }
 }
+
+export interface MarkdownFieldOptions {
+  parent: HTMLElement
+  doc: string
+  label: string
+  placeholder?: string
+  readOnly?: boolean
+  onChange?: (text: string) => void
+}
+
+/** A plain Markdown field (control room task editor): highlighting, undo, search, no tool completion. */
+export function createMarkdownField(o: MarkdownFieldOptions): { view: EditorView; destroy(): void } {
+  const extensions: Extension[] = [
+    history(),
+    drawSelection(),
+    highlightActiveLine(),
+    search({ top: true }),
+    markdownSupport(),
+    syntaxHighlighting(markdownHighlight),
+    EditorView.lineWrapping,
+    EditorView.contentAttributes.of({ 'aria-label': o.label, spellcheck: 'true', lang: 'de' }),
+    EditorState.readOnly.of(!!o.readOnly),
+    EditorView.editable.of(!o.readOnly),
+    baseTheme,
+    keymap.of([...markdownKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab]),
+    EditorView.updateListener.of((u) => {
+      if (u.docChanged) o.onChange?.(u.state.doc.toString())
+    }),
+  ]
+  if (o.placeholder) extensions.push(placeholder(o.placeholder))
+  const view = new EditorView({ parent: o.parent, state: EditorState.create({ doc: o.doc, extensions }) })
+  return { view, destroy: () => view.destroy() }
+}

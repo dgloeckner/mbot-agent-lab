@@ -34,7 +34,20 @@ type LogEntry struct {
 	Data   json.RawMessage `json:"data,omitempty"`
 	// Channel is empty for the run protocol, ChannelConversation for the conversation.
 	Channel string `json:"channel,omitempty"`
+	// Task is the team's active task when the entry was published. A page
+	// only ever sees the entries of the task it shows.
+	Task string `json:"task_id,omitempty"`
+
+	// Signal is set on notices that are not log entries: they tell the
+	// team's pages to reload (SignalTask, SignalTasks). Never in the backlog.
+	Signal string `json:"-"`
 }
+
+// Signals to the pages of a team.
+const (
+	SignalTask  = "task"  // the active task changed: reload prompt, notes, log, conversation
+	SignalTasks = "tasks" // a task was assigned, withdrawn, accepted or closed: reload the task list
+)
 
 // backlogSize is how many entries per team are kept for clients that
 // (re)connect. The full log goes to the store once the agent runtime exists.
@@ -46,15 +59,52 @@ type Hub struct {
 	seq     int64
 	backlog map[string][]LogEntry
 	subs    map[string]map[chan LogEntry]struct{}
+	task    map[string]string // active task per team
 }
 
 // NewHub creates an empty hub.
 func NewHub() *Hub {
-	return &Hub{backlog: map[string][]LogEntry{}, subs: map[string]map[chan LogEntry]struct{}{}}
+	return &Hub{backlog: map[string][]LogEntry{}, subs: map[string]map[chan LogEntry]struct{}{}, task: map[string]string{}}
 }
 
-// Publish assigns ID and time and delivers e to all subscribers of team.
-// Slow subscribers miss entries rather than block; they catch up on reconnect.
+// SetTask records the team's active task. Entries published from now on
+// carry it. When it changes, the team's pages get SignalTask.
+func (h *Hub) SetTask(team, task string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.task[team] == task {
+		return
+	}
+	h.task[team] = task
+	h.signal(team, LogEntry{Signal: SignalTask, Task: task})
+}
+
+// Task returns the active task the hub knows for team.
+func (h *Hub) Task(team string) string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.task[team]
+}
+
+// Signal tells the team's pages to reload something (SignalTasks).
+func (h *Hub) Signal(team, signal string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.signal(team, LogEntry{Signal: signal, Task: h.task[team]})
+}
+
+func (h *Hub) signal(team string, e LogEntry) {
+	for ch := range h.subs[team] {
+		select {
+		case ch <- e:
+		default:
+		}
+	}
+}
+
+// Publish assigns ID, time and the team's active task and delivers e to all
+// subscribers of team. Slow subscribers miss entries rather than block; they
+// catch up on reconnect.
 func (h *Hub) Publish(team string, e LogEntry) LogEntry {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -62,6 +112,9 @@ func (h *Hub) Publish(team string, e LogEntry) LogEntry {
 	e.ID = h.seq
 	if e.At.IsZero() {
 		e.At = time.Now()
+	}
+	if e.Task == "" {
+		e.Task = h.task[team]
 	}
 	b := append(h.backlog[team], e)
 	if len(b) > backlogSize {
@@ -77,14 +130,14 @@ func (h *Hub) Publish(team string, e LogEntry) LogEntry {
 	return e
 }
 
-// Subscribe returns the backlog after afterID and a channel for new entries.
-// Call cancel when done.
+// Subscribe returns the backlog of the team's active task after afterID and a
+// channel for new entries and signals. Call cancel when done.
 func (h *Hub) Subscribe(team string, afterID int64) (backlog []LogEntry, ch <-chan LogEntry, cancel func()) {
 	c := make(chan LogEntry, 64)
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, e := range h.backlog[team] {
-		if e.ID > afterID {
+		if e.ID > afterID && e.Task == h.task[team] {
 			backlog = append(backlog, e)
 		}
 	}
@@ -111,4 +164,5 @@ func (h *Hub) Forget(team string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	delete(h.backlog, team)
+	delete(h.task, team)
 }

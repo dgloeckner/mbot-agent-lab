@@ -60,7 +60,7 @@ func run(configPath string, log *slog.Logger) error {
 
 	db, err := store.Open(ctx, cfg.Server.DBPath)
 	if err != nil {
-		return fmt.Errorf("open store: %w", err)
+		return fmt.Errorf("open store %s: %w", cfg.Server.DBPath, err)
 	}
 	defer db.Close()
 
@@ -124,6 +124,9 @@ func run(configPath string, log *slog.Logger) error {
 	labSvc.OnTeamEvent = func(teamID, kind, text string) {
 		agents.Deliver(teamID, agent.Message{From: agent.SourceSystem, Kind: kind, Text: text})
 	}
+	labSvc.OnTaskClosed = agents.TaskClosed
+	labSvc.OnTaskActivated = agents.TaskActivated
+	labSvc.RunActive = func(teamID string) bool { return agents.Status(teamID).Running }
 
 	ui := &web.Server{Config: cfg, Robots: reg, Store: db, Hub: hub, Lab: labSvc, Agents: agents, Log: log}
 	go ui.Run(ctx)
