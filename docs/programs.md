@@ -154,6 +154,21 @@ tool's tree on one of the team's robots and answers its run id (`agent.Manager.R
   row of the pair: start and end as messages, each step as a tool call that names the team tool
   (`tool_calls.program`). `INFO` lines `team tool started`, `team tool step`, `team tool ended`.
 
+## Versions
+
+One deploy (`POST prompt`, from the prompt or the tool editor) freezes the prompt and every team
+tool of the pair, valid or not, with name, description, Blockly state and tree, under one version
+(`prompts.id`, table `prompt_programs`). The agent gets the valid tools with a description of the
+newest version (`tools.md`, "Team tools as agent tools"); a tool changed after the deploy applies
+from the next deploy. Per team tool the list says `deploy` (`deployed`, `changed`, `new` against
+the newest version) and `agent` (with `why`: "Fehler" or "ohne Beschreibung").
+
+**Zurück** (`POST prompts/{version}/restore`) replaces the working state with a version: its team
+tools, ids included (also ones deleted since), and the prompt text for the page's draft. The
+history keeps every version; the next deploy is a new one. Versions list the team tools that are
+"neu", "geändert" or "entfernt" against the version before (matched by id; a change of name,
+description or blocks counts).
+
 ## Editor
 
 The team page builds team tools in the left pane ("Werkzeug bauen"); the side pane stays, so a

@@ -32,7 +32,7 @@ protocol (`messages`, `tool_calls`, `llm_calls`) stays the detailed record per r
 | `task.withdrawn` | admin | team, task | — | `lab.WithdrawTask` |
 | `task.accepted` | team | team, task | `prompt` (`starter`, `empty`, `copy`) | `lab.AcceptTask` |
 | `task.activated` | team | team, task | — | `lab.AcceptTask`, `lab.ActivateTask` |
-| `prompt.deployed` | team | team, task, prompt | `version`, `chars`, `restart`; on accept also `source` (`starter`, `copy`) and `from_task` | team route `POST prompt`, `lab.AcceptTask` |
+| `prompt.deployed` | team | team, task, prompt | `version`, `chars`, `restart`, `tools` (names of the team tools in the version); on accept also `source` (`starter`, `copy`) and `from_task` | team route `POST prompt`, `lab.AcceptTask` |
 | `run.started` | team | team, task, prompt, run | `model`, `provider` | agent actor, run start |
 | `run.ended` | team, agent, admin, system | team, task, prompt, run | `reason`, `tokens_in`, `tokens_out`, `cost_micro_eur` | agent actor, every run end; actor `agent` for `finish`, `team` for a stop or restart by the team, `admin` for the control room (stop all, `task_closed`, team deleted), `system` for limits and server stops |
 | `run.finished` | agent | team, task, prompt, run | `report` (the agent's claim, not a result) | agent actor, before `run.ended` when the agent called `finish` |

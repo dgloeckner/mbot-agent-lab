@@ -5,7 +5,7 @@ import { EditorView } from '@codemirror/view'
 import { markdownSupport } from '../editor'
 import { changeSize, type Snapshot } from '../storage'
 import { formatNumber, relativeTime } from '../format'
-import { deployed, draft, history, restore, versions, versionText } from '../state'
+import { deployed, draft, history, restore, restoreVersion, unsavedWork, versions, versionText } from '../state'
 
 type Source = { kind: 'version'; version: number } | { kind: 'snapshot'; id: string }
 
@@ -85,6 +85,14 @@ export default function HistoryView({ onRestored }: { onRestored: () => void }) 
   const label =
     sel?.kind === 'version' ? `Version ${sel.version}` : sel ? `Stand ${relativeTime(snaps.find((s) => s.id === sel.id)?.at ?? 0)}` : ''
   const same = older !== null && older === draft.value
+  const [asking, setAsking] = useState<string[] | null>(null)
+  const restoreSelected = async () => {
+    if (sel?.kind !== 'version') return
+    if (await restoreVersion(sel.version)) {
+      setAsking(null)
+      onRestored()
+    }
+  }
 
   return (
     <div class="history">
@@ -103,6 +111,15 @@ export default function HistoryView({ onRestored }: { onRestored: () => void }) 
                   {relativeTime(v.created_at)}
                   {deployed.value?.version === v.version ? ', aktuell' : ''}
                 </span>
+                {v.tools && v.tools.length > 0 && (
+                  <span class="tool-changes">
+                    {v.tools.map((c) => (
+                      <span key={c.id} class="tool-change" data-change={c.change}>
+                        {c.name}: {c.change}
+                      </span>
+                    ))}
+                  </span>
+                )}
               </button>
             </li>
           ))}
@@ -130,17 +147,54 @@ export default function HistoryView({ onRestored }: { onRestored: () => void }) 
       <div class="history-detail">
         <div class="history-toolbar">
           <span>{same ? `${label} ist identisch mit eurem Entwurf.` : `${label} im Vergleich zu eurem Entwurf`}</span>
-          <button
-            class="btn btn-small"
-            disabled={older === null || same}
-            onClick={() => {
-              restore(older ?? '', label)
-              onRestored()
-            }}
-          >
-            {label} wiederherstellen
-          </button>
+          {sel?.kind === 'version' ? (
+            <button
+              class="btn btn-small"
+              disabled={older === null}
+              title="Prompt und eigene Werkzeuge werden wie in dieser Version."
+              onClick={() => {
+                const lost = unsavedWork()
+                if (lost.length) setAsking(lost)
+                else void restoreSelected()
+              }}
+            >
+              Diese Version wiederherstellen
+            </button>
+          ) : (
+            <button
+              class="btn btn-small"
+              disabled={older === null || same}
+              onClick={() => {
+                restore(older ?? '', label)
+                onRestored()
+              }}
+            >
+              {label} wiederherstellen
+            </button>
+          )}
         </div>
+        {asking && (
+          <div class="banner restore-ask" role="alertdialog" aria-label="Wiederherstellen bestätigen">
+            <div>
+              <strong>{label} wiederherstellen?</strong> Prompt und eigene Werkzeuge werden wie in dieser Version. Dabei geht verloren, was
+              noch nicht deployt ist:
+              <ul>
+                {asking.map((a) => (
+                  <li key={a}>{a}</li>
+                ))}
+              </ul>
+              Im Verlauf bleibt jede deployte Version erhalten.
+            </div>
+            <div class="restore-ask-actions">
+              <button class="btn btn-small btn-accent" onClick={() => void restoreSelected()}>
+                Trotzdem wiederherstellen
+              </button>
+              <button class="btn btn-small btn-quiet" onClick={() => setAsking(null)}>
+                Abbrechen
+              </button>
+            </div>
+          </div>
+        )}
         {error && <p class="error-text">{error}</p>}
         {older !== null && !same && <Diff older={older} label={label} />}
       </div>

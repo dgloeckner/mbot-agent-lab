@@ -205,6 +205,10 @@ type programCaller struct {
 	name   string
 	env    *tools.Env
 	lastAt time.Time // when the last result arrived: a sensor condition needs a newer state
+	// source of the log lines: the team (by hand) or its agent (a tool call).
+	source string
+	// onStep stores a step; nil stores it under the manual row.
+	onStep func(tool string, args, result json.RawMessage, d time.Duration)
 }
 
 // hardEnd reports whether a step's end always aborts the team tool: the
@@ -235,17 +239,17 @@ func (c *programCaller) Call(ctx context.Context, tool string, args map[string]a
 	c.lastAt = time.Now()
 
 	stored, _ := json.Marshal(args)
-	c.m.Hub.Publish(c.team, live.LogEntry{Source: live.SourceTeam, Kind: "tool", Data: mustJSON(map[string]any{
+	source := c.source
+	if source == "" {
+		source = live.SourceTeam
+	}
+	c.m.Hub.Publish(c.team, live.LogEntry{Source: source, Kind: "tool", Data: mustJSON(map[string]any{
 		"name": tool, "args": json.RawMessage(stored), "result": result, "ms": d.Milliseconds(), "program": c.name,
 	})})
-	c.g.seq.Lock()
-	seq, err := c.m.Store.NextSeq(context.Background(), c.run)
-	if err == nil {
-		err = c.m.Store.AddProgramToolCall(context.Background(), c.run, seq, c.name, tool, stored, result, d, store.RobotRef{ID: c.robot.ID, Alias: c.robot.Alias})
-	}
-	c.g.seq.Unlock()
-	if err != nil {
-		c.m.Log.Error("store team tool step", "team", c.team, "err", err)
+	if c.onStep != nil {
+		c.onStep(tool, stored, result, d)
+	} else {
+		c.storeManual(tool, stored, result, d)
 	}
 
 	var res struct {
@@ -256,6 +260,18 @@ func (c *programCaller) Call(ctx context.Context, tool string, args map[string]a
 	hard := hardEnd(res.Reason, normal, ctx.Err())
 	c.m.Log.Info("team tool step", "team", c.team, "program", c.name, "tool", tool, "reason", res.Reason, "normal", normal, "ms", d.Milliseconds())
 	return programs.Outcome{Result: result, Normal: normal, Quiet: c.m.Tools.Quiet(tool), Hard: hard}
+}
+
+func (c *programCaller) storeManual(tool string, stored, result json.RawMessage, d time.Duration) {
+	c.g.seq.Lock()
+	seq, err := c.m.Store.NextSeq(context.Background(), c.run)
+	if err == nil {
+		err = c.m.Store.AddProgramToolCall(context.Background(), c.run, seq, c.name, tool, stored, result, d, store.RobotRef{ID: c.robot.ID, Alias: c.robot.Alias})
+	}
+	c.g.seq.Unlock()
+	if err != nil {
+		c.m.Log.Error("store team tool step", "team", c.team, "err", err)
+	}
 }
 
 // Sense reads the robot's state once it is newer than the last result.

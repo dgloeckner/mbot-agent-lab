@@ -21,6 +21,10 @@ type Fake struct {
 
 const fakeMaxMoves = 8
 
+// teamToolMark is the start of the sentence the server appends to the
+// description of every team tool (agent.TeamToolNote).
+const teamToolMark = "Dies ist ein Werkzeug, das das Team selbst gebaut hat."
+
 func (f Fake) Chat(ctx context.Context, req Request) (Response, error) {
 	d := f.Delay
 	if d == 0 {
@@ -33,16 +37,29 @@ func (f Fake) Chat(ctx context.Context, req Request) (Response, error) {
 	}
 
 	has := map[string]Tool{}
+	var teamTools []string // tools the team built itself, in definition order
 	for _, t := range req.Tools {
 		has[t.Name] = t
+		if strings.Contains(t.Description, teamToolMark) {
+			teamTools = append(teamTools, t.Name)
+		}
+	}
+	isTeamTool := func(name string) bool {
+		for _, n := range teamTools {
+			if n == name {
+				return true
+			}
+		}
+		return false
 	}
 	moves, lastTool, lastResult := 0, "", ""
-	assistantSeen := false
+	assistantSeen, teamToolUsed := false, false
 	for _, m := range req.Messages {
 		switch m.Role {
 		case RoleAssistant:
 			assistantSeen = true
 			for _, tc := range m.ToolCalls {
+				teamToolUsed = teamToolUsed || isTeamTool(tc.Function.Name)
 				if tc.Function.Name == "drive_until" || tc.Function.Name == "turn" || tc.Function.Name == "turn_until_clear" {
 					moves++
 				}
@@ -95,7 +112,28 @@ func (f Fake) Chat(ctx context.Context, req Request) (Response, error) {
 		if moves >= fakeMaxMoves {
 			return reply("Ich habe meine Testrunde schon beendet und warte.", "", nil)
 		}
+		// A tool the team built comes first: that is what the team deployed it for.
+		if len(teamTools) > 0 && !teamToolUsed {
+			return reply("Ich nutze euer Werkzeug "+teamTools[0]+".", teamTools[0], map[string]any{})
+		}
 		return reply("Ich bin das Testmodell. Ich schaue mich zuerst um.", "read_sensors", map[string]any{})
+	}
+	if isTeamTool(lastTool) {
+		var tr struct {
+			End   string `json:"end"`
+			Steps int    `json:"steps"`
+			Value any    `json:"value"`
+			At    string `json:"at"`
+		}
+		_ = json.Unmarshal([]byte(lastResult), &tr)
+		report := fmt.Sprintf("Ich habe euer Werkzeug %s benutzt: Ende %s nach %d Schritten", lastTool, tr.End, tr.Steps)
+		if tr.Value != nil {
+			report += fmt.Sprintf(", es meldet %v", tr.Value)
+		}
+		if tr.End != "done" && tr.At != "" {
+			report += ", Halt bei " + tr.At
+		}
+		return reply("Euer Werkzeug ist fertig.", "finish", map[string]any{"report": report + "."})
 	}
 
 	if moves >= fakeMaxMoves {

@@ -251,6 +251,9 @@ func (a *actor) converse(parent context.Context, msgs []Message) {
 			return
 		}
 		defs := a.m.Tools.Definitions(env)
+		if teamTools, err := a.m.versionTools(ctx, c.task); err == nil {
+			defs = append(defs, a.m.teamToolDefs(a.team, teamTools)...) // as text; only conversationTools can be called
+		}
 		messages, err := a.conversationContext(ctx, c, team.Name, defs)
 		if err != nil {
 			if !errors.Is(err, context.Canceled) {

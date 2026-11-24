@@ -1,6 +1,6 @@
 // Team API client. The secret team token is the second path segment.
 
-import type { ProgramDetail, ProgramEvent, ProgramInfo } from './types'
+import type { ProgramDetail, ProgramEvent, ProgramInfo, VersionTool } from './types'
 import type { AgentStatus, LogEntry, Note, PromptChoice, PromptVersion, Robot, Session, TeamModels, TeamTask, Totals } from './types'
 
 export const token = decodeURIComponent(location.pathname.split('/')[2] ?? '')
@@ -31,7 +31,9 @@ export const api = {
   session: () => req<Session>('GET', '/api/session'),
   versions: () => req<PromptVersion[]>('GET', '/prompts'),
   prompt: (version: number) => req<PromptVersion>('GET', `/prompts/${version}`),
-  deploy: (text: string, restart: boolean) => req<PromptVersion>('POST', '/prompt', { text, restart }),
+  deploy: (text: string, restart: boolean) =>
+    req<Omit<PromptVersion, 'tools'> & { tools: VersionTool[]; warning?: string }>('POST', '/prompt', { text, restart }),
+  restoreVersion: (version: number) => req<PromptVersion>('POST', `/prompts/${version}/restore`),
   message: (text: string) => req<LogEntry>('POST', '/message', { text }),
   newConversation: () => req<void>('POST', '/conversation/new'),
   start: () => req<AgentStatus>('POST', '/start'),

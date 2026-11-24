@@ -32,6 +32,22 @@ export interface PromptVersion {
   text?: string
   created_at: string
   chars: number
+  /** Team tools that are new, changed or removed in this version (the version list only). */
+  tools?: ToolChange[]
+}
+
+export interface ToolChange {
+  id: string
+  name: string
+  change: 'neu' | 'geändert' | 'entfernt'
+}
+
+/** A team tool of a deployed version and whether the agent has it. */
+export interface VersionTool {
+  id: string
+  name: string
+  agent: boolean
+  why?: string
 }
 
 export interface Note {
@@ -170,6 +186,11 @@ export interface ProgramInfo {
   valid: boolean
   problems: ProgramProblem[]
   updated_at: string
+  /** Against the newest version: as deployed, changed since, or not deployed yet. */
+  deploy?: 'deployed' | 'changed' | 'new'
+  /** Whether the agent has the tool in the newest version, and if not, why. */
+  agent: boolean
+  why?: string
 }
 
 /** A team tool with its Blockly state. */

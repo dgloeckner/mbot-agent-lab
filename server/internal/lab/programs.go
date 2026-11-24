@@ -29,6 +29,11 @@ type ProgramInfo struct {
 	Valid       bool               `json:"valid"`
 	Problems    []programs.Problem `json:"problems"`
 	UpdatedAt   string             `json:"updated_at"`
+	// Deploy: deployed, changed or new against the newest version. Agent:
+	// whether the agent has the tool in that version, and if not, Why.
+	Deploy string `json:"deploy,omitempty"`
+	Agent  bool   `json:"agent"`
+	Why    string `json:"why,omitempty"`
 }
 
 // ProgramDetail is one team tool with its Blockly state.
@@ -57,9 +62,32 @@ func (s *Service) Programs(ctx context.Context, teamID string) ([]ProgramInfo, e
 	if err != nil {
 		return nil, err
 	}
+	deployed := map[string]store.Program{}
+	if p, err := s.Store.GetPrompt(ctx, tt, 0); err == nil {
+		vs, err := s.Store.VersionPrograms(ctx, p.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, v := range vs {
+			deployed[v.ID] = v
+		}
+	}
 	out := make([]ProgramInfo, len(list))
 	for i, p := range list {
 		out[i] = info(p)
+		v, ok := deployed[p.ID]
+		switch {
+		case !ok:
+			out[i].Deploy = DeployNew
+		case len(store.DiffTools([]store.Program{v}, []store.Program{p})) > 0:
+			out[i].Deploy = DeployChanged
+		default:
+			out[i].Deploy = DeployDeployed
+		}
+		if ok {
+			vt := versionTool(v)
+			out[i].Agent, out[i].Why = vt.Agent, vt.Why
+		}
 	}
 	return out, nil
 }

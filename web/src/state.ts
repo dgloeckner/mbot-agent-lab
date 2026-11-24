@@ -243,15 +243,59 @@ export async function deploy(restart: boolean) {
   busy.value = 'deploy'
   const text = draft.value // the user may keep typing while the request runs
   try {
+    await toolSaver.flush() // a version holds the team tools as they are now
     const p = await api.deploy(text, restart)
-    applyDeployed({ ...p, text })
+    applyDeployed({ version: p.version, created_at: p.created_at, chars: p.chars, text })
     if (local) history.value = local.addSnapshot(text, 'deploy', p.version)
-    showToast(`Version ${p.version} deployt`)
+    const withTools = p.tools.filter((t) => t.agent).length
+    const done = `Version ${p.version} deployt${withTools === 1 ? ' mit 1 eigenen Werkzeug' : withTools ? ` mit ${withTools} eigenen Werkzeugen` : ''}`
+    showToast(p.warning ? `${done}. ${p.warning}` : done, p.warning ? 'error' : 'ok')
+    void reloadVersions()
+    void loadTeamTools()
   } catch (err) {
     fail(err)
   } finally {
     busy.value = null
   }
+}
+
+async function reloadVersions() {
+  try {
+    versions.value = await api.versions()
+  } catch {
+    // the next deploy or reload brings it
+  }
+}
+
+/**
+ * "Diese Version wiederherstellen": the working state becomes that version:
+ * the team tools on the server, the prompt text in the draft. The history
+ * keeps everything; the next deploy is a new version.
+ */
+export async function restoreVersion(version: number): Promise<boolean> {
+  try {
+    await toolSaver.flush()
+    toolSaver.cancel()
+    const p = await api.restoreVersion(version)
+    restore(p.text ?? '', `Version ${version}`)
+    await loadTeamTools()
+    if (openTool.peek()) toolBridge.reload?.(openTool.peek()!)
+    return true
+  } catch (err) {
+    fail(err)
+    return false
+  }
+}
+
+/** What restoring a version would overwrite: the changed prompt draft and team tools changed or new since the last deploy. */
+export function unsavedWork(): string[] {
+  const out: string[] = []
+  if (dirty.value) out.push('die Änderungen am Prompt seit dem letzten Deploy')
+  for (const t of teamTools.value) {
+    if (t.deploy === 'changed') out.push(`die Änderungen an „${t.name}“`)
+    if (t.deploy === 'new') out.push(`das neue Werkzeug „${t.name}“`)
+  }
+  return out
 }
 
 function applyDeployed(p: PromptVersion) {

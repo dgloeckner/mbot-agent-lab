@@ -68,7 +68,7 @@ and goes here, not into `CLAUDE.md`. How the system works today: `architecture.m
 | Topic | Decision | Why |
 | --- | --- | --- |
 | Scope | the pair (team, task) is the key of everything a team produces: prompt versions, notes, runs, conversations; finer scopes add robot and agent version | results per task and team need no guessing |
-| Agent version | the prompt version (`prompts.id`); a model change is not a new version, the run records the model | results can still be split by model |
+| Agent version | the prompt version (`prompts.id`), which also freezes the pair's team tools; a model change is not a new version, the run records the model | results can still be split by model |
 | Schema changes for tasks | full reset, no data migration; an old database is refused with a clear message | tables in their final form, no `ALTER` chain |
 | Deleting teams | soft delete (`deleted_at`) | results and history stay consistent |
 | Published tasks | fixed: only drafts can be edited; to change one, duplicate it | all teams and the results page refer to the same text |

@@ -10,7 +10,10 @@ import { api } from '../api'
 import { problemsByBlock } from '../toolrun'
 import {
   agent,
+  busy,
   continueTeamTool,
+  deploy,
+  draft,
   deleteTool,
   editTool,
   newTool,
@@ -75,6 +78,8 @@ function Workspace({ detail, onProblems }: { detail: ProgramDetail; onProblems: 
   const host = useRef<HTMLDivElement>(null)
   const ws = useRef<Blockly.WorkspaceSvg | null>(null)
   const meta = useRef({ name: detail.name, description: detail.description })
+  // Shown in the name and description fields; replaced when another PC's save is loaded.
+  const [shown, setShown] = useState({ name: detail.name, description: detail.description, at: detail.updated_at })
   const ownSave = useRef<string | null>(detail.updated_at)
   const loading = useRef(false)
 
@@ -111,6 +116,7 @@ function Workspace({ detail, onProblems }: { detail: ProgramDetail; onProblems: 
           if (p.updated_at === ownSave.current) return
           ownSave.current = p.updated_at
           meta.current = { name: p.name, description: p.description }
+          setShown({ name: p.name, description: p.description, at: p.updated_at })
           load(p.blockly)
           markProblems(w, p.problems)
           onProblems(p.problems)
@@ -149,8 +155,9 @@ function Workspace({ detail, onProblems }: { detail: ProgramDetail; onProblems: 
   return (
     <>
       <MetaFields
-        key={detail.id}
-        detail={detail}
+        key={detail.id + shown.at}
+        name={shown.name}
+        description={shown.description}
         onChange={(m) => {
           meta.current = m
           save()
@@ -161,9 +168,10 @@ function Workspace({ detail, onProblems }: { detail: ProgramDetail; onProblems: 
   )
 }
 
-function MetaFields({ detail, onChange }: { detail: ProgramDetail; onChange: (m: { name: string; description: string }) => void }) {
-  const [name, setName] = useState(detail.name)
-  const [description, setDescription] = useState(detail.description)
+function MetaFields(props: { name: string; description: string; onChange: (m: { name: string; description: string }) => void }) {
+  const { onChange } = props
+  const [name, setName] = useState(props.name)
+  const [description, setDescription] = useState(props.description)
   const ro = readOnly.value
   return (
     <div class="tool-meta">
@@ -273,6 +281,11 @@ export default function ToolEditor() {
         {!readOnly.value && (
           <button class="btn-link" onClick={() => void newTool()}>
             Neues Werkzeug
+          </button>
+        )}
+        {!readOnly.value && (
+          <button class="btn btn-quiet" disabled={busy.value !== null || !draft.value.trim()} onClick={() => void deploy(false)} title="Speichert Prompt und alle eigenen Werkzeuge als neue Version.">
+            {busy.value === 'deploy' ? 'Deploye …' : 'Deployen'}
           </button>
         )}
       </div>

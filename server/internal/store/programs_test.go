@@ -67,3 +67,51 @@ func TestProgramsAreScopedByTeamAndTask(t *testing.T) {
 		t.Errorf("count = %d", c)
 	}
 }
+
+func TestVersionsFreezeAndRestoreTeamTools(t *testing.T) {
+	ctx := context.Background()
+	st, err := Open(ctx, filepath.Join(t.TempDir(), "lab.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	_, _ = st.CreateTeam(ctx, Team{ID: "rot", Name: "Rot", Token: "a", Color: "red"})
+	tt := TeamTask{Team: "rot", Task: "a1"}
+	_, _ = st.CreateTask(ctx, Task{ID: "a1", Title: "A", State: TaskOpen})
+	_, _ = st.AssignTask(ctx, tt)
+	tool := func(id, name, blockly string) Program {
+		return Program{ID: id, Name: name, Blockly: json.RawMessage(blockly), Tree: json.RawMessage(`{}`), Problems: json.RawMessage(`[]`)}
+	}
+	_, _ = st.SaveProgram(ctx, tt, tool("p1", "quadrat", `{"a":1}`), true)
+	_, _ = st.SaveProgram(ctx, tt, tool("p2", "kreis", `{}`), true)
+	v1, _ := st.SavePrompt(ctx, tt, "Version eins")
+	// Change one tool, delete one, add one; deploy with the same text.
+	_, _ = st.SaveProgram(ctx, tt, tool("p1", "quadrat", `{"a":2}`), false)
+	_ = st.DeleteProgram(ctx, tt, "p2")
+	_, _ = st.SaveProgram(ctx, tt, tool("p3", "neu", `{}`), true)
+	_, _ = st.SavePrompt(ctx, tt, "Version eins")
+
+	list, _ := st.ListPrompts(ctx, tt)
+	changes := map[string]string{}
+	for _, c := range list[0].Tools {
+		changes[c.Name] = c.Change
+	}
+	if len(list) != 2 || changes["quadrat"] != ToolChanged || changes["kreis"] != ToolRemoved || changes["neu"] != ToolNew {
+		t.Errorf("version 2 changes = %+v", list[0].Tools)
+	}
+	if len(list[1].Tools) != 2 || list[1].Tools[0].Change != ToolNew {
+		t.Errorf("version 1 changes = %+v", list[1].Tools)
+	}
+
+	p, err := st.RestoreVersion(ctx, tt, v1.Version)
+	if err != nil || p.Text != "Version eins" {
+		t.Fatalf("restore = %+v, %v", p, err)
+	}
+	now, _ := st.Programs(ctx, tt)
+	if len(now) != 2 || now[0].Name != "kreis" || now[1].ID != "p1" || string(now[1].Blockly) != `{"a":1}` {
+		t.Errorf("after restore = %+v", now)
+	}
+	if after, _ := st.ListPrompts(ctx, tt); len(after) != 2 {
+		t.Error("restoring must not change the history")
+	}
+}

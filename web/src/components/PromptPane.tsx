@@ -19,6 +19,7 @@ import {
   session,
   setDraft,
   snapshotNow,
+  teamTools,
   updatePrefs,
 } from '../state'
 import { lazyComponent } from '../lazy'
@@ -56,7 +57,10 @@ function EditorHost() {
     const ed = createEditor({
       parent: host.current!,
       doc: draft.peek(),
-      tools: session.peek()!.tools,
+      tools: () => [
+        ...session.peek()!.tools,
+        ...teamTools.peek().map((t) => ({ name: t.name, group: 'Eigene Werkzeuge', params: '', summary: t.description, ready: true, manual: false })),
+      ],
       onChange: setDraft,
       onSave: snapshotNow,
       onDeploy: () => void deploy(false),

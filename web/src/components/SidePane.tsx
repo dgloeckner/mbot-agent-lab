@@ -27,7 +27,7 @@ import {
 } from '../state'
 import { lazyComponent } from '../lazy'
 import type { SideTab } from '../storage'
-import type { LogEntry, Note } from '../types'
+import type { LogEntry, Note, ProgramInfo } from '../types'
 import { SendIcon } from './icons'
 
 type Filter = 'all' | 'robot' | 'team' | 'agent' | 'system'
@@ -336,6 +336,14 @@ function NotesPanel() {
 
 const ToolConsole = lazyComponent(() => import('./ToolConsole'))
 
+/** Whether the agent has a team tool: deployed, changed since the last deploy, or left out. */
+function agentState(t: ProgramInfo): { kind: string; label: string; title: string } {
+  if (t.deploy === 'new') return { kind: 'new', label: 'noch nicht deployt', title: 'Euer Agent bekommt es mit dem nächsten Deploy.' }
+  const base = t.agent ? 'beim Agenten' : `nicht beim Agenten: ${t.why ?? ''}`
+  if (t.deploy === 'changed') return { kind: 'changed', label: `${base}, geändert`, title: 'Seit dem letzten Deploy geändert: der Agent hat noch die deployte Fassung.' }
+  return { kind: t.agent ? 'agent' : 'left', label: base, title: t.agent ? 'Euer Agent kann es benutzen.' : 'Nur gültige Werkzeuge mit Beschreibung bekommt der Agent.' }
+}
+
 const runningText = (n: number) => `Läuft … ${n === 1 ? '1 Schritt' : `${n} Schritte`}`
 
 /** "Eigene Werkzeuge": the team's tools above the built-in ones. */
@@ -361,6 +369,9 @@ function OwnTools({ blocked, robot }: { blocked: string | null; robot?: string }
               <div class="own-tool-row">
                 <code>{t.name}</code>
                 <span class={`tool-tag ${t.valid ? 'tag-ok' : 'tag-bad'}`}>{t.valid ? 'bereit' : 'hat Fehler'}</span>
+                <span class={`tool-tag tag-agent`} data-state={agentState(t).kind} title={agentState(t).title}>
+                  {agentState(t).label}
+                </span>
                 <span class="spacer" />
                 <button class="btn-link" onClick={() => editTool(t.id)}>
                   Bearbeiten

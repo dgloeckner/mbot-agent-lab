@@ -332,7 +332,13 @@ func (a *actor) process(parent context.Context, r *run, pending []Message) []Mes
 			return nil
 		}
 		env.Agents = names(a.m.runningAgents(ctx, a.team))
-		resp, call, err := a.m.LLM.ChatWith(ctx, r.provider, llm.Request{Messages: messages, Tools: a.m.Tools.Definitions(env)})
+		// The team tools of the newest version, like the prompt.
+		teamTools, err := a.m.versionTools(ctx, r.task)
+		if err != nil {
+			a.m.Log.Error("load team tools", "team", a.team, "err", err)
+		}
+		defs := append(a.m.Tools.Definitions(env), a.m.teamToolDefs(a.team, teamTools)...)
+		resp, call, err := a.m.LLM.ChatWith(ctx, r.provider, llm.Request{Messages: messages, Tools: defs})
 		if err != nil {
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 				r.limitReached = "time_limit"
@@ -363,7 +369,7 @@ func (a *actor) process(parent context.Context, r *run, pending []Message) []Mes
 		}
 
 		a.setState(StateActing)
-		a.runTools(ctx, r, env, msg.ToolCalls)
+		a.runTools(ctx, r, env, msg.ToolCalls, teamTools)
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			r.limitReached = "time_limit"
 			return nil
@@ -397,18 +403,24 @@ func (a *actor) drainTalk() []Message {
 // acts on no robot (finish, wait_for, say, ...) waits for all earlier calls
 // and holds up all later ones. Each call is logged when it ends; the history
 // and the store get the results in call order, as the model sent them.
-func (a *actor) runTools(ctx context.Context, r *run, env *tools.Env, calls []llm.ToolCall) {
+func (a *actor) runTools(ctx context.Context, r *run, env *tools.Env, calls []llm.ToolCall, teamTools map[string]teamTool) {
 	type outcome struct {
 		ran    bool
 		result json.RawMessage
 		d      time.Duration
+		steps  []teamToolStep // steps of a team tool, stored before its call
 	}
 	out := make([]outcome, len(calls))
 	done := make([]chan struct{}, len(calls))
 	scopes := make([]tools.Scope, len(calls))
 	var wg sync.WaitGroup
 	for i, tc := range calls {
-		scopes[i] = a.m.Tools.Scope(env, tc.Function.Name, tc.Function.Arguments)
+		tt, isTeamTool := teamTools[tc.Function.Name]
+		if isTeamTool {
+			scopes[i] = a.m.teamToolScope(a.team, tc.Function.Arguments)
+		} else {
+			scopes[i] = a.m.Tools.Scope(env, tc.Function.Name, tc.Function.Arguments)
+		}
 		done[i] = make(chan struct{})
 		var after []chan struct{}
 		for j := range i {
@@ -427,12 +439,22 @@ func (a *actor) runTools(ctx context.Context, r *run, env *tools.Env, calls []ll
 				return
 			}
 			start := time.Now()
-			result := a.m.Tools.Call(ctx, env, tc.Function.Name, tc.Function.Arguments)
+			var result json.RawMessage
+			var steps []teamToolStep
+			if isTeamTool {
+				result, steps = a.runTeamTool(ctx, env, tc.Function.Name, tt, tc.Function.Arguments)
+			} else {
+				result = a.m.Tools.Call(ctx, env, tc.Function.Name, tc.Function.Arguments)
+			}
 			d := time.Since(start)
-			out[i] = outcome{ran: true, result: result, d: d}
-			a.log(live.SourceAgent, "tool", "", map[string]any{
+			out[i] = outcome{ran: true, result: result, d: d, steps: steps}
+			data := map[string]any{
 				"name": tc.Function.Name, "args": json.RawMessage(validJSON(tc.Function.Arguments)), "result": result, "ms": d.Milliseconds(),
-			})
+			}
+			if isTeamTool {
+				data["team_tool"] = true
+			}
+			a.log(live.SourceAgent, "tool", "", data)
 		}()
 	}
 	wg.Wait()
@@ -443,6 +465,12 @@ func (a *actor) runTools(ctx context.Context, r *run, env *tools.Env, calls []ll
 			continue
 		}
 		r.history = append(r.history, llm.Message{Role: llm.RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: string(out[i].result)})
+		for _, st := range out[i].steps {
+			r.seq++
+			if err := a.m.Store.AddProgramToolCall(context.Background(), r.id, r.seq, tc.Function.Name, st.tool, st.args, st.result, st.d, st.robot); err != nil {
+				a.m.Log.Error("store team tool step", "err", err)
+			}
+		}
 		r.seq++
 		if err := a.m.Store.AddToolCall(context.Background(), r.id, r.seq, tc.Function.Name, json.RawMessage(validJSON(tc.Function.Arguments)), out[i].result, out[i].d, scopes[i].Robot()); err != nil {
 			a.m.Log.Error("store tool call", "err", err)

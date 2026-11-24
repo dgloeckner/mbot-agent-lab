@@ -142,7 +142,7 @@ its data is not migrated.
 ```
 tasks ──< team_tasks >── teams
               │
-              ├──< prompts      (agent versions, numbered per (team, task))
+              ├──< prompts      (agent versions, numbered per (team, task)) ──< prompt_programs
               ├──< programs     (team tools: working state)
               ├──< notes
               └──< runs ──< messages, tool_calls (robot), llm_calls
@@ -168,6 +168,7 @@ model next to it.
 | `robots` | device ID (stable across renames), first seen; every configured robot is registered at startup |
 | `assignments` | robot → owner (`team:<id>`), alias (unique per owner) |
 | `prompts` | (team, task), version (from 1 per pair), text, time |
+| `prompt_programs` | the team tools frozen with a version: prompt, team tool id, name, description, Blockly state, tree, problems |
 | `runs` | (team, task), kind (`run`, `conversation` or `manual`), prompt (agent version), model, start, end, end reason, tokens, cost, report |
 | `messages` | run, sequence, source, kind, text, data, robot ID and alias at that moment, time |
 | `tool_calls` | run, sequence, name, arguments, result, duration, robot ID and alias at that moment, the team tool it belongs to |
@@ -236,7 +237,8 @@ a closed task writes answer 409 and reads work. Stop always works.
 | `GET tasks/{id}` | one assigned task with its text (the "Aufgabe" tab) |
 | `POST tasks/{id}/accept` | accept and activate: `{prompt: "starter" \| "empty" \| "copy", from_task?}` |
 | `POST tasks/{id}/activate` | switch to another accepted task; 409 while a run is active |
-| `GET prompts`, `GET prompts/{version}`, `POST prompt` | prompt versions; deploy, optionally with restart |
+| `GET prompts`, `GET prompts/{version}`, `POST prompt` | versions (each with the team tools that are new, changed or removed against the version before); deploy, optionally with restart: answers the version's team tools and a warning |
+| `POST prompts/{version}/restore` | restore a version: team tools here, prompt text for the draft; SSE `programs` |
 | `POST start`, `POST stop` | start or stop a run; stop also cancels a running by-hand call; start answers 409 while one runs |
 | `POST tools/{name}` | run one by-hand tool (body: its arguments, `robot` with several robots) and answer its result as the agent would get it; 409 while a run is active |
 | `GET programs`, `GET programs/{id}` | team tools of the active task (name, description, valid, problems); one with its Blockly state |
@@ -302,6 +304,7 @@ writes `note.added` and `note.deleted` for `remember` and `forget`.
 
 - **System:** fixed platform rules (German; extra rules for several robots), the team prompt of
   the run's task in its newest version, the notes of that task. Not the task text.
+- **Tools:** the built-in tools and the team tools of the newest version (valid, described).
 - **History:** the last messages of the run verbatim (`max_history_messages`); older ones are
   left out. Summaries of long runs are not implemented.
 - **Inbox:** one JSON line per new message with sender, age, kind, text and data. The sender field
@@ -325,11 +328,20 @@ writes `note.added` and `note.deleted` for `remember` and `forget`.
 
 Each note stores its origin: the run and the message after which it was written.
 
-### Deploying prompts
+### Deploying prompts and team tools
 
-Every deploy creates a new version; old versions stay. A plain deploy takes effect at the next
-model call, never in the middle of a tool call. "Deploy and restart" begins a new run. Each run
-stores its prompt version.
+Every deploy creates a new version; old versions stay. A version is the prompt text and every team
+tool of the pair, valid or not (`prompt_programs`); a deploy in which only a tool changed creates a
+new version with the same text. A plain deploy takes effect at the next model call, never in the
+middle of a tool call. "Deploy and restart" begins a new run. Each run stores its version.
+
+- The agent gets the team tools of the newest version that are valid and have a description
+  (`tools.md`, "Team tools as agent tools").
+- The deploy answers the version with its team tools (whether the agent has each, and why not) and
+  a warning for names in code style the agent has no tool for.
+- **Zurück:** `POST prompts/{version}/restore` replaces the working state with a version: the team
+  tools of the pair (also ones deleted since, with their ids) and, on the page, the prompt draft.
+  Nothing is deleted from the history; the next deploy is a new version.
 
 ### Budgets and end conditions
 
@@ -400,6 +412,12 @@ embed compiling without a build. No CDN assets. Rarely used views are lazy-loade
     While a run is active the forms are disabled ("Erst anhalten"); a closed task is read-only.
     By-hand calls appear in the protocol as "Ihr"; without a run the protocol offers "Selbst
     steuern", which opens the tab.
+  - **Versions:** "Eigene Werkzeuge" shows per tool whether the agent has it ("beim Agenten",
+    "geändert" since the last deploy, "noch nicht deployt", or "nicht beim Agenten" with the
+    reason). The prompt editor completes the names of team tools. "Deployen" also sits in the
+    tool editor. The history shows per version the team tools that are new, changed or removed;
+    "Diese Version wiederherstellen" restores prompt and team tools and first asks, naming what
+    is not deployed yet and would be lost.
   - **Team tools** (tab "Werkzeuge", group "Eigene Werkzeuge" above the built-in tools): name,
     description, "bereit" or "hat Fehler", "Neues Werkzeug", per tool "Bearbeiten" and
     "Ausführen" with the end of the last run below. "Bearbeiten" opens the tool editor in the left

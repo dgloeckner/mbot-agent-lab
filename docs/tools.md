@@ -102,6 +102,31 @@ takes a color only, no pattern.
 - **Deliberately no tool for:** Wi-Fi, vendor cloud services, reboot, setting the name, raw motor
   power.
 
+## Team tools as agent tools
+
+A deploy freezes the prompt and every team tool of the (team, task) as one version
+(`programs.md`, "Versions"). The agent gets each team tool of the newest version that is valid
+and has a description as a tool of its own:
+
+- **Name and description** are the team's. The server appends one fixed sentence: "Dies ist ein
+  Werkzeug, das das Team selbst gebaut hat. Es läuft ohne Rückfragen durch und meldet am Ende,
+  ob es fertig wurde oder wo es abbrach." No parameters, except `robot` (required enum) when the
+  team has several robots.
+- **Call:** the team tool runs inside the agent's tool call; the agent waits, messages collect in
+  its inbox meanwhile. Its steps count against the run's time limit, not as model steps or model
+  calls. A tool changed after the deploy applies from the next deploy.
+- **Result for the agent:** `{ok, end, steps, runtime_s, at, last, robot}`, plus `value` from
+  `gib zurück` and `error` (a German sentence) when it did not end `done`. `last` is the last
+  built-in tool's result only; earlier steps, and their floor traces, stay out of the agent's
+  context.
+- **Protocol:** the team sees every step in the log (source agent, `data.program`); the steps are
+  stored as tool calls of the run that name the team tool (`tool_calls.program`), before the
+  call's own row.
+- **Conversation mode** lists the team tools as text, like the other tools.
+- **Deploy warning:** if the prompt names something in code style (`` `name` ``) that is neither a
+  team tool of the version, nor a built-in tool, nor one of the team's robots, the deploy answers
+  a warning and still deploys.
+
 ## Block texts
 
 Every by-hand tool has one line in `server/internal/tools/blocks.go`: the German sentence of its
