@@ -383,7 +383,16 @@ embed compiling without a build. No CDN assets. Rarely used views are lazy-loade
 
 - **Team page** (`/t/{token}`): prompt editor (CodeMirror, Markdown, tool name completion),
   preview, history with diffs against deployed versions and local snapshots, live log over SSE,
-  conversation tab, notes, tool catalog, robots with rename and "Finden", usage, model choice.
+  conversation tab, notes, tools and console, robots with rename and "Finden", usage, model choice.
+  - **Console** (tab "Werkzeuge"): every tool of the catalog; a click on a by-hand tool opens it
+    in place (lazy-loaded `ToolConsole`): a form built from the tool's JSON schema in the session
+    (`web/src/console.ts`), "Ausführen" (`POST tools/{name}`) and the result below: one sentence
+    in the protocol's words, the key fields, the floor trace as a band (four rows, one per probe)
+    and the JSON on demand. "In den Prompt einfügen" stays as a second action. Agent-only tools
+    carry "nur Agent" and do not open. With several robots a robot picker sits above the list.
+    While a run is active the forms are disabled ("Erst anhalten"); a closed task is read-only.
+    By-hand calls appear in the protocol as "Ihr"; without a run the protocol offers "Selbst
+    steuern", which opens the tab.
   Browser storage (`web/src/storage.ts`) holds only the draft, draft snapshots and UI preferences.
   - **Tasks:** the team band shows the active task with a picker: accepted tasks to switch to
     (disabled during a run, "Erst anhalten") and new tasks with a badge. Without an active task

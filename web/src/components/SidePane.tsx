@@ -118,11 +118,18 @@ function NoRunHint() {
         Gerade läuft kein Lauf.{' '}
         {talk ? 'Fragen an euren Agenten stellt ihr im Gespräch.' : 'Startet einen Lauf, dann liest euer Agent eure Nachrichten.'}
       </p>
-      {talk && (
-        <button class="btn btn-small" onClick={() => updatePrefs({ sideTab: 'conversation' })}>
-          Zum Gespräch
-        </button>
-      )}
+      <div class="composer-hint-actions">
+        {!readOnly.value && (
+          <button class="btn btn-small" onClick={() => updatePrefs({ sideTab: 'tools' })}>
+            Selbst steuern
+          </button>
+        )}
+        {talk && (
+          <button class="btn btn-small" onClick={() => updatePrefs({ sideTab: 'conversation' })}>
+            Zum Gespräch
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -322,21 +329,51 @@ function NotesPanel() {
   )
 }
 
+const ToolConsole = lazyComponent(() => import('./ToolConsole'))
+
+/** Why the console is off right now, or null. */
+function consoleBlocked(): string | null {
+  if (readOnly.value) return 'Die Aufgabe ist geschlossen.'
+  if (agent.value.running) return 'Erst anhalten: Euer Agent fährt gerade.'
+  if (robots.value.length === 0) return 'Eurem Team ist gerade kein Roboter zugeteilt.'
+  return null
+}
+
 function ToolsPanel() {
   const tools = session.value!.tools
   const groups = [...new Set(tools.map((t) => t.group))]
+  const open = useSignal<string | null>(null)
+  const picked = useSignal<string>('')
+  const team = robots.value
+  const robot = team.length > 1 ? (team.find((r) => r.alias === picked.value)?.alias ?? team[0].alias) : undefined
+  const blocked = consoleBlocked()
   return (
     <div class="tools-panel scroll">
-      <p class="panel-intro">Diese Werkzeuge kann euer Agent benutzen. Klickt eins an, um seinen Namen in den Prompt einzufügen. Beim Schreiben schlägt der Editor ab drei Buchstaben passende Werkzeuge vor; <kbd>Tab</kbd> übernimmt den Vorschlag.</p>
-      {robots.value.length > 1 && (
+      <p class="panel-intro">
+        Diese Werkzeuge hat euer Agent. Solange kein Lauf läuft, könnt ihr sie selbst ausprobieren: anklicken, Werte eintragen, ausführen. Beim
+        Schreiben schlägt der Editor ab drei Buchstaben passende Werkzeuge vor; <kbd>Tab</kbd> übernimmt den Vorschlag.
+      </p>
+      {team.length > 1 && (
+        <div class="robot-picker">
+          <span id="robot-picker-label">Roboter</span>
+          <div class="chips" role="group" aria-labelledby="robot-picker-label">
+            {team.map((r) => (
+              <button key={r.id} class="chip" aria-pressed={r.alias === robot} onClick={() => (picked.value = r.alias)}>
+                {r.alias}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {team.length > 1 && (
         <p class="panel-intro multi-robot">
-          Euer Agent steuert {robots.value.length} Roboter: {robots.value.map((r, i) => (
-            <span key={r.id}>
-              {i > 0 && (i === robots.value.length - 1 ? ' und ' : ', ')}
-              <button class="tool-inline" onClick={() => editorBridge.insert?.(r.alias)}>{r.alias}</button>
-            </span>
-          ))}
-          . Bewegungs-Werkzeuge bekommen dann den Parameter <code>robot</code> mit einem dieser Namen, <code>stop</code> geht auch mit <code>alle</code>.
+          Euer Agent steuert {team.length} Roboter. Bewegungs-Werkzeuge bekommen dann den Parameter <code>robot</code> mit einem dieser Namen,{' '}
+          <code>stop</code> geht auch mit <code>alle</code>.
+        </p>
+      )}
+      {blocked && agent.value.running && (
+        <p class="console-hint" role="status">
+          Erst anhalten: Solange euer Agent läuft, könnt ihr nichts selbst ausführen.
         </p>
       )}
       {groups.map((g) => (
@@ -345,18 +382,35 @@ function ToolsPanel() {
           <ul class="tools">
             {tools
               .filter((t) => t.group === g)
-              .map((t) => (
-                <li key={t.name}>
-                  <button class="tool" data-ready={t.ready} onClick={() => editorBridge.insert?.('`' + t.name + '`')} title="In den Prompt einfügen">
-                    <code>{t.name}</code>
-                    {t.params && <span class="tool-params">{t.params}</span>}
-                    <span class="tool-summary">
-                      {t.summary}
-                      {!t.ready && ' Kommt bald, euer Agent hat es noch nicht.'}
-                    </span>
-                  </button>
-                </li>
-              ))}
+              .map((t) => {
+                const byHand = t.ready && t.manual
+                const isOpen = byHand && open.value === t.name
+                return (
+                  <li key={t.name} class={isOpen ? 'tool-open' : undefined}>
+                    {byHand ? (
+                      <button class="tool" aria-expanded={isOpen} onClick={() => (open.value = isOpen ? null : t.name)}>
+                        <code>{t.name}</code>
+                        <span class="tool-params">{t.params}</span>
+                        <svg class="tool-chevron" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24">
+                          <path d={isOpen ? 'M5 9l7 7 7-7' : 'M9 5l7 7-7 7'} />
+                        </svg>
+                        <span class="tool-summary">{t.summary}</span>
+                      </button>
+                    ) : (
+                      <button class="tool" data-ready={t.ready} onClick={() => editorBridge.insert?.('`' + t.name + '`')} title="In den Prompt einfügen">
+                        <code>{t.name}</code>
+                        <span class="tool-params">{t.params}</span>
+                        <span class="tool-tag">{t.ready ? 'nur Agent' : 'kommt bald'}</span>
+                        <span class="tool-summary">
+                          {t.summary}
+                          {!t.ready && ' Euer Agent hat es noch nicht.'}
+                        </span>
+                      </button>
+                    )}
+                    {isOpen && <ToolConsole tool={t} robot={robot} blocked={blocked} />}
+                  </li>
+                )
+              })}
           </ul>
         </section>
       ))}

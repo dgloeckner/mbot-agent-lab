@@ -12,6 +12,7 @@
   },
   "devDependencies": {
     "@babel/core": "7.29.13",
+    "@playwright/test": "1.63.0",
     "@preact/preset-vite": "2.10.6",
     "nx": "24.0.6",
     "typescript": "7.0.2",

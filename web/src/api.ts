@@ -47,6 +47,8 @@ export const api = {
   task: (id: string) => req<TeamTask>('GET', `/tasks/${encodeURIComponent(id)}`),
   accept: (id: string, prompt: PromptChoice, fromTask?: string) =>
     req<TeamTask>('POST', `/tasks/${encodeURIComponent(id)}/accept`, { prompt, from_task: fromTask ?? '' }),
+  /** Runs one built-in tool by hand; the answer is the tool result as the agent would get it. */
+  runTool: (name: string, args: Record<string, unknown>) => req<Record<string, any>>('POST', `/tools/${encodeURIComponent(name)}`, args),
   activate: (id: string) => req<TeamTask>('POST', `/tasks/${encodeURIComponent(id)}/activate`),
 }
 

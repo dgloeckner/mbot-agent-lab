@@ -40,6 +40,21 @@
         "protocol",
         "{workspaceRoot}/docs/lab/aufgaben/**/*"
       ]
+    },
+    "e2e": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "dependsOn": [
+        {
+          "projects": [
+            "server"
+          ],
+          "target": "build"
+        }
+      ],
+      "options": {
+        "command": "playwright test --config web/playwright.config.ts --trace off"
+      }
     }
   }
 }

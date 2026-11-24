@@ -340,6 +340,25 @@ export async function startRun() {
   }
 }
 
+/** The result of a by-hand call, with when it ended and how long it took. */
+export interface ToolRun {
+  result: Record<string, any>
+  at: number
+  ms: number
+}
+
+/** Runs one tool by hand. A refusal (run active, closed task) is shown as a toast. */
+export async function runTool(name: string, args: Record<string, unknown>): Promise<ToolRun | null> {
+  const start = Date.now()
+  try {
+    const result = await api.runTool(name, args)
+    return { result, at: Date.now(), ms: Date.now() - start }
+  } catch (err) {
+    fail(err)
+    return null
+  }
+}
+
 export async function addNote(text: string): Promise<boolean> {
   try {
     const n = await api.addNote(text)

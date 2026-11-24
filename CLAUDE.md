@@ -78,6 +78,9 @@ the user chose Nx over Make). Run `npm install` once.
 - `npx nx run sim:run --robots=2 --world=sim/worlds/labyrinth.json`: simulated robots.
 - `npx nx run sim:e2e`: end-to-end smoke test (`sim/e2e/`): builds and starts `labserver` with the
   scripted model, one seeded sim robot, drives join/assign/prompt/start over HTTP. Runs in CI.
+- `npx nx run web:e2e`: browser end-to-end tests (`web/e2e/`, Playwright, Chromium): the same lab as
+  `sim:e2e` (built `labserver`, scripted model, simulated robots), driven through the team page.
+  Screenshots go to the git-ignored `web/e2e/screenshots/`. Runs in CI.
 - `npx nx run robot:bundle [--config=robot/config.py]`: build `robot/dist/main.py`.
 - `npx nx run sim:grid`: regenerate the line field world and build plan after changing `sim/grid.py`.
 - `go test -race ./...` in `server/` before touching agent, robots or tools: they are concurrent.

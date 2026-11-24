@@ -94,6 +94,9 @@ function compactResult(result: unknown): string {
   return parts.join(', ') || 'ok'
 }
 
+/** The outcome of a tool result in words, as the protocol shows it. */
+export const resultText = (result: Record<string, any>) => compactResult(result)
+
 /** Tool call for the log: name, arguments and outcome. */
 export function describeTool(d: Record<string, any>): { call: string; outcome: string; failed: boolean } {
   const args = compactArgs(d.args)
