@@ -100,8 +100,8 @@ func TestActiveTask(t *testing.T) {
 	if err := s.AcceptTask(ctx, a); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.AssignTask(ctx, a); err != nil {
-		t.Errorf("assigning twice: %v", err)
+	if added, err := s.AssignTask(ctx, a); err != nil || added {
+		t.Errorf("assigning twice: %v, %v", added, err)
 	}
 }
 

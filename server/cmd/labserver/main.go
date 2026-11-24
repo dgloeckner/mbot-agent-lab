@@ -124,6 +124,7 @@ func run(configPath string, log *slog.Logger) error {
 	labSvc.OnTeamEvent = func(teamID, kind, text string) {
 		agents.Deliver(teamID, agent.Message{From: agent.SourceSystem, Kind: kind, Text: text})
 	}
+	labSvc.OnTaskClosed = agents.TaskClosed
 
 	ui := &web.Server{Config: cfg, Robots: reg, Store: db, Hub: hub, Lab: labSvc, Agents: agents, Log: log}
 	go ui.Run(ctx)

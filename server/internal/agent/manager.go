@@ -53,6 +53,7 @@ type Status struct {
 	State        string    `json:"state"`
 	Running      bool      `json:"running"`
 	RunID        int64     `json:"run_id,omitempty"`
+	Task         string    `json:"task_id,omitempty"`  // task of the current run
 	Provider     string    `json:"provider,omitempty"` // model provider of the current run
 	Model        string    `json:"model,omitempty"`
 	StartedAt    time.Time `json:"started_at,omitzero"`
@@ -231,6 +232,23 @@ func (m *Manager) StopAll(by string) {
 	m.mu.Unlock()
 	for _, id := range ids {
 		m.Stop(id, by)
+	}
+}
+
+// TaskClosed ends every run and conversation in a task the control room
+// closed (reason task_closed).
+func (m *Manager) TaskClosed(taskID string) {
+	m.mu.Lock()
+	actors := make([]*actor, 0, len(m.actors))
+	for _, a := range m.actors {
+		actors = append(actors, a)
+	}
+	m.mu.Unlock()
+	for _, a := range actors {
+		if a.getStatus().Task == taskID {
+			a.interrupt()
+		}
+		a.ctrl <- control{kind: ctrlTaskClosed, task: taskID}
 	}
 }
 

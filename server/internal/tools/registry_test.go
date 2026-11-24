@@ -102,7 +102,7 @@ func setup(t *testing.T, aliases map[string]string) (*Registry, *robotBus, *stor
 	if _, err := st.CreateTask(ctx, store.Task{ID: "a1", Title: "Test", State: store.TaskOpen}); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.AssignTask(ctx, rot); err != nil {
+	if _, err := st.AssignTask(ctx, rot); err != nil {
 		t.Fatal(err)
 	}
 	return NewRegistry(reg, st, live.NewHub(), config.Budgets{MaxAgentMessagesPerMinute: 2}), bus, st

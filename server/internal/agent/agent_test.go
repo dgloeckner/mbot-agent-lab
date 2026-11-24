@@ -194,7 +194,8 @@ func activateTestTask(t *testing.T, st *store.Store, team string) {
 			t.Fatal(err)
 		}
 	}
-	for _, step := range []func(context.Context, store.TeamTask) error{st.AssignTask, st.AcceptTask, st.ActivateTask} {
+	assign := func(ctx context.Context, tt store.TeamTask) error { _, err := st.AssignTask(ctx, tt); return err }
+	for _, step := range []func(context.Context, store.TeamTask) error{assign, st.AcceptTask, st.ActivateTask} {
 		if err := step(ctx, pairOf(team)); err != nil {
 			t.Fatal(err)
 		}

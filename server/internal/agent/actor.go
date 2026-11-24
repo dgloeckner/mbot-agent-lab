@@ -22,12 +22,14 @@ const (
 	ctrlStop
 	ctrlRestart
 	ctrlRemove
+	ctrlTaskClosed
 	ctrlNewConversation
 )
 
 type control struct {
 	kind   ctrlKind
 	reason string // for stop: why the run ends
+	task   string // for task closed: the task
 	by     string // who stopped it, for the log
 	reply  chan error
 }
@@ -149,6 +151,14 @@ func (a *actor) loop(ctx context.Context) {
 			case ctrlRestart:
 				end("restart", c.by)
 				err = start()
+			case ctrlTaskClosed:
+				if cur != nil && cur.task.Task == c.task {
+					end("task_closed", "Leitstand")
+				}
+				if a.conv != nil && a.conv.task.Task == c.task {
+					a.endConversation("task_closed")
+					a.talkInfo("Die Lab-Leitung hat die Aufgabe geschlossen. Das Gespräch ist zu Ende.")
+				}
 			case ctrlRemove:
 				end("team_deleted", "")
 				a.endConversation("team_deleted")
@@ -229,7 +239,7 @@ func (a *actor) startRun(ctx context.Context) (*run, error) {
 	}
 	r := &run{id: id, task: task, promptVersion: p.Version, provider: provider, started: now, deadline: now.Add(length)}
 	a.updateStatus(func(s *Status) {
-		*s = Status{State: StateWaiting, Running: true, RunID: id, Provider: provider, Model: model, StartedAt: now}
+		*s = Status{State: StateWaiting, Running: true, RunID: id, Task: task.Task, Provider: provider, Model: model, StartedAt: now}
 	})
 	// Each run starts a new way: retrace_path must not drive back through
 	// earlier runs. Robots that are offline keep their log until they get
@@ -251,13 +261,13 @@ func (a *actor) endRun(r *run, reason, by string) {
 	if err := a.m.Store.EndRun(ctx, r.id, reason, r.report); err != nil {
 		a.m.Log.Error("end run", "run", r.id, "err", err)
 	}
-	if reason == "stop" || reason == "restart" || reason == "team_deleted" || reason == "server_stop" || reason == "time_limit" {
+	if reason == "stop" || reason == "restart" || reason == "team_deleted" || reason == "server_stop" || reason == "time_limit" || reason == "task_closed" {
 		// Leave no robot driving on a stopped run. Tools were cancelled already.
 		for _, rb := range a.m.Robots.TeamRobots(a.team) {
 			go func() { _, _ = a.m.Robots.Send(ctx, rb.ID, "stop", nil, 2*time.Second) }()
 		}
 	}
-	a.updateStatus(func(s *Status) { s.State, s.Running = StateWaiting, false })
+	a.updateStatus(func(s *Status) { s.State, s.Running, s.Task = StateWaiting, false, "" })
 	a.log(live.SourceSystem, "run_end", "", map[string]any{"run": r.id, "reason": reason, "by": by, "report": r.report})
 	a.m.Log.Info("run ended", "team", a.team, "run", r.id, "reason", reason)
 }

@@ -12,6 +12,7 @@ const (
 	EventTaskPublished  = "task.published"
 	EventTaskClosed     = "task.closed"
 	EventTaskAssigned   = "task.assigned"
+	EventTaskWithdrawn  = "task.withdrawn"
 	EventTaskAccepted   = "task.accepted"
 	EventTaskActivated  = "task.activated"
 	EventPromptDeployed = "prompt.deployed"

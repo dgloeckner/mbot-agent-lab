@@ -26,9 +26,10 @@ protocol (`messages`, `tool_calls`, `llm_calls`) stays the detailed record per r
 | Kind | Actor | Scope | `data` | Written by |
 | --- | --- | --- | --- | --- |
 | `team.joined` | team | team | `name` | `lab.Join` |
-| `task.published` | admin | task | `title` | not written yet (control room API) |
-| `task.closed` | admin | task | — | not written yet (control room API) |
-| `task.assigned` | admin, system | team, task | — | default-task bridge on join (`lab/bridge.go`) |
+| `task.published` | admin | task | `title` | `lab.PublishTask` |
+| `task.closed` | admin | task | — | `lab.CloseTask` |
+| `task.assigned` | admin, system | team, task | — | `lab.AssignTask` (only teams that got the task now), default-task bridge on join (`lab/bridge.go`) |
+| `task.withdrawn` | admin | team, task | — | `lab.WithdrawTask` |
 | `task.accepted` | team, system | team, task | — | default-task bridge on join |
 | `task.activated` | team, system | team, task | — | default-task bridge on join |
 | `prompt.deployed` | team | team, task, prompt | `version`, `chars`, `restart` | team route `POST prompt` |

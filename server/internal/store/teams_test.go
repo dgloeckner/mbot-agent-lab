@@ -32,7 +32,7 @@ func pair(t *testing.T, s *Store, team, task string) TeamTask {
 		}
 	}
 	tt := TeamTask{Team: team, Task: task}
-	if err := s.AssignTask(ctx, tt); err != nil {
+	if _, err := s.AssignTask(ctx, tt); err != nil {
 		t.Fatal(err)
 	}
 	return tt

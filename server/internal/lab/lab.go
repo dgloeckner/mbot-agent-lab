@@ -74,6 +74,9 @@ type Service struct {
 	// OnTeamEvent, if set, also passes notices about a team's robots and name
 	// to the team's agent (it decides itself whether that wakes it).
 	OnTeamEvent func(teamID, kind, text string)
+	// OnTaskClosed, if set, ends running runs and open conversations in a
+	// task that the control room closed.
+	OnTaskClosed func(taskID string)
 
 	mu        sync.Mutex // serializes changes to teams, assignments and model choices
 	labCode   string

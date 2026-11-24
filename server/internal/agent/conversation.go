@@ -420,6 +420,7 @@ var endReasons = map[string]string{
 	"restart":        "Der Lauf endete, weil das Team einen neuen Prompt mit Neustart deployt hat.",
 	"server_restart": "Der Lauf endete, weil der Server neu gestartet wurde.",
 	"server_stop":    "Der Lauf endete, weil der Server neu gestartet wurde.",
+	"task_closed":    "Der Lauf endete, weil die Lab-Leitung die Aufgabe geschlossen hat.",
 }
 
 // FormatRun renders a finished run as a numbered protocol for a conversation.

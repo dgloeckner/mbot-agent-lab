@@ -59,6 +59,7 @@ const RUN_END: Record<string, string> = {
   time_limit: 'Lauf beendet: Zeitlimit erreicht',
   token_limit: 'Lauf beendet: Token-Limit erreicht',
   team_deleted: 'Lauf beendet: Team gelöscht',
+  task_closed: 'Lauf beendet: Aufgabe geschlossen',
   server_stop: 'Lauf beendet: Server wurde angehalten',
   server_restart: 'Lauf beendet: Server wurde neu gestartet',
 }

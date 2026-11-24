@@ -161,7 +161,7 @@ model next to it.
 | --- | --- |
 | `teams` | ID, name (unique among teams not deleted, case-insensitive), secret token, color, chosen model provider, `deleted_at` |
 | `tasks` | ID, title, body (Markdown for the team), starter prompt, state (`draft`, `open`, `closed`), created, published and closed time |
-| `team_tasks` | a task assigned to a team: assigned time, accepted time |
+| `team_tasks` | a task assigned to a team: assigned time, accepted time, withdrawn time |
 | `active_tasks` | the task a team works in (one row per team, must be an assigned pair) |
 | `robots` | device ID (stable across renames), first seen; every configured robot is registered at startup |
 | `assignments` | robot → owner (`team:<id>`), alias (unique per owner) |
@@ -186,6 +186,25 @@ stay, so results and history stay consistent. Its name is free again.
 ("Freies Arbeiten") and assigns, accepts and activates it for every team that joins
 (`server/internal/lab/bridge.go`). Team routes and the agent work in the team's active task; a
 team without one gets 409 "Eurem Team ist noch keine Aufgabe zugewiesen."
+
+### Tasks
+
+The control room prepares tasks and assigns them to teams; the rules live in `internal/lab`
+(`tasks.go`).
+
+- **Lifecycle:** `draft` → `open` (published) → `closed`. Only drafts can be edited or deleted.
+  Publishing needs a title and a text and fixes title, text and starter prompt: all teams and
+  the results refer to the same text. "Duplicate" creates a new draft from a task in any state.
+- **Assigning:** only open tasks, to listed teams or to all current teams (`"all"`); teams that
+  join later get nothing automatically. Assigning twice changes nothing. An assignment the team
+  has not accepted can be withdrawn (`team_tasks.withdrawn_at`); assigning again makes it new.
+- **Closing:** no more deploys, runs or conversations in the task, for every team. Running runs
+  end with reason `task_closed` and open conversations in it end (`lab.Service.OnTaskClosed` →
+  `agent.Manager.TaskClosed`). Prompts, notes and runs stay readable; a team whose active task
+  closes keeps it selected.
+- **IDs:** `"a"` + 6 random characters, like team IDs.
+- **Board:** the control room state lists all tasks (without text) and, per team, its assigned
+  tasks with their status: `assigned`, `accepted` or `active`.
 
 ### HTTP routes
 
@@ -222,6 +241,11 @@ Control room (`/admin`, admin password, session cookie):
 | `PUT /admin/api/teams/{id}`, `PUT …/color`, `DELETE …` | rename, recolor, delete a team |
 | `POST /admin/api/stop-all` | emergency stop for all robots |
 | `PUT /admin/api/models`, `PUT /admin/api/conversation` | released models; conversations on or off |
+| `GET/POST /admin/api/tasks` | list tasks; create a draft `{title, body, starter}` |
+| `GET/PUT/DELETE /admin/api/tasks/{id}` | read a task with its text; edit or delete a draft |
+| `POST /admin/api/tasks/{id}/publish`, `/close`, `/duplicate` | publish a draft, close an open task, copy any task into a new draft |
+| `POST /admin/api/tasks/{id}/assign` | assign `{teams: ["t…", …]}` or `{teams: "all"}`; answers the teams that got it now |
+| `DELETE /admin/api/tasks/{id}/assign/{team}` | withdraw an assignment the team has not accepted |
 
 ## Agent runtime
 

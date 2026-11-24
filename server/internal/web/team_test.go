@@ -81,6 +81,7 @@ func newTestServer(t *testing.T) *testLab {
 	runCtx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
 	go agents.Run(runCtx)
+	svc.OnTaskClosed = agents.TaskClosed
 	s := &Server{Config: cfg, Robots: reg, Store: st, Hub: hub, Lab: svc, Agents: agents, Log: log}
 	srv := httptest.NewServer(s.Handler())
 	t.Cleanup(srv.Close)
@@ -335,7 +336,8 @@ func activateTestTask(t *testing.T, st *store.Store, team string) {
 		}
 	}
 	tt := store.TeamTask{Team: team, Task: testTask}
-	for _, step := range []func(context.Context, store.TeamTask) error{st.AssignTask, st.AcceptTask, st.ActivateTask} {
+	assign := func(ctx context.Context, tt store.TeamTask) error { _, err := st.AssignTask(ctx, tt); return err }
+	for _, step := range []func(context.Context, store.TeamTask) error{assign, st.AcceptTask, st.ActivateTask} {
 		if err := step(ctx, tt); err != nil {
 			t.Fatal(err)
 		}

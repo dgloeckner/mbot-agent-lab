@@ -71,6 +71,8 @@ and goes here, not into `CLAUDE.md`. How the system works today: `architecture.m
 | Agent version | the prompt version (`prompts.id`); a model change is not a new version, the run records the model | results can still be split by model |
 | Schema changes for tasks | full reset, no data migration; an old database is refused with a clear message | tables in their final form, no `ALTER` chain |
 | Deleting teams | soft delete (`deleted_at`) | results and history stay consistent |
+| Published tasks | fixed: only drafts can be edited; to change one, duplicate it | all teams and the results page refer to the same text |
+| Tasks are shared | one task row, assigned to teams through `team_tasks`; never copied per team | one text, comparable results |
 | Event log | one table with the scope as real columns, one writer (`store.AddEvent`), written after the fact | results read one place at the finest scope; logging never blocks a robot or a model call |
 
 ## Documentation

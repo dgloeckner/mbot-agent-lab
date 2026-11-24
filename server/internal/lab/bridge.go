@@ -26,11 +26,12 @@ func (s *Service) bridgeDefaultTask(ctx context.Context, teamID string) error {
 		return err
 	}
 	tt := store.TeamTask{Team: teamID, Task: DefaultTaskID}
+	assign := func(ctx context.Context, tt store.TeamTask) error { _, err := s.Store.AssignTask(ctx, tt); return err }
 	steps := []struct {
 		do   func(context.Context, store.TeamTask) error
 		kind string
 	}{
-		{s.Store.AssignTask, store.EventTaskAssigned},
+		{assign, store.EventTaskAssigned},
 		{s.Store.AcceptTask, store.EventTaskAccepted},
 		{s.Store.ActivateTask, store.EventTaskActivated},
 	}
