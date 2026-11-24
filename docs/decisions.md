@@ -71,11 +71,12 @@ and goes here, not into `CLAUDE.md`. How the system works today: `architecture.m
 | Agent version | the prompt version (`prompts.id`); a model change is not a new version, the run records the model | results can still be split by model |
 | Schema changes for tasks | full reset, no data migration; an old database is refused with a clear message | tables in their final form, no `ALTER` chain |
 | Deleting teams | soft delete (`deleted_at`) | results and history stay consistent |
+| Event log | one table with the scope as real columns, one writer (`store.AddEvent`), written after the fact | results read one place at the finest scope; logging never blocks a robot or a model call |
 
 ## Documentation
 
 | Topic | Decision | Why |
 | --- | --- | --- |
-| Long-term docs | `architecture.md`, `decisions.md`, `protocol.md`, `tools.md` describe the current state; a PR that changes behaviour updates them | docs stay true without reading history |
+| Long-term docs | `architecture.md`, `decisions.md`, `protocol.md`, `tools.md`, `events.md` describe the current state; a PR that changes behaviour updates them | docs stay true without reading history |
 | Protocol | `protocol.md` is the source of truth for MQTT; changing a message changes `docs/examples/protocol/*` too | server, robot and simulator test against the same examples |
 | Field | `field.md` is the original field handoff (German), kept as written with the approved deviations on top | record of the field design |

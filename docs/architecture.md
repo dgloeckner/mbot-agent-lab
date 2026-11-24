@@ -2,7 +2,7 @@
 
 Current state of the mBot2 Agent Lab. This document describes the system as it is; a PR that
 changes behaviour updates it in the same PR. Why things are the way they are: `decisions.md`.
-MQTT: `protocol.md`. Tools: `tools.md`. The line field: `field.md`.
+MQTT: `protocol.md`. Tools: `tools.md`. Event log: `events.md`. The line field: `field.md`.
 
 ## Purpose
 
@@ -172,6 +172,11 @@ model next to it.
 | `llm_calls` | run, provider, model, tokens in and out, duration, cost |
 | `notes` | (team, task), text, origin run and message, author (`agent` or `team`), time |
 | `settings` | lab-wide settings: lab code, released models, conversations on or off |
+| `events` | the event log: kind, actor, scope (team, task, robot, prompt, run) as real columns, small JSON data; see `events.md` |
+
+**Event log:** the coarse facts that can count for a result (joins, task assignments, deploys,
+runs, robot reports, notes) at the finest scope known, written through `store.AddEvent` only.
+Kinds, scope and data fields: [`events.md`](events.md).
 
 **Deleting a team** is a soft delete: `deleted_at` is set, its robots are freed, the team
 disappears from the control room and its link stops working; its tasks, prompts, notes and runs

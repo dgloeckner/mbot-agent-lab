@@ -169,6 +169,8 @@ func (s *Server) deployPrompt(w http.ResponseWriter, r *http.Request, team store
 		s.serverError(w, err)
 		return
 	}
+	s.Lab.Record(r.Context(), store.Event{Kind: store.EventPromptDeployed, Actor: store.ActorTeam, Team: tt.Team, Task: tt.Task, Prompt: p.ID,
+		Data: map[string]any{"version": p.Version, "chars": p.Chars, "restart": req.Restart}})
 	data, _ := json.Marshal(map[string]any{"version": p.Version, "restart": req.Restart, "chars": p.Chars})
 	s.Hub.Publish(team.ID, live.LogEntry{Source: live.SourceTeam, Kind: "deploy", Data: data})
 	if req.Restart || s.Agents.Status(team.ID).Running {
@@ -336,6 +338,8 @@ func (s *Server) addNote(w http.ResponseWriter, r *http.Request, team store.Team
 		s.serverError(w, err)
 		return
 	}
+	s.Lab.Record(r.Context(), store.Event{Kind: store.EventNoteAdded, Actor: store.ActorTeam, Team: tt.Team, Task: tt.Task,
+		Data: map[string]any{"note_id": n.ID, "author": "team"}})
 	writeJSON(w, http.StatusCreated, n)
 }
 
@@ -366,7 +370,12 @@ func (s *Server) deleteNote(w http.ResponseWriter, r *http.Request, team store.T
 		writeError(w, http.StatusBadRequest, "Unbekannte Notiz.")
 		return
 	}
-	s.noteResult(w, s.Store.DeleteNote(r.Context(), tt, id))
+	err = s.Store.DeleteNote(r.Context(), tt, id)
+	if err == nil {
+		s.Lab.Record(r.Context(), store.Event{Kind: store.EventNoteDeleted, Actor: store.ActorTeam, Team: tt.Team, Task: tt.Task,
+			Data: map[string]any{"note_id": id, "author": "team"}})
+	}
+	s.noteResult(w, err)
 }
 
 func (s *Server) noteResult(w http.ResponseWriter, err error) {

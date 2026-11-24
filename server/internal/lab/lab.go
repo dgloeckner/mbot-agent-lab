@@ -175,6 +175,7 @@ func (s *Service) Join(ctx context.Context, code, name string) (store.Team, erro
 	if err != nil {
 		return store.Team{}, err
 	}
+	s.Record(ctx, store.Event{Kind: store.EventTeamJoined, Actor: store.ActorTeam, Team: t.ID, Data: map[string]string{"name": t.Name}})
 	if err := s.bridgeDefaultTask(ctx, t.ID); err != nil {
 		return store.Team{}, err
 	}
@@ -241,6 +242,7 @@ func (s *Service) SetTeamColor(ctx context.Context, teamID, color string) error 
 func (s *Service) DeleteTeam(ctx context.Context, teamID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	task := s.activeTaskID(ctx, teamID)
 	if err := s.Store.DeleteTeam(ctx, teamID); errors.Is(err, store.ErrNotFound) {
 		return ErrUnknownTeam
 	} else if err != nil {
@@ -249,6 +251,8 @@ func (s *Service) DeleteTeam(ctx context.Context, teamID string) error {
 	for _, rb := range s.Robots.Snapshot() {
 		if rb.Owner == teamID {
 			_ = s.Robots.Assign(rb.ID, robots.Owner{})
+			s.Record(ctx, store.Event{Kind: store.EventRobotReleased, Actor: store.ActorAdmin, Team: teamID, Task: task, Robot: rb.ID,
+				Data: map[string]string{"alias": rb.Alias}})
 		}
 	}
 	s.Hub.Forget(teamID)
@@ -294,10 +298,14 @@ func (s *Service) AssignRobot(ctx context.Context, robotID, teamID string) error
 		return err
 	}
 	if prev.Owner != "" {
+		s.Record(ctx, store.Event{Kind: store.EventRobotReleased, Actor: store.ActorAdmin, Team: prev.Owner, Task: s.activeTaskID(ctx, prev.Owner),
+			Robot: robotID, Data: map[string]string{"alias": prev.Alias}})
 		s.notify(prev.Owner, "robot_removed", fmt.Sprintf("Der Leitstand hat euch %s weggenommen.", prev.Alias),
 			map[string]string{"robot": robotID, "alias": prev.Alias})
 	}
 	if teamID != "" {
+		s.Record(ctx, store.Event{Kind: store.EventRobotAssigned, Actor: store.ActorAdmin, Team: teamID, Task: s.activeTaskID(ctx, teamID),
+			Robot: robotID, Data: map[string]string{"alias": owner.Alias}})
 		s.notify(teamID, "robot_added", fmt.Sprintf("Ihr habt einen Roboter dazubekommen: %s (%s). Ihr könnt ihn umbenennen.", owner.Alias, robotID),
 			map[string]string{"robot": robotID, "alias": owner.Alias})
 	}
@@ -336,6 +344,8 @@ func (s *Service) RenameRobot(ctx context.Context, teamID, robotID, alias string
 	if err := s.Robots.Assign(robotID, robots.Owner{TeamID: t.ID, TeamName: t.Name, Color: t.Color, Alias: alias}); err != nil {
 		return err
 	}
+	s.Record(ctx, store.Event{Kind: store.EventRobotRenamed, Actor: store.ActorTeam, Team: teamID, Task: s.activeTaskID(ctx, teamID),
+		Robot: robotID, Data: map[string]string{"alias": alias, "old": rb.Alias}})
 	s.notify(teamID, "robot_renamed", fmt.Sprintf("%s heißt jetzt %s.", rb.Alias, alias), map[string]string{"robot": robotID, "alias": alias, "old": rb.Alias})
 	return nil
 }

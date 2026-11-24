@@ -26,11 +26,19 @@ func (s *Service) bridgeDefaultTask(ctx context.Context, teamID string) error {
 		return err
 	}
 	tt := store.TeamTask{Team: teamID, Task: DefaultTaskID}
-	if err := s.Store.AssignTask(ctx, tt); err != nil {
-		return err
+	steps := []struct {
+		do   func(context.Context, store.TeamTask) error
+		kind string
+	}{
+		{s.Store.AssignTask, store.EventTaskAssigned},
+		{s.Store.AcceptTask, store.EventTaskAccepted},
+		{s.Store.ActivateTask, store.EventTaskActivated},
 	}
-	if err := s.Store.AcceptTask(ctx, tt); err != nil {
-		return err
+	for _, st := range steps {
+		if err := st.do(ctx, tt); err != nil {
+			return err
+		}
+		s.Record(ctx, store.Event{Kind: st.kind, Actor: store.ActorSystem, Team: tt.Team, Task: tt.Task})
 	}
-	return s.Store.ActivateTask(ctx, tt)
+	return nil
 }

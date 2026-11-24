@@ -10,8 +10,8 @@ with approved deviations on top).
 - Decisions in `docs/decisions.md` are binding. Propose deviations first; do not implement them
   silently. An approved deviation goes into `docs/decisions.md`, not into this file.
 - Long-term docs (`docs/architecture.md`, `docs/decisions.md`, `docs/protocol.md`,
-  `docs/tools.md`) describe the current state, in English, without history. A PR that changes
-  behaviour updates them in the same PR.
+  `docs/tools.md`, `docs/events.md`) describe the current state, in English, without history. A
+  PR that changes behaviour updates them in the same PR.
 - Grid freedom: robot script, server and web UI know nothing about the line grid (no junction
   coordinates, pitch or color code). Tools report floor letters and never interpret them. Field
   geometry lives only in `sim/grid.py`, the world files and `sim/tests`; reading rules live in

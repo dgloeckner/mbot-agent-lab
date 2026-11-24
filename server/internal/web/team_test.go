@@ -36,6 +36,7 @@ type testLab struct {
 	*httptest.Server
 	lab *lab.Service
 	reg *robots.Registry
+	st  *store.Store
 }
 
 func newTestServer(t *testing.T) *testLab {
@@ -83,7 +84,7 @@ func newTestServer(t *testing.T) *testLab {
 	s := &Server{Config: cfg, Robots: reg, Store: st, Hub: hub, Lab: svc, Agents: agents, Log: log}
 	srv := httptest.NewServer(s.Handler())
 	t.Cleanup(srv.Close)
-	return &testLab{Server: srv, lab: svc, reg: reg}
+	return &testLab{Server: srv, lab: svc, reg: reg, st: st}
 }
 
 func do(t *testing.T, srv *testLab, method, path, body string) (int, map[string]any) {
