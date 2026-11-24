@@ -12,12 +12,15 @@ import {
   newConversation,
   notes,
   prefs,
+  readOnly,
   robots,
   saveNote,
   sendMessage,
   session,
+  task,
   updatePrefs,
 } from '../state'
+import { lazyComponent } from '../lazy'
 import type { SideTab } from '../storage'
 import type { LogEntry, Note } from '../types'
 import { SendIcon } from './icons'
@@ -185,6 +188,20 @@ function ConversationPanel() {
   )
 }
 
+const TaskText = lazyComponent(() => import('./TaskText'))
+
+/** The task text for the team. The agent never sees it. */
+function TaskPanel() {
+  const t = task.value!
+  return (
+    <div class="task-panel scroll">
+      <h2 class="task-panel-title">{t.title}</h2>
+      <p class="panel-intro">Euer Agent sieht diesen Text nicht. Schreibt in euren Prompt, was er wissen muss.</p>
+      <TaskText task={t} />
+    </div>
+  )
+}
+
 function Composer({ placeholder }: { placeholder: string }) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
@@ -196,6 +213,7 @@ function Composer({ placeholder }: { placeholder: string }) {
     if (await sendMessage(t)) setText('')
     setSending(false)
   }
+  if (readOnly.value) return <p class="composer composer-closed">Die Aufgabe ist geschlossen.</p>
   return (
     <form
       class="composer"
@@ -259,7 +277,7 @@ function NoteItem({ n }: { n: Note }) {
       ) : (
         <>
           <p>{n.text}</p>
-          <div class="note-actions">
+          <div class="note-actions" hidden={readOnly.value}>
             <button class="btn-link" onClick={() => setEditing(true)}>
               Bearbeiten
             </button>
@@ -288,6 +306,7 @@ function NotesPanel() {
         </ul>
       )}
       <form
+        hidden={readOnly.value}
         class="note-new"
         onSubmit={async (ev) => {
           ev.preventDefault()
@@ -349,13 +368,14 @@ export function SidePane() {
   const tab = prefs.value.sideTab
   const unread = conversationUnread.value
   const tabs: [SideTab, string][] = [
+    ['task', 'Aufgabe'],
     ['log', 'Protokoll'],
     ['conversation', 'Gespräch'],
     ['notes', `Notizen${notes.value.length ? ` (${notes.value.length})` : ''}`],
     ['tools', 'Werkzeuge'],
   ]
   return (
-    <section class="pane side-pane" aria-label="Protokoll, Gespräch, Notizen und Werkzeuge">
+    <section class="pane side-pane" aria-label="Aufgabe, Protokoll, Gespräch, Notizen und Werkzeuge">
       <div class="pane-head">
         <div class="tabs" role="tablist">
           {tabs.map(([id, label]) => (
@@ -371,6 +391,7 @@ export function SidePane() {
         </div>
       </div>
       <div class="pane-body">
+        {tab === 'task' && <TaskPanel />}
         {tab === 'log' && <LogPanel />}
         {tab === 'conversation' && <ConversationPanel />}
         {tab === 'notes' && <NotesPanel />}

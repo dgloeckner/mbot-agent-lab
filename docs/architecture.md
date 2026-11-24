@@ -365,6 +365,20 @@ embed compiling without a build. No CDN assets. Rarely used views are lazy-loade
   preview, history with diffs against deployed versions and local snapshots, live log over SSE,
   conversation tab, notes, tool catalog, robots with rename and "Finden", usage, model choice.
   Browser storage (`web/src/storage.ts`) holds only the draft, draft snapshots and UI preferences.
+  - **Tasks:** the team band shows the active task with a picker: accepted tasks to switch to
+    (disabled during a run, "Erst anhalten") and new tasks with a badge. Without an active task
+    the page shows "Wartet auf eine Aufgabe von der Lab-Leitung" (or the new tasks to accept)
+    and the team's robots; editor, run and conversation are hidden. The accept dialog
+    (lazy-loaded) shows the task text, says that the agent does not see it, and asks for the
+    start prompt: the task's starter prompt, empty, or the prompt of another accepted task.
+    The side pane has a tab "Aufgabe" with the text. A closed task shows a banner and is
+    read-only (no deploy, start, messages or note changes).
+  - **Scoping:** every panel shows only the active task: log, conversation, notes, prompt
+    versions, diffs and snapshots. On the SSE event `task` (a switch on any PC of the team) the
+    page reloads the session, empties log and conversation and reopens the stream, which replays
+    the new task's backlog; entries of another task are ignored (`web/src/taskview.ts`).
+    Drafts and snapshots are stored per (team, task) (`mbot-lab:v2:<team>:<task>:…`); keys from
+    before tasks are dropped on load, preferences stay.
 - **Join page** (`/join`): lab code and team name; the browser remembers joined teams.
 - **Control room** (`/admin`): lab code for the projector, all robots live, every team with its
   robots and open browsers, robot assignment by drag and drop or from a list, team rename and

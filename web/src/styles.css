@@ -154,6 +154,11 @@ kbd {
   grid-template-rows: auto minmax(0, 1fr);
 }
 
+/* With the closed-task banner the panes keep the flexible row. */
+.app:has(> .banner-closed) {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
 .main {
   display: grid;
   grid-template-columns: calc(var(--split) * 100% - 4px) 8px minmax(0, 1fr);
@@ -186,6 +191,7 @@ kbd {
 .band {
   --focus: var(--on-accent);
   position: relative;
+  z-index: 10; /* the task menu opens over the panes below */
   isolation: isolate;
   display: grid;
   /* The team column may grow to its usage line, but never at the cost of the robot card:
@@ -1540,4 +1546,295 @@ kbd {
 .model-pending {
   opacity: 0.85;
   font-style: italic;
+}
+
+/* --- tasks on the team page ---------------------------------------------- */
+
+.task-picker {
+  position: relative;
+  margin-top: 8px;
+}
+
+.task-current {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 5px 10px;
+  font: inherit;
+  color: inherit;
+  background: color-mix(in oklab, currentColor 12%, transparent);
+  border: 1px solid color-mix(in oklab, currentColor 40%, transparent);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.task-current:hover {
+  background: color-mix(in oklab, currentColor 20%, transparent);
+}
+
+.task-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.8;
+}
+
+.task-name {
+  font-weight: 720;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-current::after {
+  content: '▾';
+  opacity: 0.8;
+}
+
+.task-flag,
+.task-new {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 0 6px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.task-new {
+  background: var(--agent);
+  color: #fff;
+}
+
+.task-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 280px;
+  max-width: 420px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 12px 36px rgb(0 0 0 / 0.22);
+}
+
+.task-menu-head {
+  margin: 6px 8px 4px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.task-menu-head span {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+  color: var(--warn);
+}
+
+.task-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 14.5px;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.task-menu-item:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.task-menu-item[aria-checked='true'] {
+  font-weight: 700;
+  background: color-mix(in oklab, var(--accent) 14%, var(--surface));
+}
+
+.task-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.waiting {
+  display: grid;
+  place-items: start center;
+  padding: 48px 24px;
+}
+
+.waiting-card {
+  width: min(640px, 100%);
+  padding: 28px 32px;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.waiting-card h2 {
+  font-size: 24px;
+  font-weight: 760;
+  margin-bottom: 8px;
+}
+
+.waiting-card p {
+  color: var(--muted);
+}
+
+.waiting-tasks {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.waiting-tasks li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  text-align: left;
+}
+
+.banner-closed {
+  margin: 10px 16px 0;
+  background: color-mix(in oklab, var(--warn) 14%, var(--surface));
+}
+
+.task-panel {
+  padding: 16px 18px;
+}
+
+.task-panel-title {
+  font-size: 20px;
+  font-weight: 760;
+  margin-bottom: 4px;
+}
+
+.composer-closed {
+  color: var(--muted);
+  font-size: 14px;
+  padding: 10px 14px;
+}
+
+.accept-dialog {
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.3);
+}
+
+.accept-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.accept-dialog::backdrop {
+  background: rgb(10 14 22 / 0.45);
+}
+
+.accept-head {
+  padding: 16px 20px 12px;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.accept-kicker {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.85;
+}
+
+.accept-head h2 {
+  font-size: 22px;
+  font-weight: 760;
+}
+
+.accept-body {
+  overflow: auto;
+  padding: 16px 20px;
+  display: grid;
+  gap: 14px;
+}
+
+.accept-note {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--agent) 14%, var(--surface));
+  font-weight: 600;
+}
+
+.accept-choice {
+  display: grid;
+  gap: 10px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.accept-choice legend {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.accept-choice label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.accept-choice label:has(input:checked) {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.accept-choice input {
+  margin-top: 4px;
+}
+
+.accept-starter {
+  margin-top: 6px;
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--code-bg);
+}
+
+.accept-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
 }

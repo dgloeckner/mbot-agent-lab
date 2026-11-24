@@ -1,4 +1,5 @@
-import { agent, busy, chooseModel, conn, copyTeamLink, deployed, identifyRobot, prefs, renameRobot, renameTeam, robots, session, startRun, stopAll, totals, updatePrefs } from '../state'
+import { agent, busy, chooseModel, conn, copyTeamLink, deployed, identifyRobot, prefs, readOnly, renameRobot, renameTeam, robots, session, startRun, stopAll, task, totals, updatePrefs } from '../state'
+import { TaskPicker } from './TaskPicker'
 import { COLOR_HEX, colorName, formatPrices, formatUsage, skillName } from '../format'
 import type { Robot } from '../types'
 import { AutoIcon, LinkIcon, MoonIcon, PlayIcon, StopIcon, SunIcon } from './icons'
@@ -92,7 +93,11 @@ export function TeamBand() {
   const a = agent.value
   const startHint = !s.agent_available
     ? 'Es ist kein Sprachmodell eingerichtet.'
-    : !deployed.value
+    : !task.value
+      ? 'Nehmt zuerst eine Aufgabe an.'
+      : readOnly.value
+        ? 'Die Aufgabe ist geschlossen.'
+        : !deployed.value
       ? 'Deployt zuerst einen Prompt.'
       : 'Startet einen neuen Lauf mit eurem aktuellen Prompt.'
   return (
@@ -121,6 +126,7 @@ export function TeamBand() {
           )}
         </p>
         <ModelPick />
+        <TaskPicker />
       </div>
 
       <div class="band-robots">
@@ -149,7 +155,7 @@ export function TeamBand() {
           <ThemeIcon />
         </button>
         {!a.running && (
-          <button class="btn btn-on-band" onClick={startRun} disabled={!s.agent_available || !deployed.value} title={startHint}>
+          <button class="btn btn-on-band" onClick={startRun} disabled={!s.agent_available || !task.value || readOnly.value || !deployed.value} title={startHint}>
             <PlayIcon /> Lauf starten
           </button>
         )}

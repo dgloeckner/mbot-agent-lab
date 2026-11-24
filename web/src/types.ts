@@ -59,6 +59,7 @@ export interface LogEntry {
   data?: Record<string, unknown>
   /** 'conversation' for the talk with the agent while no run is active; unset for the run protocol. */
   channel?: 'conversation'
+  task_id?: string
 }
 
 export type AgentState = 'waiting' | 'thinking' | 'acting'
@@ -67,6 +68,7 @@ export interface AgentStatus {
   state: AgentState
   running: boolean
   run_id?: number
+  task_id?: string
   provider?: string
   model?: string
   started_at?: string
@@ -104,8 +106,28 @@ export interface TeamModels {
   options: ModelOption[]
 }
 
+export type TaskState = 'draft' | 'open' | 'closed'
+export type TeamTaskStatus = 'assigned' | 'accepted' | 'active'
+
+/** A task assigned to the team (server/internal/store/tasks.go TeamTaskInfo). Lists leave out body and starter. */
+export interface TeamTask {
+  id: string
+  title: string
+  body: string
+  starter: string
+  state: TaskState
+  status: TeamTaskStatus
+  assigned_at: string
+  accepted_at?: string
+}
+
+export type PromptChoice = 'starter' | 'empty' | 'copy'
+
 export interface Session {
   team: Team
+  /** The active task with its text; null while the team waits for one. */
+  task: TeamTask | null
+  tasks: TeamTask[]
   robots: Robot[]
   agent: AgentStatus
   total: Totals

@@ -2,11 +2,13 @@
 
 import { computed, effect, signal } from '@preact/signals'
 import { api, ApiError, connectEvents, type ConnState } from './api'
-import { LocalStore, browserKV, shouldAutoSnapshot, type Prefs, type Snapshot } from './storage'
-import type { AgentStatus, LogEntry, Note, PromptVersion, Robot, Session, Totals } from './types'
+import { LocalStore, browserKV, dropOldKeys, shouldAutoSnapshot, type Prefs, type Snapshot } from './storage'
+import { belongsTo, taskView } from './taskview'
+import type { AgentStatus, LogEntry, Note, PromptChoice, PromptVersion, Robot, Session, TeamTask, Totals } from './types'
 
 const kv = browserKV()
-let local: LocalStore
+/** Browser storage of the active (team, task); null while the team has no task. */
+let local: LocalStore | null = null
 
 export const session = signal<Session | null>(null)
 export const loadError = signal<string | null>(null)
@@ -25,6 +27,14 @@ export const conversation = signal<LogEntry[]>([])
 export const conversationUnread = signal(0)
 export const conn = signal<ConnState>('connecting')
 export const notes = signal<Note[]>([])
+
+/** The active task (with its text) and every task assigned to the team. */
+export const task = signal<TeamTask | null>(null)
+export const tasks = signal<TeamTask[]>([])
+/** A closed task can be read but not changed. */
+export const readOnly = computed(() => task.value?.state === 'closed')
+/** The task whose accept dialog is open. */
+export const accepting = signal<TeamTask | null>(null)
 
 /** Deployed versions, newest first. `deployed` is the newest one with text. */
 export const versions = signal<PromptVersion[]>([])
@@ -90,7 +100,61 @@ effect(() => {
   else document.documentElement.dataset.theme = t
 })
 
+/** Shows the session's active task: prompt, notes, draft and history of that (team, task) only. */
+function applySession(s: Session) {
+  window.clearTimeout(saveTimer)
+  window.clearTimeout(snapTimer)
+  versionCache.clear()
+  local = s.task ? new LocalStore(kv, s.team.id, s.task.id) : null
+  session.value = s
+  robots.value = s.robots
+  agent.value = s.agent
+  totals.value = s.total
+  tasks.value = s.tasks
+  const v = taskView(s, local?.loadDraft() ?? null, local?.history() ?? [])
+  task.value = v.task
+  notes.value = v.notes
+  versions.value = v.versions
+  deployed.value = v.deployed
+  draft.value = v.draft
+  draftBase.value = v.draftBase
+  draftSavedAt.value = v.draftSavedAt
+  remoteVersion.value = v.remoteVersion
+  history.value = v.history
+  log.value = v.log
+  conversation.value = v.conversation
+  conversationUnread.value = 0
+}
+
+let events: { close: () => void; restart: () => void } | null = null
+
+/** The active task changed, here or on another PC of the team: reload everything for the new task. */
+async function onTaskChanged(id: string) {
+  if (id === (task.peek()?.id ?? '') && session.peek()) return
+  try {
+    applySession(await api.session())
+  } catch (err) {
+    fail(err)
+    return
+  }
+  // The stream keeps running; a fresh one replays the new task's backlog.
+  events?.restart()
+}
+
+async function reloadTasks() {
+  try {
+    const r = await api.tasks()
+    tasks.value = r.tasks
+    const active = r.tasks.find((t) => t.id === task.peek()?.id)
+    // The active task's state (closed) changes without a switch.
+    if (active && task.peek() && active.state !== task.peek()!.state) task.value = { ...task.peek()!, state: active.state }
+  } catch {
+    // the next event or reload brings it
+  }
+}
+
 export async function init() {
+  dropOldKeys(kv)
   let s: Session
   try {
     s = await api.session()
@@ -98,29 +162,11 @@ export async function init() {
     loadError.value = err instanceof Error ? err.message : String(err)
     return
   }
-  local = new LocalStore(kv, s.team.id)
-  session.value = s
-  robots.value = s.robots
-  agent.value = s.agent
-  totals.value = s.total
-  notes.value = s.notes
-  versions.value = s.versions
-  deployed.value = s.prompt
-  history.value = local.history()
+  applySession(s)
 
-  const saved = local.loadDraft()
-  const serverText = s.prompt?.text ?? ''
-  if (saved && saved.text !== serverText) {
-    draft.value = saved.text
-    draftBase.value = saved.base
-    draftSavedAt.value = saved.savedAt
-    if (s.prompt && s.prompt.version > saved.base) remoteVersion.value = s.prompt
-  } else {
-    draft.value = serverText
-    draftBase.value = s.prompt?.version ?? 0
-  }
-
-  connectEvents({
+  events = connectEvents({
+    task: (id) => void onTaskChanged(id),
+    tasks: () => void reloadTasks(),
     status: (st) => (conn.value = st),
     robots: (r) => (robots.value = r),
     agent: (a) => (agent.value = a),
@@ -129,6 +175,7 @@ export async function init() {
       if (session.value) session.value = { ...session.value, models: m }
     },
     log: (e) => {
+      if (!belongsTo(e, task.peek()?.id)) return
       if (e.channel === 'conversation') {
         if (append(conversation, e) && e.source === 'agent' && e.kind === 'text' && prefs.value.sideTab !== 'conversation') {
           conversationUnread.value++
@@ -154,27 +201,29 @@ let snapTimer: number | undefined
 export function setDraft(text: string) {
   draft.value = text
   window.clearTimeout(saveTimer)
+  const store = local
+  if (!store) return
   saveTimer = window.setTimeout(() => {
     const at = Date.now()
-    if (local.saveDraft({ text, base: draftBase.value, savedAt: at })) draftSavedAt.value = at
+    if (store.saveDraft({ text, base: draftBase.value, savedAt: at })) draftSavedAt.value = at
   }, 300)
   window.clearTimeout(snapTimer)
   snapTimer = window.setTimeout(() => {
     if (shouldAutoSnapshot(history.value[0], draft.value, Date.now())) {
-      history.value = local.addSnapshot(draft.value, 'auto')
+      history.value = store.addSnapshot(draft.value, 'auto')
     }
   }, 2500)
 }
 
 export function snapshotNow() {
-  if (!draft.value.trim()) return
+  if (!draft.value.trim() || !local) return
   history.value = local.addSnapshot(draft.value, 'manual')
   showToast('Zwischenstand in diesem Browser gesichert')
 }
 
 /** Replaces the editor content, keeping the previous text in the history. */
 export function restore(text: string, label: string) {
-  if (draft.value.trim() && draft.value !== text) {
+  if (draft.value.trim() && draft.value !== text && local) {
     history.value = local.addSnapshot(draft.value, 'restore')
   }
   editorBridge.replace?.(text)
@@ -188,7 +237,7 @@ export async function deploy(restart: boolean) {
   try {
     const p = await api.deploy(text, restart)
     applyDeployed({ ...p, text })
-    history.value = local.addSnapshot(text, 'deploy', p.version)
+    if (local) history.value = local.addSnapshot(text, 'deploy', p.version)
     showToast(`Version ${p.version} deployt`)
   } catch (err) {
     fail(err)
@@ -204,7 +253,7 @@ function applyDeployed(p: PromptVersion) {
   if (!versions.value.some((v) => v.version === p.version)) {
     versions.value = [{ version: p.version, created_at: p.created_at, chars: p.chars }, ...versions.value]
   }
-  local.saveDraft({ text: draft.value, base: p.version, savedAt: Date.now() })
+  local?.saveDraft({ text: draft.value, base: p.version, savedAt: Date.now() })
 }
 
 /** A deploy seen in the live log: ours, or one from another browser of the team. */
@@ -234,7 +283,7 @@ export function keepDraft() {
   if (!p) return
   remoteVersion.value = null
   draftBase.value = p.version
-  local.saveDraft({ text: draft.value, base: p.version, savedAt: Date.now() })
+  local?.saveDraft({ text: draft.value, base: p.version, savedAt: Date.now() })
 }
 
 export function acceptRemote() {
@@ -350,6 +399,30 @@ export const renameRobot = (robot: string, alias: string) => attempt(api.renameR
 
 export const identifyRobot = (robot: string, alias: string) =>
   attempt(api.identify(robot), `${alias} blinkt und piept jetzt`)
+
+/** Accepts a task with the chosen start prompt; the server makes it active and every PC of the team follows. */
+export async function acceptTask(t: TeamTask, prompt: PromptChoice, fromTask?: string): Promise<boolean> {
+  try {
+    await api.accept(t.id, prompt, fromTask)
+    showToast(`Aufgabe „${t.title}“ angenommen`)
+    await onTaskChanged(t.id)
+    return true
+  } catch (err) {
+    fail(err)
+    return false
+  }
+}
+
+/** Switches to another accepted task. Refused by the server while a run is active. */
+export async function switchTask(t: TeamTask) {
+  if (t.id === task.value?.id) return
+  try {
+    await api.activate(t.id)
+    await onTaskChanged(t.id)
+  } catch (err) {
+    fail(err)
+  }
+}
 
 export async function copyTeamLink() {
   try {

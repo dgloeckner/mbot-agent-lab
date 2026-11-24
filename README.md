@@ -174,7 +174,7 @@ robot's LEDs show, and the color band pulses in the robot's rhythm while the age
   conversations, and the conversations' share.
 - **Model:** the model of the next run with its price per million tokens, as a choice when the
   control room released more than one.
-- **Browser storage** (`localStorage`, per team): the unsaved draft, up to 80 draft snapshots and
+- **Browser storage** (`localStorage`, per team and task): the unsaved draft, up to 80 draft snapshots and
   UI preferences (theme, split, font size). Deployed versions live on the server. If another PC of
   the team deploys while this draft has changes, the page offers to take over the new version.
 

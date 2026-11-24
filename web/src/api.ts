@@ -1,6 +1,6 @@
 // Team API client. The secret team token is the second path segment.
 
-import type { AgentStatus, LogEntry, Note, PromptVersion, Robot, Session, TeamModels, Totals } from './types'
+import type { AgentStatus, LogEntry, Note, PromptChoice, PromptVersion, Robot, Session, TeamModels, TeamTask, Totals } from './types'
 
 export const token = decodeURIComponent(location.pathname.split('/')[2] ?? '')
 const base = `/t/${encodeURIComponent(token)}`
@@ -43,6 +43,11 @@ export const api = {
   setModel: (provider: string) => req<void>('PUT', '/model', { provider }),
   renameRobot: (robot: string, alias: string) => req<void>('PUT', `/robots/${encodeURIComponent(robot)}/alias`, { alias }),
   identify: (robot: string) => req<void>('POST', `/robots/${encodeURIComponent(robot)}/identify`),
+  tasks: () => req<{ tasks: TeamTask[]; active: string }>('GET', '/tasks'),
+  task: (id: string) => req<TeamTask>('GET', `/tasks/${encodeURIComponent(id)}`),
+  accept: (id: string, prompt: PromptChoice, fromTask?: string) =>
+    req<TeamTask>('POST', `/tasks/${encodeURIComponent(id)}/accept`, { prompt, from_task: fromTask ?? '' }),
+  activate: (id: string) => req<TeamTask>('POST', `/tasks/${encodeURIComponent(id)}/activate`),
 }
 
 export type ConnState = 'connecting' | 'live' | 'reconnecting'
@@ -55,7 +60,11 @@ export function connectEvents(on: {
   totals: (t: Totals) => void
   log: (e: LogEntry) => void
   status: (s: ConnState) => void
-}): () => void {
+  /** The active task changed (on any PC of the team): reload everything. */
+  task: (id: string) => void
+  /** A task was assigned, withdrawn, accepted or closed: reload the task list. */
+  tasks: () => void
+}): { close: () => void; restart: () => void } {
   let es: EventSource | null = null
   let retry: number | undefined
   const open = () => {
@@ -73,10 +82,14 @@ export function connectEvents(on: {
     es.addEventListener('totals', (ev) => on.totals(JSON.parse((ev as MessageEvent).data)))
     es.addEventListener('models', (ev) => on.models(JSON.parse((ev as MessageEvent).data)))
     es.addEventListener('log', (ev) => on.log(JSON.parse((ev as MessageEvent).data)))
+    es.addEventListener('task', (ev) => on.task(JSON.parse((ev as MessageEvent).data).task_id ?? ''))
+    es.addEventListener('tasks', () => on.tasks())
   }
   open()
-  return () => {
+  const close = () => {
     window.clearTimeout(retry)
     es?.close()
   }
+  // A fresh connection (no Last-Event-ID) replays the whole backlog of the active task.
+  return { close, restart: () => (close(), open()) }
 }
