@@ -1,5 +1,6 @@
 // Team API client. The secret team token is the second path segment.
 
+import type { ProgramDetail, ProgramEvent, ProgramInfo } from './types'
 import type { AgentStatus, LogEntry, Note, PromptChoice, PromptVersion, Robot, Session, TeamModels, TeamTask, Totals } from './types'
 
 export const token = decodeURIComponent(location.pathname.split('/')[2] ?? '')
@@ -49,6 +50,16 @@ export const api = {
     req<TeamTask>('POST', `/tasks/${encodeURIComponent(id)}/accept`, { prompt, from_task: fromTask ?? '' }),
   /** Runs one built-in tool by hand; the answer is the tool result as the agent would get it. */
   runTool: (name: string, args: Record<string, unknown>) => req<Record<string, any>>('POST', `/tools/${encodeURIComponent(name)}`, args),
+  programs: () => req<ProgramInfo[]>('GET', '/programs'),
+  program: (id: string) => req<ProgramDetail>('GET', `/programs/${encodeURIComponent(id)}`),
+  createProgram: (name: string, description: string, blockly: unknown) => req<ProgramDetail>('POST', '/programs', { name, description, blockly }),
+  saveProgram: (id: string, name: string, description: string, blockly: unknown) =>
+    req<ProgramDetail>('PUT', `/programs/${encodeURIComponent(id)}`, { name, description, blockly }),
+  deleteProgram: (id: string) => req<void>('DELETE', `/programs/${encodeURIComponent(id)}`),
+  runProgram: (id: string, robot: string | undefined, step: boolean) =>
+    req<{ run: string }>('POST', `/programs/${encodeURIComponent(id)}/run`, { robot: robot ?? '', step }),
+  continueProgram: (run: string) => req<void>('POST', `/program-runs/${encodeURIComponent(run)}/continue`),
+  blocks: () => req<{ definitions: any[]; toolbox: any }>('GET', '/blocks'),
   activate: (id: string) => req<TeamTask>('POST', `/tasks/${encodeURIComponent(id)}/activate`),
 }
 
@@ -66,6 +77,10 @@ export function connectEvents(on: {
   task: (id: string) => void
   /** A task was assigned, withdrawn, accepted or closed: reload the task list. */
   tasks: () => void
+  /** A team tool was saved or deleted (on any PC of the team). */
+  programs: (id: string) => void
+  /** A step of a running team tool. */
+  program: (e: ProgramEvent) => void
 }): { close: () => void; restart: () => void } {
   let es: EventSource | null = null
   let retry: number | undefined
@@ -86,6 +101,8 @@ export function connectEvents(on: {
     es.addEventListener('log', (ev) => on.log(JSON.parse((ev as MessageEvent).data)))
     es.addEventListener('task', (ev) => on.task(JSON.parse((ev as MessageEvent).data).task_id ?? ''))
     es.addEventListener('tasks', () => on.tasks())
+    es.addEventListener('programs', (ev) => on.programs(JSON.parse((ev as MessageEvent).data).id ?? ''))
+    es.addEventListener('program', (ev) => on.program(JSON.parse((ev as MessageEvent).data)))
   }
   open()
   const close = () => {

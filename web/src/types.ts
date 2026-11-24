@@ -155,3 +155,56 @@ export interface Session {
   tools: ToolInfo[]
   limits: { prompt_chars: number; message_chars: number; note_chars: number }
 }
+
+/** A problem of a team tool, at its block (empty: name or description). */
+export interface ProgramProblem {
+  block?: string
+  text: string
+}
+
+/** A team tool ("eigenes Werkzeug") in the list. */
+export interface ProgramInfo {
+  id: string
+  name: string
+  description: string
+  valid: boolean
+  problems: ProgramProblem[]
+  updated_at: string
+}
+
+/** A team tool with its Blockly state. */
+export interface ProgramDetail extends ProgramInfo {
+  blockly: unknown
+}
+
+/** How a team tool ended (server: programs.Result). */
+export interface ProgramResult {
+  ok: boolean
+  end: 'done' | 'aborted' | 'limit' | 'stopped'
+  steps: number
+  runtime_s: number
+  at?: string
+  block?: string
+  tool?: string
+  reason?: string
+  error?: string
+  last?: Record<string, any>
+  value?: unknown
+}
+
+/** An SSE "program" event: a step of a running team tool. */
+export interface ProgramEvent {
+  run: string
+  program: string
+  phase: 'start' | 'wait' | 'before' | 'after' | 'end'
+  name?: string
+  robot?: string
+  step?: number | boolean
+  block?: string
+  kind?: 'call' | 'sense'
+  tool?: string
+  args?: Record<string, unknown>
+  round?: number
+  result?: any
+  ms?: number
+}

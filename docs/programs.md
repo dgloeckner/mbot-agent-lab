@@ -154,6 +154,28 @@ tool's tree on one of the team's robots and answers its run id (`agent.Manager.R
   row of the pair: start and end as messages, each step as a tool call that names the team tool
   (`tool_calls.program`). `INFO` lines `team tool started`, `team tool step`, `team tool ended`.
 
+## Editor
+
+The team page builds team tools in the left pane ("Werkzeug bauen"); the side pane stays, so a
+team can try a built-in tool on the right while it builds on the left.
+
+- **Blockly** is a lazy-loaded part of the build (`web/src/components/ToolEditor.tsx`), German
+  locale, with its cursors and icons served by the server under `/assets/blockly-media/` (a Vite
+  plugin copies them from the package): nothing is fetched from another host. The block
+  definitions and the toolbox come from `GET blocks`; the browser keeps no tool list.
+- **Saving** is automatic 1.5 s after the last change (blocks, name or description), last write
+  wins. A `programs` event for the open tool from another PC reloads it, unless a change of this
+  PC is still waiting to be saved.
+- **Problems:** a block the server refuses gets a red outline and a warning icon with the reason;
+  problems of name or description stand below the workspace.
+- **Running:** "Ausführen" and "Einzelschritt" save first and start the run; the `program` events
+  mark the running block (`highlightBlock`) and fill the "Ablauf": every step with its result in
+  words, the rounds of a loop as separator lines, the end with where and why it stopped. In single
+  step "Weiter" replaces "Ausführen". "Stopp" is the team's stop.
+- While an agent run is active "Ausführen" and "Einzelschritt" are disabled ("Erst anhalten"); a
+  closed task is read-only. The browser never runs anything: it shows and sends states.
+- Pure helpers with tests: `web/src/toolrun.ts` (events to "Ablauf", the saver, problems per block).
+
 ## Blocks
 
 Two representations, one source: the browser stores the **Blockly state** of a team tool, the

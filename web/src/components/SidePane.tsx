@@ -1,8 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
 import { useSignal } from '@preact/signals'
-import { clock, describe, describeTool, logGroup, relativeTime } from '../format'
+import { clock, describe, describeTool, logGroup, programEnd, relativeTime } from '../format'
 import {
   addNote,
+  editTool,
+  newTool,
+  runTeamTool,
+  teamTools,
+  toolRun,
   agent,
   conversation,
   conversationUnread,
@@ -331,6 +336,58 @@ function NotesPanel() {
 
 const ToolConsole = lazyComponent(() => import('./ToolConsole'))
 
+const runningText = (n: number) => `Läuft … ${n === 1 ? '1 Schritt' : `${n} Schritte`}`
+
+/** "Eigene Werkzeuge": the team's tools above the built-in ones. */
+function OwnTools({ blocked, robot }: { blocked: string | null; robot?: string }) {
+  const list = teamTools.value
+  const run = toolRun.value
+  return (
+    <section class="own-tools">
+      <div class="own-tools-head">
+        <h3>Eigene Werkzeuge</h3>
+        {!readOnly.value && (
+          <button class="btn btn-small" onClick={() => void newTool()}>
+            Neues Werkzeug
+          </button>
+        )}
+      </div>
+      {list.length === 0 ? (
+        <p class="panel-intro">Noch keine. Baut aus Blöcken ein eigenes Werkzeug, zum Beispiel „fahre ein Quadrat“.</p>
+      ) : (
+        <ul class="tools">
+          {list.map((t) => (
+            <li key={t.id} class="own-tool">
+              <div class="own-tool-row">
+                <code>{t.name}</code>
+                <span class={`tool-tag ${t.valid ? 'tag-ok' : 'tag-bad'}`}>{t.valid ? 'bereit' : 'hat Fehler'}</span>
+                <span class="spacer" />
+                <button class="btn-link" onClick={() => editTool(t.id)}>
+                  Bearbeiten
+                </button>
+                <button
+                  class="btn btn-small btn-accent"
+                  disabled={!t.valid || blocked !== null || run.running}
+                  title={blocked ?? (t.valid ? undefined : 'Erst die Fehler beheben.')}
+                  onClick={() => void runTeamTool(t.id, false, robot)}
+                >
+                  Ausführen
+                </button>
+              </div>
+              {t.description && <span class="tool-summary">{t.description}</span>}
+              {run.program === t.id && (run.running || run.result) && (
+                <p class="own-tool-run" data-ok={run.result ? run.result.end === 'done' : undefined}>
+                  {run.running ? runningText(run.lines.filter((l) => l.kind === 'step').length) : programEnd(t.name, run.result!)}
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
 /** Why the console is off right now, or null. */
 function consoleBlocked(): string | null {
   if (readOnly.value) return 'Die Aufgabe ist geschlossen.'
@@ -376,6 +433,7 @@ function ToolsPanel() {
           Erst anhalten: Solange euer Agent läuft, könnt ihr nichts selbst ausführen.
         </p>
       )}
+      <OwnTools blocked={blocked} robot={robot} />
       {groups.map((g) => (
         <section key={g}>
           <h3>{g}</h3>

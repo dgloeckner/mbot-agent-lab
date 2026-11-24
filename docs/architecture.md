@@ -400,6 +400,14 @@ embed compiling without a build. No CDN assets. Rarely used views are lazy-loade
     While a run is active the forms are disabled ("Erst anhalten"); a closed task is read-only.
     By-hand calls appear in the protocol as "Ihr"; without a run the protocol offers "Selbst
     steuern", which opens the tab.
+  - **Team tools** (tab "Werkzeuge", group "Eigene Werkzeuge" above the built-in tools): name,
+    description, "bereit" or "hat Fehler", "Neues Werkzeug", per tool "Bearbeiten" and
+    "Ausführen" with the end of the last run below. "Bearbeiten" opens the tool editor in the left
+    pane: its head switches between "Prompt" and "Werkzeug bauen", the side pane stays. The editor
+    (`web/src/components/ToolEditor.tsx`, Blockly, lazy-loaded) has a picker of the team's tools,
+    "Ausführen", "Einzelschritt" ("Weiter") and "Stopp" in its head, name and description, the
+    block categories and the workspace, and the "Ablauf" beside it. Details: `programs.md`,
+    "Editor".
   Browser storage (`web/src/storage.ts`) holds only the draft, draft snapshots and UI preferences.
   - **Tasks:** the team band shows the active task with a picker: accepted tasks to switch to
     (disabled during a run, "Erst anhalten") and new tasks with a badge. Without an active task

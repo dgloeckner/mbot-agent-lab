@@ -12,6 +12,7 @@ import {
   draftSavedAt,
   editorBridge,
   keepDraft,
+  leftView,
   prefs,
   readOnly,
   remoteVersion,
@@ -23,6 +24,25 @@ import {
 import { lazyComponent } from '../lazy'
 
 const Preview = lazyComponent(() => import('./Preview'))
+const ToolEditor = lazyComponent(() => import('./ToolEditor'))
+
+/** The head of the left pane switches between the prompt and the tool editor. */
+function ViewSwitch() {
+  return (
+    <div class="view-switch" role="tablist" aria-label="Linker Bereich">
+      {(
+        [
+          ['prompt', 'Prompt'],
+          ['tool', 'Werkzeug bauen'],
+        ] as const
+      ).map(([id, label]) => (
+        <button key={id} role="tab" aria-selected={leftView.value === id} class="view-switch-btn" onClick={() => (leftView.value = id)}>
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
 const HistoryView = lazyComponent(() => import('./HistoryView'))
 
 type Tab = 'write' | 'preview' | 'history'
@@ -93,9 +113,16 @@ export function PromptPane() {
     ['preview', 'Vorschau'],
     ['history', 'Verlauf'],
   ]
+  const tool = leftView.value === 'tool'
   return (
-    <section class="pane prompt-pane" aria-label="Prompt">
-      <div class="pane-head">
+    <section class="pane prompt-pane" aria-label={tool ? 'Werkzeug bauen' : 'Prompt'}>
+      <ViewSwitch />
+      {tool && (
+        <div class="pane-body">
+          <ToolEditor />
+        </div>
+      )}
+      <div class="pane-head" hidden={tool}>
         <div class="tabs" role="tablist">
           {tabs.map(([id, label]) => (
             <button
@@ -128,7 +155,7 @@ export function PromptPane() {
         </div>
       </div>
 
-      {remote && (
+      {remote && !tool && (
         <div class="banner" role="status">
           <span>
             Version {remote.version} wurde an einem anderen Rechner deployt. Euer Entwurf hier ist anders.
@@ -142,7 +169,7 @@ export function PromptPane() {
         </div>
       )}
 
-      <div class="pane-body">
+      <div class="pane-body" hidden={tool}>
         <div hidden={tab.value !== 'write'} class="tab-panel">
           <EditorHost />
         </div>
@@ -157,7 +184,7 @@ export function PromptPane() {
           </div>
         )}
       </div>
-      <StatusLine />
+      {!tool && <StatusLine />}
     </section>
   )
 }
