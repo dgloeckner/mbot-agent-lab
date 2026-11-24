@@ -57,8 +57,11 @@ takes a color only, no pattern.
   `Träger`; by default the sticker color, e.g. `rot`), never `mbot-2`. Devices can be swapped
   without changing prompts as long as the new robot gets the same name. `all` and `alle` are
   reserved and cannot be robot names.
-- **`retrace_path` turns around:** it drives the way back forward, so the obstacle reflex
-  stays on, and ends at the start facing the way it came. The way counts from the start of the
+- **Obstacles:** every forward motion stops by itself before an obstacle the ultrasonic sensor
+  sees (reason `obstacle`). The sensor looks forward only: `drive` backwards is blind, and the
+  tool description tells the agent so. Details and limits in `docs/protocol.md`, "Rules".
+- **`retrace_path` turns around:** it drives the way back forward, also a stretch the team drove
+  backwards, so the obstacle reflex stays on, and ends at the start facing the way it came. The way counts from the start of the
   run: the server clears the trip log of the team's robots when a run starts. After an abort the
   rest stays in the trip log and the next call continues (details in `docs/protocol.md`, "Trip log").
 - **`drive_arc` curves:** it drives forward on a circle of `radius_cm` (10 to 200 cm, to the

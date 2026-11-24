@@ -105,7 +105,7 @@ class NoisySkillTest(unittest.TestCase):
     def test_scan_faces_the_most_open_direction(self):
         # A wall close on the left and ahead, open space far to the right.
         walls = [[30, 0, 30, 200], [30, 200, 250, 200], [250, 200, 250, 0], [250, 0, 30, 0]]
-        run = SkillRun({"walls": walls, "start": {"x": 50, "y": 170, "heading": 0}})
+        run = SkillRun({"walls": walls, "start": {"x": 50, "y": 150, "heading": 0}})
         r = run.run("scan", {"from_deg": -90, "to_deg": 90, "step_deg": 15})
         d = r["data"]
         self.assertEqual(r["reason"], "done", r)

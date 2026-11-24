@@ -372,7 +372,7 @@ func builtins() []*tool {
 	return []*tool{
 		{
 			name:     "drive",
-			desc:     "Fährt geradeaus um cm Zentimeter, negative Werte fahren rückwärts. Hält von selbst bei einem Hindernis an. Ergebnis: driven_cm, reason (done, obstacle, stopped, tilted, timeout), floor und min_distance_cm. " + floorHelp,
+			desc:     "Fährt geradeaus um cm Zentimeter, negative Werte fahren rückwärts. Vorwärts hält er von selbst vor einem Hindernis an (reason obstacle). Hinten hat er keinen Sensor: rückwärts fährt er blind, auch gegen eine Wand, also nur dorthin, wo sicher frei ist, etwa ein Stück auf dem Weg zurück, den er gerade gekommen ist. Ergebnis: driven_cm, reason (done, obstacle, stopped, tilted, timeout), floor und min_distance_cm. " + floorHelp,
 			props:    static(map[string]any{"cm": map[string]any{"type": "number", "minimum": -300, "maximum": 300}, "speed": map[string]any{"type": "number", "minimum": 5, "maximum": 80, "description": "Umdrehungen pro Minute, Standard 40."}}),
 			required: []string{"cm"}, robot: robotOne,
 			run: func(ctx context.Context, c *call) any {
@@ -385,7 +385,7 @@ func builtins() []*tool {
 		},
 		{
 			name:     "turn",
-			desc:     "Dreht auf der Stelle um degrees Grad. Positiv dreht nach rechts, negativ nach links. Ergebnis: turned_deg, reason und floor (wie bei drive, Position in Grad).",
+			desc:     "Dreht auf der Stelle um degrees Grad. Positiv dreht nach rechts, negativ nach links. Beim Drehen prüft er keine Hindernisse; dicht an einer Wand kann er sie mit einer Ecke streifen. Ergebnis: turned_deg, reason und floor (wie bei drive, Position in Grad).",
 			props:    static(map[string]any{"degrees": map[string]any{"type": "number", "minimum": -720, "maximum": 720}}),
 			required: []string{"degrees"}, robot: robotOne,
 			run: func(ctx context.Context, c *call) any {
@@ -410,7 +410,7 @@ func builtins() []*tool {
 		},
 		{
 			name: "drive_until",
-			desc: "Fährt geradeaus, bis eine Wand näher als stop_below_cm ist (reason wall), die Bodenfarbe stop_on_color erscheint (reason color) oder max_cm gefahren sind (reason max_cm). Die Farbe zählt, sobald eine der vier Bodensonden sie sieht; any ist jede Farbe außer Weiß. Steht der Roboter beim Start schon auf der Farbe, zählt sie erst, wenn er sie verlassen hat und wieder erreicht. Der Roboter prüft das selbst mit geglätteten Messwerten. Ergebnis: driven_cm, reason, distance_cm, color, floor (wie bei drive) und min_distance_cm.",
+			desc: "Fährt geradeaus, bis eine Wand näher als stop_below_cm ist (reason wall), die Bodenfarbe stop_on_color erscheint (reason color) oder max_cm gefahren sind (reason max_cm). Vor einem Hindernis hält er immer von selbst an (reason obstacle), auch ohne stop_below_cm. Die Farbe zählt, sobald eine der vier Bodensonden sie sieht; any ist jede Farbe außer Weiß. Steht der Roboter beim Start schon auf der Farbe, zählt sie erst, wenn er sie verlassen hat und wieder erreicht. Der Roboter prüft das selbst mit geglätteten Messwerten. Ergebnis: driven_cm, reason, distance_cm, color, floor (wie bei drive) und min_distance_cm.",
 			props: static(map[string]any{
 				"max_cm":        map[string]any{"type": "number", "minimum": 1, "maximum": 300},
 				"stop_below_cm": map[string]any{"type": "number", "minimum": 3, "maximum": 100},
@@ -458,7 +458,7 @@ func builtins() []*tool {
 		},
 		{
 			name: "follow_line_until",
-			desc: "Folgt einer Linie auf dem Boden und lenkt dabei selbst. Endet an der Farbe stop_on_color (reason color, zählt wie bei drive_until), an einer Kreuzung (reason crossing, abschaltbar mit stop_at_crossing false), wenn die Linie aufhört (reason line_lost) oder nach max_cm (reason max_cm). Ergebnis: driven_cm, reason, color und floor (wie bei drive).",
+			desc: "Folgt einer Linie auf dem Boden und lenkt dabei selbst. Endet an der Farbe stop_on_color (reason color, zählt wie bei drive_until), an einer Kreuzung (reason crossing, abschaltbar mit stop_at_crossing false), wenn die Linie aufhört (reason line_lost) oder nach max_cm (reason max_cm). Vor einem Hindernis hält er von selbst an (reason obstacle). Ergebnis: driven_cm, reason, color und floor (wie bei drive).",
 			props: static(map[string]any{
 				"max_cm":           map[string]any{"type": "number", "minimum": 1, "maximum": 300},
 				"stop_on_color":    map[string]any{"type": "string", "enum": floorColors},

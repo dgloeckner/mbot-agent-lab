@@ -465,8 +465,9 @@ class RetraceSkill(Motion):
 
     The log is the way from its start to here. A turn at its end is folded
     into self.turned (the robot's rotation on top of the logged way). Before a
-    drive the robot faces back (turned 180) and drives the same distance
-    forward, so the obstacle reflex stays on. Sub-steps are ordinary drive and
+    drive the robot faces the way back (turned 180, or 0 for a drive the team
+    made backwards) and drives the distance forward, so the obstacle reflex
+    stays on: the retrace never drives blind. Sub-steps are ordinary drive and
     turn skills and never reach the log. The skill works the log off in place:
     done leaves it empty, an abort leaves the way still to go plus a turn for
     self.turned, so a new retrace_path continues from here.
@@ -498,11 +499,12 @@ class RetraceSkill(Motion):
             self.segments += 1
         if not log:
             return False
-        deg = _norm(180 - self.turned)
+        cm = log[-1][1]
+        deg = _norm((180 if cm > 0 else 0) - self.turned)
         if abs(deg) > SK_TURN_TOLERANCE_DEG:
             self.sub = TurnSkill({"deg": deg})
         else:
-            self.sub = DriveSkill({"cm": log[-1][1]})
+            self.sub = DriveSkill({"cm": abs(cm)})
         self.forward = self.sub.forward
         self.sub.start(s)
         return True
@@ -515,8 +517,9 @@ class RetraceSkill(Motion):
         if kind == "turn":
             self.turned += value
         else:
-            self.driven += abs(value)
-            rest = round(self.log[-1][1] - value, 1)
+            self.driven += value
+            cm = self.log[-1][1]
+            rest = round(cm - value if cm > 0 else cm + value, 1)
             if abs(rest) < 1:
                 self.log.pop()
                 self.segments += 1

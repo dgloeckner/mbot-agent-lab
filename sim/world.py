@@ -37,6 +37,10 @@ CM_PER_WHEEL_DEG = math.pi * WHEEL_DIAMETER_CM / 360
 TRACK_CM = GEOMETRY["track_cm"]                    # distance between the wheels
 ROBOT_RADIUS_CM = GEOMETRY["robot_radius_cm"]
 SENSOR_FRONT_CM = GEOMETRY["ultrasonic_front_cm"]  # ultrasonic sensor ahead of the axle
+# The echo comes back from the nearest surface inside the sound cone, not only
+# straight ahead: a wall approached at a slant answers from its nearest point.
+SENSOR_BEAM_DEG = GEOMETRY["ultrasonic_beam_deg"]  # full opening angle
+BEAM_RAYS = 7
 GROUND_FRONT_CM = GEOMETRY["probe_front_cm"]       # quad RGB sensor bar ahead of the axle ("o")
 PROBES = ("L2", "L1", "R1", "R2")
 PROBE_LATERAL_CM = tuple(GEOMETRY["probe_lateral_cm"][p] for p in PROBES)
@@ -185,13 +189,14 @@ class World:
     def distance_cm(self):
         self.update()
         ox, oy = self._ahead(SENSOR_FRONT_CM)
-        r = math.radians(self.heading)
-        dx, dy = math.sin(r), math.cos(r)
         best = MAX_RANGE_CM
-        for w in self.walls:
-            t = _ray_segment(ox, oy, dx, dy, w)
-            if t is not None and t < best:
-                best = t
+        for i in range(BEAM_RAYS):
+            r = math.radians(self.heading + SENSOR_BEAM_DEG * (i / (BEAM_RAYS - 1) - 0.5))
+            dx, dy = math.sin(r), math.cos(r)
+            for w in self.walls:
+                t = _ray_segment(ox, oy, dx, dy, w)
+                if t is not None and t < best:
+                    best = t
         if self.rng:
             p = self.rng.random()
             if p < 0.04:
