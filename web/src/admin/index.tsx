@@ -3,7 +3,11 @@ import { useEffect, useState } from 'preact/hooks'
 import { signal } from '@preact/signals'
 import { COLOR_HEX, colorName, formatPrices, formatUsage, onColor, relativeTime, skillName } from '../format'
 import type { AgentStatus, ModelOption, RobotState, Totals } from '../types'
+import { lazyComponent } from '../lazy'
+import { ALL_TEAMS, STATUS_LABEL, assignBody, assignedText, groupTasks, teamsWithout, type AdminTask, type AdminTeamTask, type TaskDetail } from './tasks'
 import './admin.css'
+
+const TaskEditor = lazyComponent(() => import('./TaskEditor'))
 
 interface AdminRobot {
   id: string
@@ -27,6 +31,7 @@ interface AdminTeam {
   provider: string // model provider of the team's next run
   agent: AgentStatus // current or last run
   total: Totals // all runs and conversations
+  tasks: AdminTeamTask[] // assigned tasks and where the team stands
 }
 
 interface AdminState {
@@ -35,6 +40,7 @@ interface AdminState {
   conversation: boolean // teams may talk with their agent while no run is active
   teams: AdminTeam[]
   robots: AdminRobot[]
+  tasks: AdminTask[]
 }
 
 const AGENT_LABEL = { waiting: 'wartet', thinking: 'denkt nach', acting: 'handelt' } as const
@@ -111,6 +117,58 @@ const assign = (robot: string, team: string) => {
   if (!r || r.team === team) return
   const tname = state.value?.teams.find((t) => t.id === team)?.name
   void act(call('POST', '/assign', { robot, team }), team ? `${robot} gehört jetzt ${tname}` : `${robot} ist frei`)
+}
+
+// --- tasks ------------------------------------------------------------------
+
+/** The task open in the editor dialog. */
+const editing = signal<TaskDetail | null>(null)
+
+async function openTask(id: string) {
+  try {
+    editing.value = await call('GET', `/tasks/${id}`)
+  } catch (e) {
+    say((e as Error).message, true)
+  }
+}
+
+async function newTask() {
+  try {
+    editing.value = await call('POST', '/tasks', { title: 'Neue Aufgabe', body: '', starter: '' })
+    void act(Promise.resolve())
+  } catch (e) {
+    say((e as Error).message, true)
+  }
+}
+
+/** Runs a task action from the dialog; true when it worked. */
+async function taskAction(p: Promise<unknown>, ok: string): Promise<boolean> {
+  try {
+    await p
+    say(ok)
+    if (auth.value === 'ok') state.value = await call('GET', '/state')
+    return true
+  } catch (e) {
+    say((e as Error).message, true)
+    return false
+  }
+}
+
+function assignTask(task: string, target: string) {
+  const s = state.value
+  const t = s?.tasks.find((x) => x.id === task)
+  if (!s || !t) return
+  if (target === ALL_TEAMS && !confirm(`„${t.title}“ allen ${s.teams.length} Teams zuweisen? Teams, die später beitreten, bekommen sie nicht automatisch.`)) return
+  const names = Object.fromEntries(s.teams.map((x) => [x.id, x.name]))
+  void call('POST', `/tasks/${task}/assign`, assignBody(target))
+    .then((r: { assigned: string[] }) => act(Promise.resolve(), assignedText(t.title, r.assigned, names)))
+    .catch((e: Error) => say(e.message, true))
+}
+
+function closeTask(t: { id: string; title: string }) {
+  if (!confirm(`„${t.title}“ schließen? Laufende Läufe in dieser Aufgabe enden sofort. Danach kann kein Team darin mehr deployen oder starten; alles bleibt lesbar.`)) return false
+  void taskAction(call('POST', `/tasks/${t.id}/close`), `„${t.title}“ geschlossen`).then((ok) => ok && (editing.value = null))
+  return true
 }
 
 const modelName = (provider: string) => state.value?.models.find((m) => m.provider === provider)?.model ?? provider
@@ -217,7 +275,8 @@ function DropZone(props: { team: string; class: string; children: preact.Compone
       class={`${props.class}${over ? ' drop-over' : ''}`}
       aria-label={props.label}
       onDragOver={(ev) => {
-        if (ev.dataTransfer?.types.includes('text/robot')) {
+        const types = ev.dataTransfer?.types ?? []
+        if (types.includes('text/robot') || (props.team && types.includes('text/task'))) {
           ev.preventDefault()
           setOver(true)
         }
@@ -228,6 +287,8 @@ function DropZone(props: { team: string; class: string; children: preact.Compone
         setOver(false)
         const id = ev.dataTransfer?.getData('text/robot')
         if (id) assign(id, props.team)
+        const task = ev.dataTransfer?.getData('text/task')
+        if (task && props.team) assignTask(task, props.team)
       }}
     >
       {props.children}
@@ -287,6 +348,7 @@ function TeamCard({ t, robots, teams }: { t: AdminTeam; robots: AdminRobot[]; te
           ))}
         </div>
       )}
+      <TeamTasks t={t} />
       <ul class="robot-list">
         {mine.length === 0 ? (
           <li class="drop-hint">Roboter hierher ziehen oder unten auswählen</li>
@@ -360,6 +422,100 @@ function TeamCard({ t, robots, teams }: { t: AdminTeam; robots: AdminRobot[]; te
       </p>
       <p class="team-age">Beigetreten {relativeTime(t.created_at)}</p>
     </DropZone>
+  )
+}
+
+function TeamTasks({ t }: { t: AdminTeam }) {
+  if (t.tasks.length === 0) return <p class="team-tasks-empty">Noch keine Aufgabe. Zieht eine offene Aufgabe hierher.</p>
+  return (
+    <ul class="team-tasks" aria-label={`Aufgaben von ${t.name}`}>
+      {t.tasks.map((x) => (
+        <li key={x.id} data-status={x.status} data-closed={x.state === 'closed'}>
+          <span class="team-task-title">{x.title}</span>
+          <span class="team-task-status">
+            {STATUS_LABEL[x.status]}
+            {x.state === 'closed' ? ', geschlossen' : ''}
+          </span>
+          {x.status === 'assigned' && x.state !== 'closed' && (
+            <button
+              class="btn-link"
+              aria-label={`${x.title} von ${t.name} zurückziehen`}
+              onClick={() => act(call('DELETE', `/tasks/${x.id}/assign/${t.id}`), `„${x.title}“ zurückgezogen`)}
+            >
+              Zurückziehen
+            </button>
+          )}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function TaskItem({ task, teams }: { task: AdminTask; teams: AdminTeam[] }) {
+  const open = task.state === 'open'
+  const choices = open ? teamsWithout(teams, task.id) : []
+  return (
+    <li
+      class="task-item"
+      data-state={task.state}
+      draggable={open}
+      onDragStart={(ev) => {
+        ev.dataTransfer!.setData('text/task', task.id)
+        ev.dataTransfer!.effectAllowed = 'copy'
+      }}
+    >
+      <button class="task-open" onClick={() => openTask(task.id)} title={task.state === 'draft' ? 'Bearbeiten' : 'Ansehen'}>
+        {task.title}
+      </button>
+      {open && choices.length > 0 && (
+        <select
+          class="chip-move"
+          aria-label={`${task.title} zuweisen`}
+          value=""
+          onChange={(e) => {
+            const v = e.currentTarget.value
+            e.currentTarget.value = ''
+            if (v) assignTask(task.id, v)
+          }}
+        >
+          <option value="">Zuweisen …</option>
+          {choices.length > 0 && <option value={ALL_TEAMS}>An alle Teams</option>}
+          {choices.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+      )}
+    </li>
+  )
+}
+
+function TasksPanel({ tasks, teams }: { tasks: AdminTask[]; teams: AdminTeam[] }) {
+  const groups = groupTasks(tasks)
+  return (
+    <section class="models-panel tasks-panel" aria-label="Aufgaben">
+      <div class="panel-head">
+        <h2>Aufgaben</h2>
+        <button class="btn btn-small btn-accent" onClick={newTask}>
+          Neue Aufgabe
+        </button>
+      </div>
+      <p class="pool-sub">Offene Aufgaben auf ein Team ziehen oder über „Zuweisen“ verteilen. Den Aufgabentext sehen nur die Teams, nie der Agent.</p>
+      {groups.length === 0 && <p class="drop-hint">Noch keine Aufgaben.</p>}
+      {groups.map((g) => (
+        <div key={g.state} class="task-group">
+          <h3>
+            {g.label} <span class="count">{g.tasks.length}</span>
+          </h3>
+          <ul class="task-list">
+            {g.tasks.map((t) => (
+              <TaskItem key={t.id} task={t} teams={teams} />
+            ))}
+          </ul>
+        </div>
+      ))}
+    </section>
   )
 }
 
@@ -468,6 +624,7 @@ function Board() {
               {free.length === 0 ? <li class="drop-hint">Alle Roboter sind zugeteilt. Hierher ziehen gibt einen frei.</li> : free.map((r) => <RobotChip key={r.id} r={r} teams={s.teams} inTeam={false} />)}
             </ul>
           </DropZone>
+          <TasksPanel tasks={s.tasks} teams={s.teams} />
           <ModelsPanel models={s.models} teams={s.teams} />
           <ConversationPanel on={s.conversation} />
         </div>
@@ -498,12 +655,44 @@ function AdminApp() {
   return (
     <>
       {auth.value === 'login' ? <Login /> : auth.value === 'ok' && state.value ? <Board /> : <main class="fullpage-message" aria-busy="true" />}
+      {editing.value && <TaskDialog task={editing.value} />}
       {toast.value && (
         <div class={`toast${toast.value.error ? ' toast-error' : ''}`} role={toast.value.error ? 'alert' : 'status'}>
           {toast.value.text}
         </div>
       )}
     </>
+  )
+}
+
+function TaskDialog({ task }: { task: TaskDetail }) {
+  const done = () => (editing.value = null)
+  return (
+    <TaskEditor
+      key={task.id}
+      task={task}
+      onClose={done}
+      onSave={(t) => taskAction(call('PUT', `/tasks/${task.id}`, t), 'Entwurf gespeichert')}
+      onPublish={(t) =>
+        taskAction(
+          call('PUT', `/tasks/${task.id}`, t).then(() => call('POST', `/tasks/${task.id}/publish`)),
+          `„${t.title}“ veröffentlicht`,
+        )
+      }
+      onDuplicate={async () => {
+        try {
+          const copy: TaskDetail = await call('POST', `/tasks/${task.id}/duplicate`)
+          editing.value = copy
+          void act(Promise.resolve(), 'Kopie als Entwurf angelegt')
+        } catch (e) {
+          say((e as Error).message, true)
+        }
+      }}
+      onCloseTask={() => closeTask(task)}
+      onDelete={() => {
+        if (confirm(`Entwurf „${task.title}“ löschen?`)) void taskAction(call('DELETE', `/tasks/${task.id}`), 'Entwurf gelöscht').then((ok) => ok && done())
+      }}
+    />
   )
 }
 

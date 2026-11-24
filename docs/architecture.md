@@ -369,6 +369,16 @@ embed compiling without a build. No CDN assets. Rarely used views are lazy-loade
 - **Control room** (`/admin`): lab code for the projector, all robots live, every team with its
   robots and open browsers, robot assignment by drag and drop or from a list, team rename and
   delete, released models, conversations switch, usage per team, stop all.
+  - **Task panel** ("Aufgaben"): tasks grouped by state (Entwürfe, Offen, Geschlossen),
+    "Neue Aufgabe". Clicking a task opens a dialog (`web/src/admin/TaskEditor.tsx`, lazy-loaded
+    with CodeMirror and the Markdown renderer): a draft is edited there (title, task text,
+    starter prompt, both Markdown) with a preview as the team will see it, saved, published or
+    deleted; a published task is shown read-only with "Duplizieren" and "Aufgabe schließen"
+    (with confirmation: running runs end).
+  - **Assigning:** drag an open task onto a team card, or pick a team or "An alle Teams" in the
+    task's "Zuweisen …" menu (keyboard and screen readers, like robot assignment). Each team
+    card lists its tasks with status (zugewiesen, angenommen, aktiv) and "Zurückziehen" while the
+    team has not accepted. Pure helpers in `web/src/admin/tasks.ts`.
 
 ## Simulator
 
