@@ -1,0 +1,16 @@
+{
+  "name": "labyrinth_gestoert",
+  "description": "The simple labyrinth (labyrinth_rechts), disturbed: a box blocks the top corridor, a detour leads through the middle, and the blue goal field lies at the end of a side corridor. Turning right at every wall no longer arrives; following the right-hand wall cell by cell does.",
+  "floor": "white",
+  "walls": [
+    [0, 0, 200, 0], [200, 0, 200, 200], [200, 200, 0, 200], [0, 200, 0, 0],
+    [50, 0, 50, 150],
+    [150, 0, 150, 100],
+    [100, 150, 150, 150],
+    [100, 0, 100, 100],
+    [110, 160, 140, 160], [140, 160, 140, 190], [140, 190, 110, 190], [110, 190, 110, 160]
+  ],
+  "fields": [{"rect": [100, 0, 50, 40], "color": "blue"}],
+  "lines": [],
+  "starts": [{"x": 25, "y": 20, "heading": 0}]
+}

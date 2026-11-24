@@ -112,11 +112,37 @@ func (f Fake) Chat(ctx context.Context, req Request) (Response, error) {
 		if moves >= fakeMaxMoves {
 			return reply("Ich habe meine Testrunde schon beendet und warte.", "", nil)
 		}
+		if isTeamTool("ein_feld") && isTeamTool("rechts") && isTeamTool("links") && !teamToolUsed {
+			return reply("Ich folge der rechten Wand, Feld für Feld.", "rechts", map[string]any{})
+		}
 		// A tool the team built comes first: that is what the team deployed it for.
 		if len(teamTools) > 0 && !teamToolUsed {
 			return reply("Ich nutze euer Werkzeug "+teamTools[0]+".", teamTools[0], map[string]any{})
 		}
 		return reply("Ich bin das Testmodell. Ich schaue mich zuerst um.", "read_sensors", map[string]any{})
+	}
+	// The small cut: with team tools for one cell and for turning, the model
+	// follows the right-hand wall cell by cell, reading the sensors before
+	// every move, until a cell ends on blue.
+	if isTeamTool("ein_feld") && isTeamTool("rechts") && isTeamTool("links") {
+		switch lastTool {
+		case "", "ein_feld":
+			if strings.Contains(lastResult, `"value":"blue"`) {
+				return reply("Ich stehe auf Blau.", "finish", map[string]any{"report": "Ich bin Feld für Feld an der rechten Wand entlang bis zum blauen Feld gefahren."})
+			}
+			return reply("Ich schaue nach rechts.", "rechts", map[string]any{})
+		case "rechts", "links":
+			return reply("Ist hier frei?", "read_sensors", map[string]any{})
+		case "read_sensors":
+			var st struct {
+				Distance float64 `json:"distance_cm"`
+			}
+			_ = json.Unmarshal([]byte(lastResult), &st)
+			if st.Distance > 40 {
+				return reply("Frei, ein Feld weiter.", "ein_feld", map[string]any{})
+			}
+			return reply("Wand, ich drehe nach links.", "links", map[string]any{})
+		}
 	}
 	if isTeamTool(lastTool) {
 		var tr struct {

@@ -75,6 +75,8 @@ class LabCase(unittest.TestCase):
 
     WORLD = WORLD
     ROBOTS = 2
+    DELAY_MS = 0  # network delay of the simulated robots (sim/run.py --delay-ms)
+    CONFIG = ()   # extra (pattern, replacement) edits of the lab configuration
 
     def setUp(self):
         if not BINARY.exists():
@@ -89,6 +91,10 @@ class LabCase(unittest.TestCase):
         self.base = "http://127.0.0.1:%d" % http_port
         cfg = self.tmp / "lab.yaml"
         cfg_text = test_config(http_port, mqtt_port, self.tmp / "lab.db")
+        for pattern, repl in self.CONFIG:
+            cfg_text, n = re.subn(pattern, repl, cfg_text, count=1)
+            if n != 1:
+                raise AssertionError("lab.yaml: no match for %r" % pattern)
         cfg.write_text(cfg_text, encoding="utf-8")
 
         # Dev secrets, as in the server:dev target. Never in the YAML.
@@ -109,7 +115,7 @@ class LabCase(unittest.TestCase):
         self.wait_for(self.healthy, "server /healthz")
         self.spawn([sys.executable, str(ROOT / "sim" / "run.py"), "--robots", str(self.ROBOTS),
                     "--port", str(mqtt_port), "--world", str(self.WORLD),
-                    "--trace", "0.2", "--seed", str(SEED)], env, self.sim_log)
+                    "--trace", "0.2", "--seed", str(SEED), "--delay-ms", str(self.DELAY_MS)], env, self.sim_log)
 
         self.admin = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(CookieJar()))
         self.events = []

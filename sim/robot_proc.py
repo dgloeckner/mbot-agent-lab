@@ -102,7 +102,13 @@ def main(argv=None):
     p.add_argument("--trace", type=float, default=0, help="print pose, LEDs and sounds every N seconds")
     p.add_argument("--no-noise", action="store_true", help="ideal sensors instead of realistic noise")
     p.add_argument("--seed", type=int, default=None, help="seed for the sensor noise (default: random)")
+    p.add_argument("--delay-ms", type=int, default=0, help="network delay per packet and direction (default 0)")
     a = p.parse_args(argv)
+
+    if a.delay_ms > 0:
+        from netdelay import DelayProxy
+        proxy = DelayProxy(a.host, a.port, a.delay_ms / 1000.0)
+        a.host, a.port = "127.0.0.1", proxy.port
 
     noise = None if a.no_noise else random.Random(a.seed)
     simstate.world = World.load(a.world, a.id, a.start, noise=noise)
