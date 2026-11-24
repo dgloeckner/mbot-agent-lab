@@ -445,6 +445,26 @@ class SmokeTest(LabCase):
         self.assertIn("gibt es nicht", calls["drive_until"]["error"])
         self.assertEqual(calls["quadrat"]["end"], "done")
 
+        # The control room scores the finished run: the lab lead confirms it
+        # and notes a hand on the robot; the run shows the four measures.
+        scored = self.request("GET", "/admin/api/tasks/%s/runs" % task["id"])["teams"]
+        self.assertEqual([t["name"] for t in scored], ["Nur Eigene"], scored)
+        run = scored[0]["runs"][0]
+        self.assertIsNone(run["success"], run)
+        self.request("POST", "/admin/api/runs/%d/confirm" % run["run"], {"success": True}, expect=(204,))
+        self.request("POST", "/admin/api/runs/%d/intervention" % run["run"], {"kind": "moved"}, expect=(204,))
+        scored = self.request("GET", "/admin/api/tasks/%s/runs" % task["id"])["teams"]
+        run = scored[0]["runs"][0]
+        print("e2e: scored run: success=%s to_goal_s=%s calls=%s interventions=%s team_tools=%s end=%s" % (
+            run["success"], run.get("to_goal_s"), run["calls"], run["interventions"], run["team_tools"], run.get("end_reason")), file=sys.stderr)
+        self.assertTrue(run["success"], run)
+        self.assertGreater(run["calls"], 0, run)
+        self.assertEqual(run["interventions"]["moved"], 1, run)
+        self.assertEqual(run["team_tools"], ["quadrat"], run)
+        if run.get("end_reason") == "finish":
+            self.assertIn("to_goal_s", run)
+        self.assertEqual((scored[0]["successes"], scored[0]["rank"]), (1, 1), scored)
+
     def test_two_tasks_and_a_switch(self):
         """A team works in two tasks and switches between them: prompt, notes
         and runs always belong to the active task. Starting before accepting a

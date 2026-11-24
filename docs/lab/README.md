@@ -25,7 +25,16 @@ Englisch mit gleichem Dateinamen.
 6. **Arbeiten.** Prompt-Versionen, Notizen, Läufe, Gespräch und Protokoll gehören immer zur aktiven
    Aufgabe. Über den Aufgaben-Wähler oben auf der Teamseite wechselt das Team zwischen seinen
    Aufgaben; alle Rechner des Teams wechseln mit. Während eines Laufs geht das nicht.
-7. **Schließen.** Wenn die Zeit um ist: Aufgabe öffnen, „Aufgabe schließen“. Laufende Läufe enden
+7. **Werten.** Im Leitstand bei der Aufgabe auf „Läufe“ klicken. Für jeden Lauf eines Agenten
+   steht dort: Version, wie er endete, Zeit bis zum Ziel, Modellaufrufe, Eingriffe und welche
+   Werkzeuge der Agent hatte. Ob ein Lauf geschafft ist, entscheidet ihr, nicht der Agent: Er
+   meldet nur „fertig“. Nach jedem Lauf „✓ geschafft“ oder „✗ nicht“ klicken (ein zweiter Klick
+   überschreibt). Wenn jemand den Roboter während des Laufs anfasst oder zurücksetzt:
+   „+ von Hand bewegt“. Stopps des Teams und Werkzeuge, die das Team vor dem Lauf von Hand
+   aufgerufen hat, zählt der Server selbst. Die Rangliste: zuerst geschaffte Läufe, dann wenigste
+   Modellaufrufe, dann kürzeste Zeit; gewertet wird der beste Lauf jedes Teams. Mit
+   „Lauf starten“ startet ihr den Lauf eines Teams selbst, z. B. für den Wertungslauf.
+8. **Schließen.** Wenn die Zeit um ist: Aufgabe öffnen, „Aufgabe schließen“. Laufende Läufe enden
    sofort, danach kann niemand mehr darin deployen oder starten. Alles bleibt lesbar.
 
 ## Wichtig für die Teams

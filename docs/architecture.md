@@ -272,6 +272,10 @@ Control room (`/admin`, admin password, session cookie):
 | `POST /admin/api/tasks/{id}/publish`, `/close`, `/duplicate` | publish a draft, close an open task, copy any task into a new draft |
 | `POST /admin/api/tasks/{id}/assign` | assign `{teams: ["t…", …]}` or `{teams: "all"}`; answers the teams that got it now |
 | `DELETE /admin/api/tasks/{id}/assign/{team}` | withdraw an assignment the team has not accepted |
+| `GET /admin/api/tasks/{id}/runs` | "Läufe": per team its runs with the four measures and tools, best run and rank |
+| `POST /admin/api/runs/{id}/confirm` | score a run `{success}`; the last answer counts |
+| `POST /admin/api/runs/{id}/intervention` | note an intervention `{kind: "moved"}` |
+| `POST /admin/api/teams/{id}/start` | start a team's run from the control room (same rules as the team's start) |
 
 ## Agent runtime
 
@@ -463,6 +467,13 @@ embed compiling without a build. No CDN assets. Rarely used views are lazy-loade
     task's "Zuweisen …" menu (keyboard and screen readers, like robot assignment). Each team
     card lists its tasks with status (zugewiesen, angenommen, aktiv) and "Zurückziehen" while the
     team has not accepted. Pure helpers in `web/src/admin/tasks.ts`.
+  - **Runs** ("Läufe" on a published task, `web/src/admin/RunsView.tsx`, lazy-loaded): the
+    ranking and, per team, every agent run with version, end, success, time to the goal, model
+    calls, interventions and the tools it had (team tools and built-in ones). Buttons per run:
+    "geschafft", "nicht" (`run.confirmed`), "+ von Hand bewegt" (`run.intervention`); per team
+    "Lauf starten". The view reloads when the board's `scores` counter or an agent changes.
+    Measures and ranking are computed by the server (`store.TaskRuns`, `lab.Rank`,
+    `docs/events.md`); `web/src/admin/runs.ts` only words them.
 
 ## Simulator
 

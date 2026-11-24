@@ -41,6 +41,7 @@ interface AdminState {
   teams: AdminTeam[]
   robots: AdminRobot[]
   tasks: AdminTask[]
+  scores: number // changes with every confirmation or intervention
 }
 
 const AGENT_LABEL = { waiting: 'wartet', thinking: 'denkt nach', acting: 'handelt' } as const
@@ -123,6 +124,9 @@ const assign = (robot: string, team: string) => {
 
 /** The task open in the editor dialog. */
 const editing = signal<TaskDetail | null>(null)
+/** The task whose "Läufe" are open. */
+const scoring = signal<AdminTask | null>(null)
+const RunsView = lazyComponent(() => import('./RunsView'))
 
 async function openTask(id: string) {
   try {
@@ -467,6 +471,11 @@ function TaskItem({ task, teams }: { task: AdminTask; teams: AdminTeam[] }) {
       <button class="task-open" onClick={() => openTask(task.id)} title={task.state === 'draft' ? 'Bearbeiten' : 'Ansehen'}>
         {task.title}
       </button>
+      {task.state !== 'draft' && (
+        <button class="btn-link task-runs" onClick={() => (scoring.value = task)} aria-label={`Läufe von ${task.title}`}>
+          Läufe
+        </button>
+      )}
       {open && choices.length > 0 && (
         <select
           class="chip-move"
@@ -656,6 +665,17 @@ function AdminApp() {
     <>
       {auth.value === 'login' ? <Login /> : auth.value === 'ok' && state.value ? <Board /> : <main class="fullpage-message" aria-busy="true" />}
       {editing.value && <TaskDialog task={editing.value} />}
+      {scoring.value && (
+        <RunsView
+          key={scoring.value.id}
+          taskId={scoring.value.id}
+          title={scoring.value.title}
+          version={`${state.value?.scores ?? 0}/${state.value?.teams.map((t) => `${t.agent.run_id ?? 0}:${t.agent.running}`).join(',')}`}
+          call={call}
+          act={act}
+          onClose={() => (scoring.value = null)}
+        />
+      )}
       {toast.value && (
         <div class={`toast${toast.value.error ? ' toast-error' : ''}`} role={toast.value.error ? 'alert' : 'status'}>
           {toast.value.text}
