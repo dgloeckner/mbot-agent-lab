@@ -169,6 +169,27 @@ history keeps every version; the next deploy is a new one. Versions list the tea
 "neu", "geändert" or "entfernt" against the version before (matched by id; a change of name,
 description or blocks counts).
 
+### Comparing versions
+
+`programs.Diff` compares two states of a team tool (a version and the working state, or two
+versions; the older one first) for the history's tool comparison. Both trees come from the stored
+Blockly states, which carry the same block ids, so the diff reads those states and can name the
+exact field of a changed value. Blocks are matched by their block id:
+
+| Change | Means |
+| --- | --- |
+| `value` | a block in both states holds another value in a field: `block`, `field`, `old`, `new` |
+| `new` | a block only the newer state has |
+| `removed` | a block only the older state has |
+| `moved` | a block stands in another block or input, or out of order among the blocks both states share in the same chain (the fewest such blocks); a block that only shifted because another was added or removed before it did not move |
+| `name`, `description` | the tool's name or description: `old`, `new` |
+
+A block deleted and built again has a new id and counts as removed and new; a block whose type
+changed under the same id too. Moving the whole tool on the workspace is no change. Two equal
+states give no change. Order: name, description, removed blocks in the older order, then the
+changes of the newer blocks in program order. The chips of a comparison come from the same rule
+as the version list (`store.DiffTools`: by id; name, description or blocks).
+
 ## Editor
 
 The team page builds team tools in the left pane ("Werkzeug bauen"); the side pane stays, so a

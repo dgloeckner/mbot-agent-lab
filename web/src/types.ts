@@ -42,6 +42,37 @@ export interface ToolChange {
   change: 'neu' | 'geändert' | 'entfernt'
 }
 
+/** One difference of a team tool between two states (server: programs.Change). */
+export interface BlockChange {
+  kind: 'value' | 'new' | 'removed' | 'moved' | 'name' | 'description'
+  block?: string
+  field?: string
+  old?: unknown
+  new?: unknown
+}
+
+/** Team tools that differ between two states; version 0 is the working state. */
+export interface ToolChanges {
+  left: number
+  right: number
+  tools: ToolChange[]
+}
+
+/** A team tool as stored in a version or the working state. */
+export interface ToolState {
+  id: string
+  name: string
+  description: string
+  blockly: unknown
+}
+
+/** A team tool in two states, the older on the left; a side's tool is null where it did not exist. */
+export interface ToolDiff {
+  left: { version: number; tool: ToolState | null }
+  right: { version: number; tool: ToolState | null }
+  changes: BlockChange[]
+}
+
 /** A team tool of a deployed version and whether the agent has it. */
 export interface VersionTool {
   id: string

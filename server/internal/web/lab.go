@@ -28,6 +28,8 @@ func (s *Server) labError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, "Dieses Team gibt es nicht mehr.")
 	case errors.Is(err, lab.ErrUnknownRun):
 		writeError(w, http.StatusNotFound, "Diesen Lauf gibt es nicht.")
+	case errors.Is(err, lab.ErrUnknownVersion):
+		writeError(w, http.StatusNotFound, "Diese Version gibt es nicht.")
 	case errors.Is(err, lab.ErrUnknownProgram):
 		writeError(w, http.StatusNotFound, "Dieses Werkzeug gibt es nicht (mehr).")
 	case errors.Is(err, lab.ErrUnknownRobot):

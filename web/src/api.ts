@@ -1,6 +1,6 @@
 // Team API client. The secret team token is the second path segment.
 
-import type { ProgramDetail, ProgramEvent, ProgramInfo, VersionTool } from './types'
+import type { ProgramDetail, ProgramEvent, ProgramInfo, ToolChanges, ToolDiff, VersionTool } from './types'
 import type { AgentStatus, LogEntry, Note, PromptChoice, PromptVersion, Robot, Session, TeamModels, TeamTask, Totals } from './types'
 
 export const token = decodeURIComponent(location.pathname.split('/')[2] ?? '')
@@ -34,6 +34,10 @@ export const api = {
   deploy: (text: string, restart: boolean) =>
     req<Omit<PromptVersion, 'tools'> & { tools: VersionTool[]; warning?: string }>('POST', '/prompt', { text, restart }),
   restoreVersion: (version: number) => req<PromptVersion>('POST', `/prompts/${version}/restore`),
+  /** Team tools that differ between a version and another one (against; 0 is the working state). */
+  compareTools: (version: number, against: number) => req<ToolChanges>('GET', `/prompts/${version}/tools?against=${against || 'now'}`),
+  compareTool: (version: number, against: number, id: string) =>
+    req<ToolDiff>('GET', `/prompts/${version}/tools/${encodeURIComponent(id)}?against=${against || 'now'}`),
   message: (text: string) => req<LogEntry>('POST', '/message', { text }),
   newConversation: () => req<void>('POST', '/conversation/new'),
   start: () => req<AgentStatus>('POST', '/start'),

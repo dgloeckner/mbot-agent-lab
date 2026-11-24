@@ -5,8 +5,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
 import * as Blockly from 'blockly/core'
-import * as De from 'blockly/msg/de'
 import { api } from '../api'
+import { defineBlocks, MEDIA } from '../blocklySetup'
 import { problemsByBlock } from '../toolrun'
 import {
   agent,
@@ -28,21 +28,6 @@ import {
   toolSaver,
 } from '../state'
 import type { ProgramDetail, ProgramProblem } from '../types'
-
-Blockly.setLocale(De as unknown as Record<string, string>)
-
-let defined: Promise<{ toolbox: any }> | null = null
-
-/** Defines the served blocks once per page. */
-function defineBlocks() {
-  defined ??= api.blocks().then((d) => {
-    Blockly.common.defineBlocksWithJsonArray(d.definitions)
-    return { toolbox: d.toolbox }
-  })
-  return defined
-}
-
-const MEDIA = '/assets/blockly-media/'
 
 function markProblems(ws: Blockly.WorkspaceSvg, problems: ProgramProblem[]) {
   const { byBlock } = problemsByBlock(problems)

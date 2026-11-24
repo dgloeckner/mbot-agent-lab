@@ -851,9 +851,20 @@ kbd {
 }
 
 .history-detail {
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  min-height: 0;
+}
+
+.history-detail > * {
+  flex: none;
+}
+
+.history-detail > .diff,
+.history-detail > .tooldiff,
+.history-detail > .loading {
+  flex: 1 1 0;
   min-height: 0;
 }
 
@@ -2349,4 +2360,195 @@ kbd {
   border-color: var(--warn);
   color: var(--warn);
   font-family: var(--font-ui);
+}
+
+/* Tool comparison in "Verlauf" (components/ToolDiffView.tsx). Marks never by color alone:
+   each kind has its own outline and a sign in the legend. */
+.history-against {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.history-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 14px 0;
+}
+
+.history-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.history-chip[aria-selected='true'] {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  font-weight: 650;
+}
+
+.history-same {
+  padding: 14px;
+  color: var(--muted);
+}
+
+.tooldiff {
+  --diff-new: var(--ok);
+  --diff-removed: #c81e3a;
+  --diff-moved: #7a3cc8;
+  --diff-value: #b26b00;
+  padding: 10px 14px 16px;
+  overflow: auto;
+}
+
+.tooldiff-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.tooldiff-text {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.tooldiff-text div {
+  display: flex;
+  gap: 8px;
+}
+
+.tooldiff-text dt {
+  font-weight: 650;
+  min-width: 7em;
+}
+
+.tooldiff-text dd {
+  margin: 0;
+}
+
+.tooldiff-text del {
+  text-decoration: line-through;
+  background: color-mix(in oklab, var(--diff-removed) 12%, transparent);
+}
+
+.tooldiff-text ins {
+  text-decoration: underline;
+  background: color-mix(in oklab, var(--diff-new) 14%, transparent);
+}
+
+.tooldiff-sides {
+  display: grid;
+  gap: 12px;
+}
+
+.tooldiff[data-layout='side'] .tooldiff-sides {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.tooldiff-side {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.tooldiff-side header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13.5px;
+}
+
+.tooldiff-canvas {
+  height: 200px;
+  position: relative;
+}
+
+.tooldiff-missing {
+  margin: 0;
+  padding: 28px 14px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.tooldiff .diff-new > .blocklyPath {
+  stroke: var(--diff-new);
+  stroke-width: 4px;
+}
+
+.tooldiff .diff-removed > .blocklyPath {
+  stroke: var(--diff-removed);
+  stroke-width: 4px;
+  stroke-dasharray: 9 5;
+}
+
+.tooldiff .diff-moved > .blocklyPath {
+  stroke: var(--diff-moved);
+  stroke-width: 4px;
+  stroke-dasharray: 1 5;
+  stroke-linecap: round;
+}
+
+/* !important: Blockly's renderer CSS styles field rects with more specific selectors. */
+.tooldiff g.diff-field > rect.blocklyFieldRect {
+  stroke: var(--diff-value) !important;
+  stroke-width: 3px !important;
+  fill: #fff !important;
+  fill-opacity: 1 !important;
+}
+
+.tooldiff-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.tooldiff-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tooldiff-sign {
+  font-weight: 750;
+  color: var(--ink);
+}
+
+.tooldiff-swatch {
+  width: 22px;
+  height: 12px;
+  border-radius: 3px;
+  border: 3px solid var(--diff-value);
+}
+
+.tooldiff-legend [data-kind='new'] .tooldiff-swatch {
+  border-color: var(--diff-new);
+}
+
+.tooldiff-legend [data-kind='removed'] .tooldiff-swatch {
+  border-color: var(--diff-removed);
+  border-style: dashed;
+}
+
+.tooldiff-legend [data-kind='moved'] .tooldiff-swatch {
+  border-color: var(--diff-moved);
+  border-style: dotted;
 }

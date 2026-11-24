@@ -244,6 +244,8 @@ a closed task writes answer 409 and reads work. Stop always works.
 | `POST tasks/{id}/activate` | switch to another accepted task; 409 while a run is active |
 | `GET prompts`, `GET prompts/{version}`, `POST prompt` | versions (each with the team tools that are new, changed or removed against the version before); deploy, optionally with restart: answers the version's team tools and a warning |
 | `POST prompts/{version}/restore` | restore a version: team tools here, prompt text for the draft; SSE `programs` |
+| `GET prompts/{version}/tools?against=now\|{n}` | team tools that differ between the version and the working state (default) or version n: `{left, right, tools}`, the older state on the left, version 0 is the working state; reads work in a closed task |
+| `GET prompts/{version}/tools/{id}?against=now\|{n}` | one team tool in both states (`{left, right}` with `version` and the stored tool or null) and the changes between them (`docs/programs.md`, "Comparing versions"); 404 for an unknown version or a tool in neither |
 | `POST start`, `POST stop` | start or stop a run; stop also cancels a running by-hand call; start answers 409 while one runs |
 | `POST tools/{name}` | run one by-hand tool (body: its arguments, `robot` with several robots) and answer its result as the agent would get it; 409 while a run is active |
 | `GET programs`, `GET programs/{id}` | team tools of the active task (name, description, valid, problems); one with its Blockly state |
@@ -427,6 +429,18 @@ embed compiling without a build. No CDN assets. Rarely used views are lazy-loade
     tool editor. The history shows per version the team tools that are new, changed or removed;
     "Diese Version wiederherstellen" restores prompt and team tools and first asks, naming what
     is not deployed yet and would be lost.
+  - **Tool comparison** (history, `web/src/components/ToolDiffView.tsx`, lazy-loaded with
+    Blockly): for the selected version a row of chips, "Prompt" and one per team tool that
+    differs ("neu", "geändert", "entfernt"), against "Euer Stand jetzt" or, with "Vergleichen
+    mit", another version (the prompt chip then compares the two version texts). A tool chip
+    shows two read-only Blockly workspaces, the older state left, each loaded from its stored
+    state and as high as its blocks (scrolling sideways), side by side when the pane is at least
+    620 px wide and one above the other below. Marks per block id from the server's changes: a
+    changed value outlines its field on both sides, a new block has a solid outline (right), a
+    removed one a dashed outline (left), a moved one a dotted outline (both); the legend gives
+    each its sign (→ + − ↕), so no mark relies on color. Name and description changes stand as
+    text above. A new tool shows only on the right ("Gab es in Version n noch nicht."), a
+    removed one only on the left. Pure helpers in `web/src/tooldiff.ts`.
   - **Team tools** (tab "Werkzeuge", group "Eigene Werkzeuge" above the built-in tools): name,
     description, "bereit" or "hat Fehler", "Neues Werkzeug", per tool "Bearbeiten" and
     "Ausführen" with the end of the last run below. "Bearbeiten" opens the tool editor in the left
