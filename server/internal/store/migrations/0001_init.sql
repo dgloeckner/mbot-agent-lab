@@ -1,4 +1,4 @@
--- Initial schema, see docs/handoff.md "Datenmodell in SQLite".
+-- Initial schema, see docs/architecture.md "Data model".
 -- Timestamps are RFC 3339 strings in UTC.
 
 CREATE TABLE prompts (

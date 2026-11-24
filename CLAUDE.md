@@ -1,23 +1,17 @@
 # CLAUDE.md
 
 mBot2 Agent Lab: teams of teenagers prompt AI agents that drive real Makeblock mBot2 robots.
-Full background and all decisions: `docs/handoff.md` (original handoff, German). The line field
-with colored stripes: `docs/field.md` (field handoff, German, with approved deviations on top).
+How the system works: `docs/architecture.md`. Binding decisions and approved deviations:
+`docs/decisions.md`. The line field with colored stripes: `docs/field.md` (field handoff, German,
+with approved deviations on top).
 
 ## Ground rules
 
-- Decisions in `docs/handoff.md` ("Entscheidungen im Überblick") are binding. Propose deviations
-  first; do not implement them silently. Deviations the user has approved:
-  - Tasks run through Nx instead of a Makefile.
-  - Teams are not configured in YAML: they join on `/join` with a lab code and get a secret link;
-    the control room (`/admin`) assigns 1..N robots per team. No profiles (einzel/duo/…) for now.
-  - Teams name their robots themselves (default: German color name); `all`/`alle` is reserved.
-  - The heartbeat carries `team`, `owner`, `name`, `color`, `agent` (see `docs/protocol.md`).
-  - Claude is a second model provider (`kind: anthropic`) on the official Anthropic Go SDK, an
-    exception to "no SDK for the language model". Mistral stays the default.
-  - Field handoff: `turn` stays positive-right; all turns via encoders (gyro only for tilt);
-    `driven_cm` stays, `crossing` becomes `junction`; line following on L1/R1 gray values; own
-    RGB classification per probe; calibration values via a new MQTT `config` message.
+- Decisions in `docs/decisions.md` are binding. Propose deviations first; do not implement them
+  silently. An approved deviation goes into `docs/decisions.md`, not into this file.
+- Long-term docs (`docs/architecture.md`, `docs/decisions.md`, `docs/protocol.md`,
+  `docs/tools.md`) describe the current state, in English, without history. A PR that changes
+  behaviour updates them in the same PR.
 - Grid freedom: robot script, server and web UI know nothing about the line grid (no junction
   coordinates, pitch or color code). Tools report floor letters and never interpret them. Field
   geometry lives only in `sim/grid.py`, the world files and `sim/tests`; reading rules live in

@@ -119,7 +119,7 @@ All vendor API calls live in `robot/src/hw.py` and are marked `VERIFY` until che
 
 | Path | Content |
 | --- | --- |
-| `docs/` | handoff, protocol, tool catalog, example messages |
+| `docs/` | architecture, decisions, protocol, tool catalog, field, example messages |
 | `docs/lab/` | lab material (German), example prompts (German and English) |
 | `robot/` | robot script sources, bundler, config example |
 | `sim/` | simulator: fakes, world, worlds, tests |

@@ -1,7 +1,7 @@
 // Package agent implements the per-team agent runtime. Every team has one
 // actor: a goroutine with an inbox that calls the model only when a message
 // wakes it. Everything that happens is a message: team instructions, robot
-// events, other agents, system notices. See docs/handoff.md, "Agent-Runtime".
+// events, other agents, system notices. See docs/architecture.md, "Agent runtime".
 package agent
 
 import (

@@ -1,11 +1,11 @@
 <!--
-Original field handoff (German), kept as written, like docs/handoff.md. Decisions the user
+Original field handoff (German), kept as written. Decisions the user
 took on 2026-11-22 that change it are listed right below; they win over the text.
 -->
 
 > **Approved deviations (2026-11-22).** Where the text below says otherwise, these apply:
 >
-> 1. `turn`: positive is **right**, as in the main handoff. Agents count right turns as +90,
+> 1. `turn`: positive is **right**, as in `docs/decisions.md`. Agents count right turns as +90,
 >    which matches compass headings (north 0, east 90).
 > 2. All turns (`turn`, `turn_until_clear`, `scan`, `find_line`) are measured with the wheel
 >    encoders. The gyro is used for tilt detection only.

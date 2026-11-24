@@ -1,0 +1,282 @@
+# Architecture
+
+Current state of the mBot2 Agent Lab. This document describes the system as it is; a PR that
+changes behaviour updates it in the same PR. Why things are the way they are: `decisions.md`.
+MQTT: `protocol.md`. Tools: `tools.md`. The line field: `field.md`.
+
+## Purpose
+
+A lab in which teams of teenagers (around 15) instruct AI agents that drive real Makeblock mBot2
+robots. Each team writes and deploys the prompt of its agent. The agent runs as a loop inside the
+server, controls the team's robots through a small set of tools and reacts to messages from the
+robots, from its team and from other agents.
+
+- **Hardware:** Makeblock mBot2 with CyberPi (ESP32, MicroPython), ultrasonic sensor, quad RGB
+  sensor, encoder motors, display, speaker and LEDs.
+- **Users:** teams at Windows PCs in a corporate network. They need a browser only: no account
+  with a model provider, no local software.
+- **Learning goals:** instructing precisely, recognising failures and limits of agents, designing
+  tools, understanding attacks such as prompt injection, treating tokens as a cost.
+- **Out of scope for now:** camera, mapping and path planning; speech in and out (the vendor's
+  cloud speech recognition is not used); user management beyond team links and an admin password.
+
+## Components
+
+```
+ Lab PCs (browser) ──HTTPS/SSE──┐
+                                ▼
+                    ┌──────────────────────────┐        OpenAI-compatible API
+                    │ labserver (one Go binary)│ ─────▶ (Mistral, Ollama, …) or Claude
+                    │  web · agents · tools    │
+                    │  robots · store (SQLite) │
+                    │  embedded MQTT broker    │
+                    └──────────▲───────────────┘
+                               │ MQTT (TLS), QoS 0, compact JSON
+                 ┌─────────────┴─────────────┐
+           mBot2 + CyberPi             simulated robots
+           (MicroPython)               (same script, fake hardware)
+```
+
+| Path | Content |
+| --- | --- |
+| `server/` | Go module, one binary `labserver`: broker, robot registry, agents, model access, store, web |
+| `web/` | team page and control room (Preact + signals, CodeMirror 6, Vite), embedded into the binary |
+| `robot/` | MicroPython sources (`robot/src`), bundler, config example |
+| `sim/` | simulator: fakes for the vendor modules, 2D world, worlds, tests, end-to-end test |
+| `docs/` | these docs, protocol examples, lab material (`docs/lab/`, German) |
+| `configs/`, `deploy/` | example lab configuration; Azure VM, systemd unit, local development config |
+
+Deployment target: the server on an Azure VM, robots in a guest Wi-Fi, lab PCs in the corporate
+network. Local development runs everything on one machine with simulated robots.
+
+## Robot script
+
+One MicroPython script per robot in upload mode (`robot/dist/main.py`, uploaded with mBlock). It
+starts after power-on, connects to the broker and never blocks.
+
+- **Bundle:** `robot/tools/bundle.py` joins the modules of `robot/src` in dependency order
+  (`MODULES`) into one `main.py`, strips comments and docstrings and inlines `config.py`. All
+  modules share one namespace after bundling. Only `hw.py` touches vendor modules (`cyberpi`,
+  `mbot2`, `mbuild`); the MQTT client is bundled (`mqtt.py`) because the firmware has no `umqtt`.
+- **Main loop** (about 40 Hz): fetch commands without blocking, advance the active skill one step
+  (every skill is a state machine), check reflexes, send events on state changes, send the state
+  on change and otherwise two to five times per second, watch the server heartbeat.
+- **Nothing blocks:** the vendor's fixed-distance drive calls are not used; motors start with a
+  speed and the loop stops them from encoder readings. Sounds play without blocking.
+- **Filtered sensors:** `sense.py` turns raw readings into the filtered snapshot every decision
+  uses (median distance, floor pattern after three equal readings, tilt with hysteresis).
+- **Reflexes** on the robot, independent of the server: emergency stop before obstacles, limits
+  per command, watchdog (3 s without heartbeat: stop, show "getrennt"), stop and reconnect with
+  backoff on Wi-Fi or broker loss, stop and event when tilted or lifted.
+- **Trip log:** finished motion segments, the basis of `retrace_path`; cleared on owner change,
+  on `clear_log` and on restart.
+- **Display and LEDs:** robot name, team, connection state, last text; LEDs in the team color,
+  pulsing while the agent thinks.
+
+Skills, events, the trip log and the floor trace are specified in `protocol.md`.
+
+## Server
+
+`server/cmd/labserver` wires the packages in `server/internal/`:
+
+| Package | Role |
+| --- | --- |
+| `config` | loads the YAML configuration; secrets only from environment variables (`*_env`); validated at startup |
+| `protocol` | MQTT message types, tested against `docs/examples/protocol/` |
+| `broker` | embedded MQTT broker (mochi-mqtt), TCP and TLS listeners, per-robot login and ACL |
+| `robots` | registry of all robots: state, owner, heartbeat, matching results to commands, reassignment |
+| `store` | SQLite (pure Go driver `modernc.org/sqlite`), migrations in `store/migrations` |
+| `lab` | joining, teams, robot assignment, robot names, lab code, released models: the rules; web handlers stay thin |
+| `live` | per-team log hub for SSE, with a backlog for reconnecting browsers |
+| `agent` | one actor per team: inbox, wake rules, context, budgets, runs and conversations |
+| `tools` | tool registry: model-facing German descriptions, JSON schemas, handlers |
+| `llm` | OpenAI-compatible client and Claude (official Anthropic Go SDK), retries, fallback, cost; `Fake` scripted test model |
+| `memory` | history trimming and notes formatting for the context |
+| `web` | HTTP handlers, SSE, admin session, embedded pages |
+| `auth`, `mcp` | stubs |
+
+Libraries: `github.com/mochi-mqtt/server/v2`, `modernc.org/sqlite`, `gopkg.in/yaml.v3`,
+`golang.org/x/crypto/acme/autocert`, `github.com/anthropics/anthropic-sdk-go/v2`; otherwise the
+standard library.
+
+### Configuration
+
+`configs/lab.example.yaml` documents every key: `server` (HTTP and MQTT addresses, TLS mode
+`off`/`autocert`, admin password and optional fixed lab code by variable name, database path),
+`llm` (providers with `kind` OpenAI-compatible, `anthropic` or `fake`, `default`, `fallback`,
+prices, parallel calls), `budgets` and `robots` (ID, password variable, sticker color). Teams and
+assignments are not in the configuration; they live in the database.
+
+### Robot ownership
+
+- The owner is stored per robot (`assignments`, primary key `robot_id`), so a robot can never
+  have two owners. A team can have any number of robots.
+- A free robot stands still and shows "frei".
+- Reassigning is one step: stop, clear trip log and state, change owner, show the new owner. A
+  running command ends with `reassigned`.
+- A newly assigned robot is named after its sticker color (`rot`, `blau`, …). Teams rename their
+  robots; `all` and `alle` are reserved. A team cannot give two robots the same name.
+
+### Model access
+
+- One `Provider` interface for a chat call with tools. Mistral, other OpenAI-compatible
+  providers and Ollama differ only in configuration; Claude (`kind: anthropic`) goes through the
+  official SDK and keeps its own form of an assistant turn in `Message.Native` (thinking blocks
+  are replayed unchanged).
+- A semaphore limits parallel calls (`max_parallel_calls`).
+- Every call is stored with tokens, duration and estimated cost (prompt-cache reads and writes
+  priced separately).
+- Provider errors: bounded retries with backoff, then the configured fallback provider, then a
+  notice to the team.
+- Each team picks its model among the providers the control room released (`default` is always
+  released). A choice applies at the team's next run.
+
+### Data model (SQLite)
+
+Timestamps are RFC 3339 strings in UTC. Migrations are numbered files in
+`server/internal/store/migrations`, applied in order and tracked in `PRAGMA user_version`.
+
+| Table | Content |
+| --- | --- |
+| `teams` | ID, name (unique, case-insensitive), secret token, color, chosen model provider |
+| `assignments` | robot → owner (`team:<id>`), alias (unique per owner) |
+| `prompts` | team, version, text, time |
+| `runs` | team, prompt version, model, kind (`run` or `conversation`), start, end, end reason, tokens, cost, report |
+| `messages` | run, sequence, source, kind, text, data, time |
+| `tool_calls` | run, sequence, name, arguments, result, duration |
+| `llm_calls` | run, provider, model, tokens in and out, duration, cost |
+| `notes` | team, text, origin run and message, author (`agent` or `team`), time |
+| `settings` | lab-wide settings: lab code, released models, conversations on or off |
+
+### HTTP routes
+
+Pages and joining:
+
+| Route | Purpose |
+| --- | --- |
+| `GET /`, `GET /join`, `POST /api/join` | start page, join page, join with lab code and team name (rate limited) |
+| `GET /assets/…` | embedded team page and control room build |
+| `GET /healthz` | health check |
+
+Team routes (`/t/{token}/…`, the token is the secret part of the team link):
+
+| Route | Purpose |
+| --- | --- |
+| `GET /t/{token}` | team page |
+| `GET api/session` | team, robots, models, current state |
+| `GET prompts`, `GET prompts/{version}`, `POST prompt` | prompt versions; deploy, optionally with restart |
+| `POST start`, `POST stop` | start or stop a run |
+| `POST message`, `POST conversation/new` | message to the own agent; start a new conversation |
+| `GET events` | SSE: log, state, usage; `Last-Event-ID` catches up |
+| `GET/POST notes`, `PUT/DELETE notes/{id}` | notes |
+| `PUT name`, `PUT model` | rename the team, choose the model |
+| `PUT robots/{robot}/alias`, `POST robots/{robot}/identify` | rename a robot, make it blink and beep |
+
+Control room (`/admin`, admin password, session cookie):
+
+| Route | Purpose |
+| --- | --- |
+| `GET /admin`, `POST /admin/api/login`, `/logout` | page and session |
+| `GET /admin/api/state`, `GET /admin/api/events` | board payload and its SSE stream |
+| `POST /admin/api/assign` | assign or free a robot |
+| `POST /admin/api/lab-code` | replace the lab code |
+| `PUT /admin/api/teams/{id}`, `PUT …/color`, `DELETE …` | rename, recolor, delete a team |
+| `POST /admin/api/stop-all` | emergency stop for all robots |
+| `PUT /admin/api/models`, `PUT /admin/api/conversation` | released models; conversations on or off |
+
+## Agent runtime
+
+Every team has exactly one agent: a goroutine with an inbox (`agent.Manager` holds one actor per
+team). It calls the model only when a message wakes it. Everything that happens is a message.
+
+- **Message:** source (`team`, `robot`, `agent:<team name>`, `system`), kind, text, data, time.
+- **States:** `waiting`, `thinking`, `acting`. In `waiting` the model is not called. The state
+  goes to the team page and, in the heartbeat, to the robots (LEDs pulse while thinking).
+- **Wake rules:** team messages, other agents, the start of a run and the robot events `tilted`,
+  `button_a`, `button_b`, `clap` and `battery_low` wake the agent. Routine readings (obstacles, floor colors) wait in the inbox for the next wake-up.
+- **Loop:** collect all pending messages, build the context, call the model, run the requested
+  tools and append the results, insert messages that arrived meanwhile, repeat until the model
+  requests no tool or an end condition holds, then back to `waiting`.
+- **Interruption:** normal messages wait for the next model call. A stop by the team or the
+  control room cancels the running model call and tool calls through the `context` and stops the
+  robots.
+
+### Context per model call
+
+- **System:** fixed platform rules (German; extra rules for several robots), the team prompt in
+  its newest version, the notes.
+- **History:** the last messages of the run verbatim (`max_history_messages`); older ones are
+  left out. Summaries of long runs are not implemented.
+- **Inbox:** one JSON line per new message with sender, age, kind, text and data. The sender field
+  (`Team`, `Roboter <Name>`, `Agent <Name>`, `System`) is set by the server, so another agent
+  cannot pose as the team.
+
+| Source | Meaning for the agent |
+| --- | --- |
+| Team | instructions it follows |
+| Robot | facts about the world |
+| Other agents | claims to be checked |
+| System | platform rules, e.g. budget or end of a run |
+
+### Memory layers
+
+| Layer | Written by | Seen by the model | Purpose |
+| --- | --- | --- | --- |
+| Working context | runtime | yes, sliding window | the current run |
+| Notes | the agent via `remember`, the team on its page | yes, every round, size-limited | learning across runs |
+| Protocol | runtime (`messages`, `tool_calls`, `llm_calls`) | no | comparing report and protocol ("Lügendetektor"), evaluation |
+
+Each note stores its origin: the run and the message after which it was written.
+
+### Deploying prompts
+
+Every deploy creates a new version; old versions stay. A plain deploy takes effect at the next
+model call, never in the middle of a tool call. "Deploy and restart" begins a new run. Each run
+stores its prompt version.
+
+### Budgets and end conditions
+
+Budgets (config `budgets`): steps per wake-up, tokens per run, minutes per run, messages to other
+agents per minute, messages kept in the context, team messages to a stopped agent per minute,
+tokens per conversation. A reached budget gives the agent a system message and the team a notice.
+
+A run ends when the agent calls `finish(report)`, at the step, token or time limit, or on a stop
+by the team or the control room.
+
+### Conversations
+
+While no run is active, a team message wakes the agent in conversation mode. A conversation is a
+`runs` row with `kind = 'conversation'`; its messages, tool calls and model calls are stored like
+a run's and its tokens count into the team totals. The context has conversation rules, every tool
+as text, the team, prompt and notes, and the numbered protocol of the last run. Only
+`read_sensors` and `remember` can be called. It ends when a run starts, with "Neues Gespräch" or
+at its token budget. The control room can switch conversations off for the lab.
+
+### Talking between agents
+
+`say(to, text)` puts a message into the recipient's inbox and wakes its agent; the text also
+shows on the speaker's display. Agent messages are rate limited per minute.
+
+## Web UI
+
+Built with Vite into `server/internal/web/dist/app` and embedded; `dist/README.md` keeps the
+embed compiling without a build. No CDN assets. Rarely used views are lazy-loaded
+(`web/src/lazy.tsx`).
+
+- **Team page** (`/t/{token}`): prompt editor (CodeMirror, Markdown, tool name completion),
+  preview, history with diffs against deployed versions and local snapshots, live log over SSE,
+  conversation tab, notes, tool catalog, robots with rename and "Finden", usage, model choice.
+  Browser storage (`web/src/storage.ts`) holds only the draft, draft snapshots and UI preferences.
+- **Join page** (`/join`): lab code and team name; the browser remembers joined teams.
+- **Control room** (`/admin`): lab code for the projector, all robots live, every team with its
+  robots and open browsers, robot assignment by drag and drop or from a list, team rename and
+  delete, released models, conversations switch, usage per team, stop all.
+
+## Simulator
+
+`sim/` runs the real bundled robot script under CPython with fakes for `cyberpi`, `mbot2` and
+`mbuild` (`sim/fakes/`) and a 2D world (`sim/world.py`) with optional seeded sensor noise. MQTT is
+real. The floor is a drawing of tape bands seen by four probes. Assumed robot geometry in
+`sim/mbot2.json`. Worlds: `arena`, `labyrinth`, `linie`, `gitter` (generated by `sim/grid.py`
+together with `docs/lab/feld/bauplan.svg`). `sim/tests` run the real bundle in-process; `sim/e2e`
+starts `labserver` with the scripted model and one simulated robot and drives the lab over HTTP.
