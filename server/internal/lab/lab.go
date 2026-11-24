@@ -107,6 +107,12 @@ func (s *Service) Start(ctx context.Context) error {
 		return err
 	}
 
+	for _, r := range s.Config.Robots {
+		if err := s.Store.SeeRobot(ctx, r.ID); err != nil {
+			return err
+		}
+	}
+
 	teams, err := s.teamMap(ctx)
 	if err != nil {
 		return err
@@ -167,6 +173,9 @@ func (s *Service) Join(ctx context.Context, code, name string) (store.Team, erro
 		return store.Team{}, &UserError{Msg: fmt.Sprintf("Den Namen „%s“ hat schon ein anderes Team. Wählt einen anderen.", name), Conflict: true}
 	}
 	if err != nil {
+		return store.Team{}, err
+	}
+	if err := s.bridgeDefaultTask(ctx, t.ID); err != nil {
 		return store.Team{}, err
 	}
 	s.Log.Info("team joined", "team", t.ID, "name", t.Name)

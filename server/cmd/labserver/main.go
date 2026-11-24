@@ -60,7 +60,7 @@ func run(configPath string, log *slog.Logger) error {
 
 	db, err := store.Open(ctx, cfg.Server.DBPath)
 	if err != nil {
-		return fmt.Errorf("open store: %w", err)
+		return fmt.Errorf("open store %s: %w", cfg.Server.DBPath, err)
 	}
 	defer db.Close()
 

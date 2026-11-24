@@ -159,6 +159,7 @@ func newFixture(t *testing.T, budgets config.Budgets) *fixture {
 	t.Cleanup(func() { st.Close() })
 	for _, tm := range []store.Team{{ID: "rot", Name: "Rot", Token: "a", Color: "red"}, {ID: "blau", Name: "Blau", Token: "b", Color: "blue"}} {
 		_, _ = st.CreateTeam(ctx, tm)
+		activateTestTask(t, st, tm.ID)
 	}
 	_ = reg.Assign("mbot-1", robots.Owner{TeamID: "rot", TeamName: "Rot", Alias: "Scout"})
 	_ = reg.Assign("mbot-2", robots.Owner{TeamID: "blau", TeamName: "Blau", Alias: "blau"})
@@ -179,9 +180,30 @@ func newFixture(t *testing.T, budgets config.Budgets) *fixture {
 	return &fixture{m: m, st: st, hub: hub, model: model, bus: bus}
 }
 
+// testTask is the task every test team works in.
+const testTask = "a1"
+
+func pairOf(team string) store.TeamTask { return store.TeamTask{Team: team, Task: testTask} }
+
+// activateTestTask assigns, accepts and activates testTask for team.
+func activateTestTask(t *testing.T, st *store.Store, team string) {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := st.Task(ctx, testTask); errors.Is(err, store.ErrNotFound) {
+		if _, err := st.CreateTask(ctx, store.Task{ID: testTask, Title: "Test", Body: "Aufgabe", State: store.TaskOpen}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, step := range []func(context.Context, store.TeamTask) error{st.AssignTask, st.AcceptTask, st.ActivateTask} {
+		if err := step(ctx, pairOf(team)); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func (f *fixture) deploy(t *testing.T, team, text string) {
 	t.Helper()
-	if _, err := f.st.SavePrompt(context.Background(), team, text); err != nil {
+	if _, err := f.st.SavePrompt(context.Background(), pairOf(team), text); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -277,7 +299,7 @@ func TestToolLoopFinishAndLog(t *testing.T) {
 		t.Error("queued robot event missing from the next inbox")
 	}
 
-	runs, _ := f.st.Runs(context.Background(), "rot", 5)
+	runs, _ := f.st.Runs(context.Background(), pairOf("rot"), 5)
 	if runs[0].EndReason != "finish" || runs[0].Report != "20 cm gefahren" || runs[0].TokensIn != 300 {
 		t.Errorf("run = %+v", runs[0])
 	}
@@ -305,7 +327,7 @@ func TestStopCancelsModelCall(t *testing.T) {
 	waitFor(t, "thinking", func() bool { return f.m.Status("rot").State == StateThinking })
 	f.m.Stop("rot", "Team")
 	waitFor(t, "stopped", func() bool { return !f.m.Status("rot").Running })
-	runs, _ := f.st.Runs(context.Background(), "rot", 1)
+	runs, _ := f.st.Runs(context.Background(), pairOf("rot"), 1)
 	if runs[0].EndReason != "stop" {
 		t.Errorf("end reason = %q", runs[0].EndReason)
 	}
@@ -391,7 +413,7 @@ func TestRunUsesTeamProvider(t *testing.T) {
 	if len(other.calls()) != 1 || len(f.model.calls()) != 0 {
 		t.Fatalf("calls: chosen %d, default %d", len(other.calls()), len(f.model.calls()))
 	}
-	runs, _ := f.st.Runs(context.Background(), "rot", 1)
+	runs, _ := f.st.Runs(context.Background(), pairOf("rot"), 1)
 	if runs[0].Model != "other-model" {
 		t.Errorf("run model = %q", runs[0].Model)
 	}
@@ -493,7 +515,7 @@ func TestToolCallsForDifferentRobotsRunTogether(t *testing.T) {
 	if !strings.Contains(results[1].Content, `"robot":"Blitz"`) {
 		t.Errorf("turn result: %s", results[1].Content)
 	}
-	runs, _ := f.st.Runs(context.Background(), "rot", 1)
+	runs, _ := f.st.Runs(context.Background(), pairOf("rot"), 1)
 	if runs[0].EndReason != "finish" {
 		t.Errorf("end reason = %q", runs[0].EndReason)
 	}
@@ -526,7 +548,7 @@ func TestStopCancelsParallelToolCalls(t *testing.T) {
 		}
 		return sameSet(stops, []string{"mbot-1:stop", "mbot-2:stop"})
 	})
-	runs, _ := f.st.Runs(context.Background(), "rot", 1)
+	runs, _ := f.st.Runs(context.Background(), pairOf("rot"), 1)
 	if runs[0].EndReason != "stop" || runs[0].Report != "" {
 		t.Errorf("run = %+v: finish must not run after a stop", runs[0])
 	}
@@ -552,7 +574,7 @@ func TestTimeLimitCancelsToolCalls(t *testing.T) {
 	waitFor(t, "both robots moving", func() bool { return len(f.bus.holding()) == 2 })
 	before := len(f.bus.sent())
 	waitFor(t, "run to end", func() bool { return !f.m.Status("rot").Running })
-	runs, _ := f.st.Runs(context.Background(), "rot", 1)
+	runs, _ := f.st.Runs(context.Background(), pairOf("rot"), 1)
 	if runs[0].EndReason != "time_limit" {
 		t.Errorf("end reason = %q", runs[0].EndReason)
 	}

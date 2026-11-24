@@ -62,17 +62,17 @@ func scanTeam(row interface{ Scan(...any) error }) (Team, error) {
 
 // TeamByToken finds the team of a team link.
 func (s *Store) TeamByToken(ctx context.Context, token string) (Team, error) {
-	return scanTeam(s.DB.QueryRowContext(ctx, `SELECT id, name, token, color, provider, created_at FROM teams WHERE token = ?`, token))
+	return scanTeam(s.DB.QueryRowContext(ctx, `SELECT id, name, token, color, provider, created_at FROM teams WHERE token = ? AND deleted_at IS NULL`, token))
 }
 
 // Team returns one team by ID.
 func (s *Store) Team(ctx context.Context, id string) (Team, error) {
-	return scanTeam(s.DB.QueryRowContext(ctx, `SELECT id, name, token, color, provider, created_at FROM teams WHERE id = ?`, id))
+	return scanTeam(s.DB.QueryRowContext(ctx, `SELECT id, name, token, color, provider, created_at FROM teams WHERE id = ? AND deleted_at IS NULL`, id))
 }
 
 // Teams returns all teams in the order they joined.
 func (s *Store) Teams(ctx context.Context) ([]Team, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT id, name, token, color, provider, created_at FROM teams ORDER BY created_at, id`)
+	rows, err := s.DB.QueryContext(ctx, `SELECT id, name, token, color, provider, created_at FROM teams WHERE deleted_at IS NULL ORDER BY created_at, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func (s *Store) Teams(ctx context.Context) ([]Team, error) {
 
 // RenameTeam changes a team's name. ErrConflict means the name is taken.
 func (s *Store) RenameTeam(ctx context.Context, id, name string) error {
-	err := s.affectOne(ctx, `UPDATE teams SET name = ? WHERE id = ?`, name, id)
+	err := s.affectOne(ctx, `UPDATE teams SET name = ? WHERE id = ? AND deleted_at IS NULL`, name, id)
 	if isUnique(err) {
 		return ErrConflict
 	}
@@ -99,12 +99,12 @@ func (s *Store) RenameTeam(ctx context.Context, id, name string) error {
 
 // SetTeamColor changes a team's color.
 func (s *Store) SetTeamColor(ctx context.Context, id, color string) error {
-	return s.affectOne(ctx, `UPDATE teams SET color = ? WHERE id = ?`, color, id)
+	return s.affectOne(ctx, `UPDATE teams SET color = ? WHERE id = ? AND deleted_at IS NULL`, color, id)
 }
 
 // SetTeamProvider stores the model provider a team chose ("" = lab default).
 func (s *Store) SetTeamProvider(ctx context.Context, id, provider string) error {
-	return s.affectOne(ctx, `UPDATE teams SET provider = ? WHERE id = ?`, provider, id)
+	return s.affectOne(ctx, `UPDATE teams SET provider = ? WHERE id = ? AND deleted_at IS NULL`, provider, id)
 }
 
 // ClearTeamProvider sets every team that chose provider back to the lab
@@ -126,8 +126,9 @@ func (s *Store) ClearTeamProvider(ctx context.Context, provider string) ([]strin
 	return ids, rows.Err()
 }
 
-// DeleteTeam removes a team and frees its robots. Prompts and notes stay in
-// the database for later evaluation but are no longer reachable.
+// DeleteTeam marks a team deleted and frees its robots. The team disappears
+// from every list and its link stops working; its tasks, prompts, notes and
+// runs stay in the database, so results and history stay consistent.
 func (s *Store) DeleteTeam(ctx context.Context, id string) error {
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -137,7 +138,7 @@ func (s *Store) DeleteTeam(ctx context.Context, id string) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM assignments WHERE owner = ?`, teamOwnerPrefix+id); err != nil {
 		return err
 	}
-	res, err := tx.ExecContext(ctx, `DELETE FROM teams WHERE id = ?`, id)
+	res, err := tx.ExecContext(ctx, `UPDATE teams SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL`, now(), id)
 	if err != nil {
 		return err
 	}

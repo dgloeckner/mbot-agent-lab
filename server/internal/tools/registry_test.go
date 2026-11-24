@@ -95,6 +95,16 @@ func setup(t *testing.T, aliases map[string]string) (*Registry, *robotBus, *stor
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
+	rot := store.TeamTask{Team: "rot", Task: "a1"}
+	if _, err := st.CreateTeam(ctx, store.Team{ID: "rot", Name: "Rot", Token: "a", Color: "red"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.CreateTask(ctx, store.Task{ID: "a1", Title: "Test", State: store.TaskOpen}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AssignTask(ctx, rot); err != nil {
+		t.Fatal(err)
+	}
 	return NewRegistry(reg, st, live.NewHub(), config.Budgets{MaxAgentMessagesPerMinute: 2}), bus, st
 }
 
@@ -243,7 +253,7 @@ func TestServerTools(t *testing.T) {
 	ctx := context.Background()
 	var finished string
 	var said []string
-	env := &Env{TeamID: "rot", RunID: 0, Agents: []string{"Blau"},
+	env := &Env{TeamID: "rot", TaskID: "a1", RunID: 0, Agents: []string{"Blau"},
 		Finish: func(report string) { finished = report },
 		Say:    func(to, text string) []string { said = append(said, to+":"+text); return []string{to} },
 	}
@@ -252,7 +262,7 @@ func TestServerTools(t *testing.T) {
 	if got["ok"] != true {
 		t.Fatalf("remember = %v", got)
 	}
-	notes, _ := st.ListNotes(ctx, "rot")
+	notes, _ := st.ListNotes(ctx, store.TeamTask{Team: "rot", Task: "a1"})
 	if len(notes) != 1 || notes[0].Author != "agent" {
 		t.Errorf("notes = %+v", notes)
 	}

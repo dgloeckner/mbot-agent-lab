@@ -12,6 +12,7 @@ import (
 type Run struct {
 	ID            int64     `json:"id"`
 	TeamID        string    `json:"team_id"`
+	TaskID        string    `json:"task_id"`
 	PromptVersion int       `json:"prompt_version"`
 	Model         string    `json:"model"`
 	StartedAt     time.Time `json:"started_at"`
@@ -89,19 +90,20 @@ func (s *Store) TeamTotal(ctx context.Context, team string) (Totals, error) {
 	return t, err
 }
 
-// CreateRun starts a run with the given prompt.
-func (s *Store) CreateRun(ctx context.Context, team string, promptID int64, model string) (int64, error) {
-	return s.create(ctx, KindRun, team, promptID, model)
+// CreateRun starts a run of the pair with the given prompt (the agent version).
+func (s *Store) CreateRun(ctx context.Context, tt TeamTask, promptID int64, model string) (int64, error) {
+	return s.create(ctx, KindRun, tt, promptID, model)
 }
 
 // CreateConversation starts a conversation. promptID is the prompt the team
 // had deployed then (0 for none).
-func (s *Store) CreateConversation(ctx context.Context, team string, promptID int64, model string) (int64, error) {
-	return s.create(ctx, KindConversation, team, promptID, model)
+func (s *Store) CreateConversation(ctx context.Context, tt TeamTask, promptID int64, model string) (int64, error) {
+	return s.create(ctx, KindConversation, tt, promptID, model)
 }
 
-func (s *Store) create(ctx context.Context, kind, team string, promptID int64, model string) (int64, error) {
-	res, err := s.DB.ExecContext(ctx, `INSERT INTO runs (team_id, kind, prompt_id, model, started_at) VALUES (?, ?, ?, ?, ?)`, team, kind, nullID(promptID), model, now())
+func (s *Store) create(ctx context.Context, kind string, tt TeamTask, promptID int64, model string) (int64, error) {
+	res, err := s.DB.ExecContext(ctx, `INSERT INTO runs (team_id, task_id, kind, prompt_id, model, started_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		tt.Team, tt.Task, kind, nullID(promptID), model, now())
 	if err != nil {
 		return 0, err
 	}
@@ -121,22 +123,22 @@ func (s *Store) EndOpenRuns(ctx context.Context, reason string) error {
 	return err
 }
 
-const runColumns = `r.id, r.team_id, COALESCE(p.version, 0), r.model, r.started_at, COALESCE(r.ended_at, ''),
+const runColumns = `r.id, r.team_id, r.task_id, COALESCE(p.version, 0), r.model, r.started_at, COALESCE(r.ended_at, ''),
 	COALESCE(r.end_reason, ''), r.tokens_in, r.tokens_out, r.cost_microeur, COALESCE(r.report, '')
 	FROM runs r LEFT JOIN prompts p ON p.id = r.prompt_id`
 
 func scanRun(sc interface{ Scan(...any) error }) (Run, error) {
 	var r Run
 	var started, ended string
-	err := sc.Scan(&r.ID, &r.TeamID, &r.PromptVersion, &r.Model, &started, &ended, &r.EndReason,
+	err := sc.Scan(&r.ID, &r.TeamID, &r.TaskID, &r.PromptVersion, &r.Model, &started, &ended, &r.EndReason,
 		&r.TokensIn, &r.TokensOut, &r.CostMicroEUR, &r.Report)
 	r.StartedAt, r.EndedAt = parseTime(started), parseTime(ended)
 	return r, err
 }
 
-// Runs returns the latest runs of a team, newest first. Conversations are left out.
-func (s *Store) Runs(ctx context.Context, team string, limit int) ([]Run, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT `+runColumns+` WHERE r.team_id = ? AND r.kind = 'run' ORDER BY r.id DESC LIMIT ?`, team, limit)
+// Runs returns the latest runs of the pair, newest first. Conversations are left out.
+func (s *Store) Runs(ctx context.Context, tt TeamTask, limit int) ([]Run, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT `+runColumns+` WHERE r.team_id = ? AND r.task_id = ? AND r.kind = 'run' ORDER BY r.id DESC LIMIT ?`, tt.Team, tt.Task, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -152,30 +154,38 @@ func (s *Store) Runs(ctx context.Context, team string, limit int) ([]Run, error)
 	return out, rows.Err()
 }
 
-// LastRun returns the newest ended run of a team, or ErrNotFound.
-func (s *Store) LastRun(ctx context.Context, team string) (Run, error) {
+// LastRun returns the newest ended run of the pair, or ErrNotFound.
+func (s *Store) LastRun(ctx context.Context, tt TeamTask) (Run, error) {
 	r, err := scanRun(s.DB.QueryRowContext(ctx, `SELECT `+runColumns+`
-		WHERE r.team_id = ? AND r.kind = 'run' AND r.ended_at IS NOT NULL ORDER BY r.id DESC LIMIT 1`, team))
+		WHERE r.team_id = ? AND r.task_id = ? AND r.kind = 'run' AND r.ended_at IS NOT NULL ORDER BY r.id DESC LIMIT 1`, tt.Team, tt.Task))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Run{}, ErrNotFound
 	}
 	return r, err
 }
 
+// RobotRef names the robot a message or tool call is about: its device ID and
+// what the team called it at that moment. The zero value means no robot.
+type RobotRef struct {
+	ID    string
+	Alias string
+}
+
 // AddMessage logs a message of a run (inbox entry, agent text, system notice).
-func (s *Store) AddMessage(ctx context.Context, run int64, seq int, source, kind, text string, data json.RawMessage) (int64, error) {
-	res, err := s.DB.ExecContext(ctx, `INSERT INTO messages (run_id, seq, source, kind, text, data, at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		run, seq, source, kind, text, nullJSON(data), now())
+// robot is set for messages from a robot.
+func (s *Store) AddMessage(ctx context.Context, run int64, seq int, source, kind, text string, data json.RawMessage, robot RobotRef) (int64, error) {
+	res, err := s.DB.ExecContext(ctx, `INSERT INTO messages (run_id, seq, source, kind, text, data, robot_id, robot_alias, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		run, seq, source, kind, text, nullJSON(data), nullString(robot.ID), nullString(robot.Alias), now())
 	if err != nil {
 		return 0, err
 	}
 	return res.LastInsertId()
 }
 
-// AddToolCall logs one tool call of a run.
-func (s *Store) AddToolCall(ctx context.Context, run int64, seq int, name string, args, result json.RawMessage, d time.Duration) error {
-	_, err := s.DB.ExecContext(ctx, `INSERT INTO tool_calls (run_id, seq, name, args, result, duration_ms, at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		run, seq, name, string(args), nullJSON(result), d.Milliseconds(), now())
+// AddToolCall logs one tool call of a run. robot is set for robot tools.
+func (s *Store) AddToolCall(ctx context.Context, run int64, seq int, name string, args, result json.RawMessage, d time.Duration, robot RobotRef) error {
+	_, err := s.DB.ExecContext(ctx, `INSERT INTO tool_calls (run_id, seq, name, args, result, duration_ms, robot_id, robot_alias, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		run, seq, name, string(args), nullJSON(result), d.Milliseconds(), nullString(robot.ID), nullString(robot.Alias), now())
 	return err
 }
 

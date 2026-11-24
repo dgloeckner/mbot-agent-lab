@@ -57,6 +57,7 @@ const stepChars = 400
 // conversation is the state of an open conversation, owned by the actor goroutine.
 type conversation struct {
 	id       int64
+	task     store.TeamTask // the task the conversation belongs to
 	provider string
 	lastRun  string // the last run's protocol, fixed for the whole conversation
 	history  []llm.Message
@@ -165,14 +166,18 @@ func (a *actor) startConversation(ctx context.Context) (*conversation, error) {
 		provider = a.m.TeamProvider(ctx, a.team)
 	}
 	provider = a.m.LLM.Resolve(provider)
+	task, err := a.m.activeTask(ctx, a.team)
+	if err != nil {
+		return nil, err
+	}
 	var promptID int64
-	if p, err := a.m.Store.GetPrompt(ctx, a.team, 0); err == nil {
+	if p, err := a.m.Store.GetPrompt(ctx, task, 0); err == nil {
 		promptID = p.ID
 	} else if !errors.Is(err, store.ErrNotFound) {
 		return nil, err
 	}
 	lastRun := "Dein Team hatte noch keinen Lauf."
-	if r, err := a.m.Store.LastRun(ctx, a.team); err == nil {
+	if r, err := a.m.Store.LastRun(ctx, task); err == nil {
 		steps, err := a.m.Store.RunSteps(ctx, r.ID)
 		if err != nil {
 			return nil, err
@@ -181,13 +186,13 @@ func (a *actor) startConversation(ctx context.Context) (*conversation, error) {
 	} else if !errors.Is(err, store.ErrNotFound) {
 		return nil, err
 	}
-	id, err := a.m.Store.CreateConversation(ctx, a.team, promptID, a.m.LLM.Model(provider))
+	id, err := a.m.Store.CreateConversation(ctx, task, promptID, a.m.LLM.Model(provider))
 	if err != nil {
 		return nil, err
 	}
 	a.updateStatus(func(s *Status) { s.ConversationID, s.ConversationTokens = id, 0 })
 	a.m.Log.Info("conversation started", "team", a.team, "conversation", id, "provider", provider)
-	return &conversation{id: id, provider: provider, lastRun: lastRun}, nil
+	return &conversation{id: id, task: task, provider: provider, lastRun: lastRun}, nil
 }
 
 // converse answers the team's messages in the open conversation (or a new
@@ -230,7 +235,7 @@ func (a *actor) converse(parent context.Context, msgs []Message) {
 		b.Write(line)
 		b.WriteByte('\n')
 		c.seq++
-		if id, err := a.m.Store.AddMessage(context.WithoutCancel(ctx), c.id, c.seq, m.From, m.Kind, m.Text, nil); err == nil {
+		if id, err := a.m.Store.AddMessage(context.WithoutCancel(ctx), c.id, c.seq, m.From, m.Kind, m.Text, nil, store.RobotRef{}); err == nil {
 			msgID = id
 		} else {
 			a.m.Log.Error("store message", "err", err)
@@ -239,7 +244,7 @@ func (a *actor) converse(parent context.Context, msgs []Message) {
 	appendUser(&c.history, strings.TrimRight(b.String(), "\n"))
 
 	team, _ := a.m.Store.Team(ctx, a.team)
-	env := &tools.Env{TeamID: a.team, TeamName: team.Name, RunID: c.id, MsgID: msgID}
+	env := &tools.Env{TeamID: a.team, TaskID: c.task.Task, TeamName: team.Name, RunID: c.id, MsgID: msgID}
 	for step := 0; ; step++ {
 		if step >= conversationSteps {
 			a.talkInfo("Euer Agent hat für diese Antwort zu viele Schritte gebraucht und hört hier auf. Fragt einfach noch einmal.")
@@ -280,7 +285,7 @@ func (a *actor) converse(parent context.Context, msgs []Message) {
 		c.history = append(c.history, msg)
 		if msg.Content != "" {
 			c.seq++
-			if _, err := a.m.Store.AddMessage(context.WithoutCancel(ctx), c.id, c.seq, "agent", "text", msg.Content, nil); err != nil {
+			if _, err := a.m.Store.AddMessage(context.WithoutCancel(ctx), c.id, c.seq, "agent", "text", msg.Content, nil, store.RobotRef{}); err != nil {
 				a.m.Log.Error("store message", "err", err)
 			}
 			a.talkLog(live.SourceAgent, "text", msg.Content, nil)
@@ -309,7 +314,7 @@ func (a *actor) converse(parent context.Context, msgs []Message) {
 			d := time.Since(start)
 			c.history = append(c.history, llm.Message{Role: llm.RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: string(result)})
 			c.seq++
-			if err := a.m.Store.AddToolCall(context.Background(), c.id, c.seq, tc.Function.Name, json.RawMessage(validJSON(tc.Function.Arguments)), result, d); err != nil {
+			if err := a.m.Store.AddToolCall(context.Background(), c.id, c.seq, tc.Function.Name, json.RawMessage(validJSON(tc.Function.Arguments)), result, d, store.RobotRef{}); err != nil {
 				a.m.Log.Error("store tool call", "err", err)
 			}
 			a.talkLog(live.SourceAgent, "tool", "", map[string]any{
@@ -344,12 +349,12 @@ func (a *actor) conversationContext(ctx context.Context, c *conversation, teamNa
 	for _, rb := range a.m.Robots.TeamRobots(a.team) {
 		in.Robots = append(in.Robots, rb.Alias)
 	}
-	if p, err := a.m.Store.GetPrompt(ctx, a.team, 0); err == nil {
+	if p, err := a.m.Store.GetPrompt(ctx, c.task, 0); err == nil {
 		in.PromptVersion, in.Prompt = p.Version, p.Text
 	} else if !errors.Is(err, store.ErrNotFound) {
 		return nil, err
 	}
-	notes, err := a.m.Store.ListNotes(ctx, a.team)
+	notes, err := a.m.Store.ListNotes(ctx, c.task)
 	if err != nil {
 		return nil, err
 	}

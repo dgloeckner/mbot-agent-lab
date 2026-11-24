@@ -169,6 +169,18 @@ func (m *Manager) Status(teamID string) Status {
 // StartError is a reason why a run cannot start. Its text is German.
 type StartError struct{ Msg string }
 
+// ErrNoTask is the German refusal for a team without an active task.
+var ErrNoTask = &StartError{"Eurem Team ist noch keine Aufgabe zugewiesen."}
+
+// activeTask returns the task the team works in, or ErrNoTask.
+func (m *Manager) activeTask(ctx context.Context, teamID string) (store.TeamTask, error) {
+	tt, err := m.Store.ActiveTask(ctx, teamID)
+	if errors.Is(err, store.ErrNotFound) {
+		return store.TeamTask{}, ErrNoTask
+	}
+	return tt, err
+}
+
 func (e *StartError) Error() string { return e.Msg }
 
 // Start begins a new run for a team with its newest prompt.
@@ -176,7 +188,11 @@ func (m *Manager) Start(ctx context.Context, teamID string) error {
 	if !m.Available() {
 		return &StartError{"Es ist kein Sprachmodell eingerichtet. Sagt der Lab-Leitung Bescheid."}
 	}
-	if _, err := m.Store.GetPrompt(ctx, teamID, 0); errors.Is(err, store.ErrNotFound) {
+	task, err := m.activeTask(ctx, teamID)
+	if err != nil {
+		return err
+	}
+	if _, err := m.Store.GetPrompt(ctx, task, 0); errors.Is(err, store.ErrNotFound) {
 		return &StartError{"Deployt zuerst einen Prompt, dann kann euer Agent loslegen."}
 	} else if err != nil {
 		return err

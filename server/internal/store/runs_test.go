@@ -10,19 +10,20 @@ import (
 func TestRunLifecycle(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
-	p, _ := s.SavePrompt(ctx, "rot", "Finde das blaue Feld.")
+	rot := pair(t, s, "rot", "a1")
+	p, _ := s.SavePrompt(ctx, rot, "Finde das blaue Feld.")
 	if p.ID == 0 {
 		t.Fatal("prompt id missing")
 	}
-	run, err := s.CreateRun(ctx, "rot", p.ID, "testmodell")
+	run, err := s.CreateRun(ctx, rot, p.ID, "testmodell")
 	if err != nil {
 		t.Fatal(err)
 	}
-	msg, err := s.AddMessage(ctx, run, 1, "team", "chat", "Los!", nil)
+	msg, err := s.AddMessage(ctx, run, 1, "team", "chat", "Los!", nil, RobotRef{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.AddToolCall(ctx, run, 2, "drive", json.RawMessage(`{"cm":10}`), json.RawMessage(`{"ok":true}`), 1500*time.Millisecond); err != nil {
+	if err := s.AddToolCall(ctx, run, 2, "drive", json.RawMessage(`{"cm":10}`), json.RawMessage(`{"ok":true}`), 1500*time.Millisecond, RobotRef{}); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 2; i++ {
@@ -30,7 +31,7 @@ func TestRunLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := s.AddNoteFrom(ctx, "rot", "Wand links", "agent", run, msg); err != nil {
+	if _, err := s.AddNoteFrom(ctx, rot, "Wand links", "agent", run, msg); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.EndRun(ctx, run, "finish", "Feld gefunden"); err != nil {
@@ -38,7 +39,7 @@ func TestRunLifecycle(t *testing.T) {
 	}
 	_ = s.EndRun(ctx, run, "stop", "") // a second end must not overwrite the first
 
-	runs, _ := s.Runs(ctx, "rot", 10)
+	runs, _ := s.Runs(ctx, rot, 10)
 	r := runs[0]
 	if r.PromptVersion != 1 || r.TokensIn != 200 || r.TokensOut != 40 || r.CostMicroEUR != 10 || r.EndReason != "finish" || r.Report != "Feld gefunden" || r.EndedAt.IsZero() {
 		t.Errorf("run = %+v", r)
@@ -48,9 +49,9 @@ func TestRunLifecycle(t *testing.T) {
 		t.Errorf("messages = %+v", msgs)
 	}
 
-	open2, _ := s.CreateRun(ctx, "rot", p.ID, "testmodell")
+	open2, _ := s.CreateRun(ctx, rot, p.ID, "testmodell")
 	_ = s.EndOpenRuns(ctx, "server_restart")
-	runs, _ = s.Runs(ctx, "rot", 10)
+	runs, _ = s.Runs(ctx, rot, 10)
 	if runs[0].ID != open2 || runs[0].EndReason != "server_restart" {
 		t.Errorf("open run not closed: %+v", runs[0])
 	}
@@ -59,6 +60,7 @@ func TestRunLifecycle(t *testing.T) {
 func TestTeamTotals(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
+	pairs := map[string]TeamTask{"rot": pair(t, s, "rot", "a1"), "blau": pair(t, s, "blau", "a1")}
 	if tot, err := s.TeamTotal(ctx, "rot"); err != nil || tot != (Totals{}) {
 		t.Fatalf("no runs: %+v %v", tot, err)
 	}
@@ -67,12 +69,12 @@ func TestTeamTotals(t *testing.T) {
 		in, out int
 		cost    int64
 	}{{"rot", 11000, 440, 37900}, {"rot", 55000, 1036, 71900}, {"blau", 100, 10, 1}} {
-		run, _ := s.CreateRun(ctx, c.team, 0, "m")
+		run, _ := s.CreateRun(ctx, pairs[c.team], 0, "m")
 		if err := s.AddLLMCall(ctx, run, "p", "m", c.in, c.out, time.Second, c.cost); err != nil {
 			t.Fatal(err)
 		}
 	}
-	conv, _ := s.CreateConversation(ctx, "rot", 0, "m")
+	conv, _ := s.CreateConversation(ctx, pairs["rot"], 0, "m")
 	if err := s.AddLLMCall(ctx, conv, "p", "m", 4000, 100, time.Second, 500); err != nil {
 		t.Fatal(err)
 	}
@@ -90,25 +92,26 @@ func TestTeamTotals(t *testing.T) {
 func TestLastRunAndSteps(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
-	if _, err := s.LastRun(ctx, "rot"); err != ErrNotFound {
+	rot := pair(t, s, "rot", "a1")
+	if _, err := s.LastRun(ctx, rot); err != ErrNotFound {
 		t.Fatalf("no runs: %v", err)
 	}
-	p, _ := s.SavePrompt(ctx, "rot", "Los.")
-	run, _ := s.CreateRun(ctx, "rot", p.ID, "m")
-	_, _ = s.AddMessage(ctx, run, 1, "system", "start", "Der Lauf beginnt.", nil)
-	_ = s.AddToolCall(ctx, run, 2, "drive", json.RawMessage(`{"cm":10}`), json.RawMessage(`{"ok":true}`), time.Second)
-	_, _ = s.AddMessage(ctx, run, 3, "robot:rot", "obstacle_near", "", json.RawMessage(`{"distance_cm":9}`))
-	_ = s.AddToolCall(ctx, run, 4, "finish", json.RawMessage(`{"report":"ok"}`), nil, 0)
-	if _, err := s.LastRun(ctx, "rot"); err != ErrNotFound {
+	p, _ := s.SavePrompt(ctx, rot, "Los.")
+	run, _ := s.CreateRun(ctx, rot, p.ID, "m")
+	_, _ = s.AddMessage(ctx, run, 1, "system", "start", "Der Lauf beginnt.", nil, RobotRef{})
+	_ = s.AddToolCall(ctx, run, 2, "drive", json.RawMessage(`{"cm":10}`), json.RawMessage(`{"ok":true}`), time.Second, RobotRef{})
+	_, _ = s.AddMessage(ctx, run, 3, "robot:rot", "obstacle_near", "", json.RawMessage(`{"distance_cm":9}`), RobotRef{})
+	_ = s.AddToolCall(ctx, run, 4, "finish", json.RawMessage(`{"report":"ok"}`), nil, 0, RobotRef{})
+	if _, err := s.LastRun(ctx, rot); err != ErrNotFound {
 		t.Errorf("an open run is not the last run: %v", err)
 	}
 	_ = s.EndRun(ctx, run, "finish", "ok")
 	// Conversations and open runs do not count as the last run.
-	conv, _ := s.CreateConversation(ctx, "rot", p.ID, "m")
+	conv, _ := s.CreateConversation(ctx, rot, p.ID, "m")
 	_ = s.EndRun(ctx, conv, "new", "")
-	_, _ = s.CreateRun(ctx, "rot", p.ID, "m")
+	_, _ = s.CreateRun(ctx, rot, p.ID, "m")
 
-	last, err := s.LastRun(ctx, "rot")
+	last, err := s.LastRun(ctx, rot)
 	if err != nil || last.ID != run || last.PromptVersion != 1 || last.Report != "ok" {
 		t.Fatalf("last run = %+v %v", last, err)
 	}
@@ -120,7 +123,7 @@ func TestLastRunAndSteps(t *testing.T) {
 		string(steps[2].Data) != `{"distance_cm":9}` || steps[3].Tool != "finish" || steps[3].Result != nil {
 		t.Errorf("steps = %+v", steps)
 	}
-	if runs, _ := s.Runs(ctx, "rot", 10); len(runs) != 2 {
+	if runs, _ := s.Runs(ctx, rot, 10); len(runs) != 2 {
 		t.Errorf("Runs lists %d rows, want the 2 runs without the conversation", len(runs))
 	}
 }

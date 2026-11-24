@@ -109,11 +109,11 @@ func (a *actor) addInbox(ctx context.Context, r *run, msgs []Message) {
 // buildContext assembles one model request: platform rules, the team prompt
 // in its newest version, the notes, then the (trimmed) conversation.
 func (a *actor) buildContext(ctx context.Context, r *run) ([]llm.Message, error) {
-	prompt, err := a.m.Store.GetPrompt(ctx, a.team, 0)
+	prompt, err := a.m.Store.GetPrompt(ctx, r.task, 0)
 	if err != nil {
 		return nil, err
 	}
-	notes, err := a.m.Store.ListNotes(ctx, a.team)
+	notes, err := a.m.Store.ListNotes(ctx, r.task)
 	if err != nil {
 		return nil, err
 	}

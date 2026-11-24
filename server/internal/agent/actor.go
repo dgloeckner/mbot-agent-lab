@@ -11,6 +11,7 @@ import (
 
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/live"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/llm"
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/store"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/tools"
 )
 
@@ -34,6 +35,7 @@ type control struct {
 // run is the state of one run, owned by the actor goroutine.
 type run struct {
 	id            int64
+	task          store.TeamTask // the task the run works in, fixed for the run
 	promptVersion int
 	provider      string // model provider of the whole run
 	started       time.Time
@@ -202,7 +204,11 @@ func wakes(ms []Message) bool {
 }
 
 func (a *actor) startRun(ctx context.Context) (*run, error) {
-	p, err := a.m.Store.GetPrompt(ctx, a.team, 0)
+	task, err := a.m.activeTask(ctx, a.team)
+	if err != nil {
+		return nil, err
+	}
+	p, err := a.m.Store.GetPrompt(ctx, task, 0)
 	if err != nil {
 		return nil, &StartError{"Deployt zuerst einen Prompt, dann kann euer Agent loslegen."}
 	}
@@ -212,7 +218,7 @@ func (a *actor) startRun(ctx context.Context) (*run, error) {
 	}
 	provider = a.m.LLM.Resolve(provider)
 	model := a.m.LLM.Model(provider)
-	id, err := a.m.Store.CreateRun(ctx, a.team, p.ID, model)
+	id, err := a.m.Store.CreateRun(ctx, task, p.ID, model)
 	if err != nil {
 		return nil, err
 	}
@@ -221,7 +227,7 @@ func (a *actor) startRun(ctx context.Context) (*run, error) {
 	if a.m.runLength > 0 {
 		length = a.m.runLength
 	}
-	r := &run{id: id, promptVersion: p.Version, provider: provider, started: now, deadline: now.Add(length)}
+	r := &run{id: id, task: task, promptVersion: p.Version, provider: provider, started: now, deadline: now.Add(length)}
 	a.updateStatus(func(s *Status) {
 		*s = Status{State: StateWaiting, Running: true, RunID: id, Provider: provider, Model: model, StartedAt: now}
 	})
@@ -405,7 +411,7 @@ func (a *actor) runTools(ctx context.Context, r *run, env *tools.Env, calls []ll
 		}
 		r.history = append(r.history, llm.Message{Role: llm.RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: string(out[i].result)})
 		r.seq++
-		if err := a.m.Store.AddToolCall(context.Background(), r.id, r.seq, tc.Function.Name, json.RawMessage(validJSON(tc.Function.Arguments)), out[i].result, out[i].d); err != nil {
+		if err := a.m.Store.AddToolCall(context.Background(), r.id, r.seq, tc.Function.Name, json.RawMessage(validJSON(tc.Function.Arguments)), out[i].result, out[i].d, store.RobotRef{}); err != nil {
 			a.m.Log.Error("store tool call", "err", err)
 		}
 	}
@@ -447,7 +453,7 @@ func (a *actor) account(r *run, call llm.Call) {
 
 func (a *actor) store(ctx context.Context, r *run, source, kind, text string, data json.RawMessage) int64 {
 	r.seq++
-	id, err := a.m.Store.AddMessage(context.WithoutCancel(ctx), r.id, r.seq, source, kind, text, data)
+	id, err := a.m.Store.AddMessage(context.WithoutCancel(ctx), r.id, r.seq, source, kind, text, data, store.RobotRef{})
 	if err != nil {
 		a.m.Log.Error("store message", "err", err)
 	}
@@ -456,7 +462,7 @@ func (a *actor) store(ctx context.Context, r *run, source, kind, text string, da
 
 func (a *actor) env(ctx context.Context, r *run) *tools.Env {
 	team, _ := a.m.Store.Team(ctx, a.team)
-	env := &tools.Env{TeamID: a.team, TeamName: team.Name, RunID: r.id}
+	env := &tools.Env{TeamID: a.team, TaskID: r.task.Task, TeamName: team.Name, RunID: r.id}
 	env.Finish = func(report string) {
 		r.report = report
 		r.finished.Store(true)

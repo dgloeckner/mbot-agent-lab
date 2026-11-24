@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -64,6 +65,7 @@ func newTestServer(t *testing.T) *testLab {
 		if _, err := st.CreateTeam(ctx, tm); err != nil {
 			t.Fatal(err)
 		}
+		activateTestTask(t, st, tm.ID)
 	}
 	if err := svc.AssignRobot(ctx, "mbot-1", "rot"); err != nil {
 		t.Fatal(err)
@@ -316,5 +318,25 @@ func TestMessageWithoutRunStartsConversation(t *testing.T) {
 	resp.Body.Close()
 	if state.Conversation {
 		t.Error("admin state still shows conversations on")
+	}
+}
+
+// testTask is the task every test team works in.
+const testTask = "a1"
+
+// activateTestTask assigns, accepts and activates testTask for team.
+func activateTestTask(t *testing.T, st *store.Store, team string) {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := st.Task(ctx, testTask); errors.Is(err, store.ErrNotFound) {
+		if _, err := st.CreateTask(ctx, store.Task{ID: testTask, Title: "Test", Body: "Aufgabe", State: store.TaskOpen}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tt := store.TeamTask{Team: team, Task: testTask}
+	for _, step := range []func(context.Context, store.TeamTask) error{st.AssignTask, st.AcceptTask, st.ActivateTask} {
+		if err := step(ctx, tt); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

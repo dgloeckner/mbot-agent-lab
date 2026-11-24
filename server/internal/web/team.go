@@ -48,21 +48,40 @@ func (s *Server) teamRobots(teamID string) []RobotView {
 	return out
 }
 
+// activeTask returns the pair the team works in. Without one it answers 409
+// and returns false.
+func (s *Server) activeTask(w http.ResponseWriter, r *http.Request, team store.Team) (store.TeamTask, bool) {
+	tt, err := s.Store.ActiveTask(r.Context(), team.ID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusConflict, "Eurem Team ist noch keine Aufgabe zugewiesen.")
+		return tt, false
+	}
+	if err != nil {
+		s.serverError(w, err)
+		return tt, false
+	}
+	return tt, true
+}
+
 func (s *Server) session(w http.ResponseWriter, r *http.Request, team store.Team) {
+	tt, ok := s.activeTask(w, r, team)
+	if !ok {
+		return
+	}
 	ctx := r.Context()
 	var prompt *store.Prompt
-	if p, err := s.Store.GetPrompt(ctx, team.ID, 0); err == nil {
+	if p, err := s.Store.GetPrompt(ctx, tt, 0); err == nil {
 		prompt = &p
 	} else if !errors.Is(err, store.ErrNotFound) {
 		s.serverError(w, err)
 		return
 	}
-	versions, err := s.Store.ListPrompts(ctx, team.ID)
+	versions, err := s.Store.ListPrompts(ctx, tt)
 	if err != nil {
 		s.serverError(w, err)
 		return
 	}
-	notes, err := s.Store.ListNotes(ctx, team.ID)
+	notes, err := s.Store.ListNotes(ctx, tt)
 	if err != nil {
 		s.serverError(w, err)
 		return
@@ -74,6 +93,7 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request, team store.Team
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"team":            map[string]string{"id": team.ID, "name": team.Name, "color": team.Color},
+		"task_id":         tt.Task,
 		"robots":          s.teamRobots(team.ID),
 		"agent":           s.Agents.Status(team.ID),
 		"total":           total,
@@ -90,7 +110,11 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request, team store.Team
 }
 
 func (s *Server) listPrompts(w http.ResponseWriter, r *http.Request, team store.Team) {
-	versions, err := s.Store.ListPrompts(r.Context(), team.ID)
+	tt, ok := s.activeTask(w, r, team)
+	if !ok {
+		return
+	}
+	versions, err := s.Store.ListPrompts(r.Context(), tt)
 	if err != nil {
 		s.serverError(w, err)
 		return
@@ -99,12 +123,16 @@ func (s *Server) listPrompts(w http.ResponseWriter, r *http.Request, team store.
 }
 
 func (s *Server) getPrompt(w http.ResponseWriter, r *http.Request, team store.Team) {
+	tt, ok := s.activeTask(w, r, team)
+	if !ok {
+		return
+	}
 	v, err := strconv.Atoi(r.PathValue("version"))
 	if err != nil || v < 1 {
 		writeError(w, http.StatusBadRequest, "Unbekannte Version.")
 		return
 	}
-	p, err := s.Store.GetPrompt(r.Context(), team.ID, v)
+	p, err := s.Store.GetPrompt(r.Context(), tt, v)
 	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("Version %d gibt es nicht.", v))
 		return
@@ -117,6 +145,10 @@ func (s *Server) getPrompt(w http.ResponseWriter, r *http.Request, team store.Te
 }
 
 func (s *Server) deployPrompt(w http.ResponseWriter, r *http.Request, team store.Team) {
+	tt, ok := s.activeTask(w, r, team)
+	if !ok {
+		return
+	}
 	var req struct {
 		Text    string `json:"text"`
 		Restart bool   `json:"restart"`
@@ -132,7 +164,7 @@ func (s *Server) deployPrompt(w http.ResponseWriter, r *http.Request, team store
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("Der Prompt hat %d Zeichen, erlaubt sind %d.", n, MaxPromptChars))
 		return
 	}
-	p, err := s.Store.SavePrompt(r.Context(), team.ID, req.Text)
+	p, err := s.Store.SavePrompt(r.Context(), tt, req.Text)
 	if err != nil {
 		s.serverError(w, err)
 		return
@@ -259,7 +291,11 @@ func (s *Server) stop(w http.ResponseWriter, r *http.Request, team store.Team) {
 }
 
 func (s *Server) listNotes(w http.ResponseWriter, r *http.Request, team store.Team) {
-	notes, err := s.Store.ListNotes(r.Context(), team.ID)
+	tt, ok := s.activeTask(w, r, team)
+	if !ok {
+		return
+	}
+	notes, err := s.Store.ListNotes(r.Context(), tt)
 	if err != nil {
 		s.serverError(w, err)
 		return
@@ -287,11 +323,15 @@ func noteText(w http.ResponseWriter, r *http.Request) (string, bool) {
 }
 
 func (s *Server) addNote(w http.ResponseWriter, r *http.Request, team store.Team) {
+	tt, ok := s.activeTask(w, r, team)
+	if !ok {
+		return
+	}
 	text, ok := noteText(w, r)
 	if !ok {
 		return
 	}
-	n, err := s.Store.AddNote(r.Context(), team.ID, text, "team")
+	n, err := s.Store.AddNote(r.Context(), tt, text, "team")
 	if err != nil {
 		s.serverError(w, err)
 		return
@@ -300,6 +340,10 @@ func (s *Server) addNote(w http.ResponseWriter, r *http.Request, team store.Team
 }
 
 func (s *Server) updateNote(w http.ResponseWriter, r *http.Request, team store.Team) {
+	tt, ok := s.activeTask(w, r, team)
+	if !ok {
+		return
+	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "Unbekannte Notiz.")
@@ -309,16 +353,20 @@ func (s *Server) updateNote(w http.ResponseWriter, r *http.Request, team store.T
 	if !ok {
 		return
 	}
-	s.noteResult(w, s.Store.UpdateNote(r.Context(), team.ID, id, text))
+	s.noteResult(w, s.Store.UpdateNote(r.Context(), tt, id, text))
 }
 
 func (s *Server) deleteNote(w http.ResponseWriter, r *http.Request, team store.Team) {
+	tt, ok := s.activeTask(w, r, team)
+	if !ok {
+		return
+	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "Unbekannte Notiz.")
 		return
 	}
-	s.noteResult(w, s.Store.DeleteNote(r.Context(), team.ID, id))
+	s.noteResult(w, s.Store.DeleteNote(r.Context(), tt, id))
 }
 
 func (s *Server) noteResult(w http.ResponseWriter, err error) {

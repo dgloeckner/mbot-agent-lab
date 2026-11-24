@@ -29,6 +29,7 @@ const AllRobots = "alle"
 // Env is what a tool call needs to know about the calling agent.
 type Env struct {
 	TeamID   string
+	TaskID   string // the task of the run: remember and forget act on its notes
 	TeamName string
 	RunID    int64
 	MsgID    int64 // newest inbox message: provenance for notes
@@ -41,6 +42,8 @@ type Env struct {
 	// Finish ends the run with a report. Set by the agent runtime.
 	Finish func(report string)
 }
+
+func (e *Env) pair() store.TeamTask { return store.TeamTask{Team: e.TeamID, Task: e.TaskID} }
 
 // robot parameter modes.
 const (
@@ -630,14 +633,14 @@ func builtins() []*tool {
 			props:    static(map[string]any{"text": map[string]any{"type": "string", "maxLength": 200}}),
 			required: []string{"text"},
 			run: func(ctx context.Context, c *call) any {
-				existing, err := c.r.Store.ListNotes(ctx, c.env.TeamID)
+				existing, err := c.r.Store.ListNotes(ctx, c.env.pair())
 				if err != nil {
 					return fail("Notizen sind gerade nicht erreichbar.")
 				}
 				if len(existing) >= maxNotes {
 					return fail("Es gibt schon %d Notizen. Lösche zuerst eine mit forget.", maxNotes)
 				}
-				n, err := c.r.Store.AddNoteFrom(ctx, c.env.TeamID, clampRunes(c.str("text"), 200), "agent", c.env.RunID, c.env.MsgID)
+				n, err := c.r.Store.AddNoteFrom(ctx, c.env.pair(), clampRunes(c.str("text"), 200), "agent", c.env.RunID, c.env.MsgID)
 				if err != nil {
 					return fail("Die Notiz konnte nicht gespeichert werden.")
 				}
@@ -650,7 +653,7 @@ func builtins() []*tool {
 			props:    static(map[string]any{"note_id": map[string]any{"type": "integer"}}),
 			required: []string{"note_id"},
 			run: func(ctx context.Context, c *call) any {
-				if err := c.r.Store.DeleteNote(ctx, c.env.TeamID, int64(c.num("note_id", 0))); err != nil {
+				if err := c.r.Store.DeleteNote(ctx, c.env.pair(), int64(c.num("note_id", 0))); err != nil {
 					return fail("Diese Notiz gibt es nicht.")
 				}
 				return map[string]any{"ok": true}

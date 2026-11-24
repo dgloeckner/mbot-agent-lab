@@ -133,20 +133,54 @@ assignments are not in the configuration; they live in the database.
 
 ### Data model (SQLite)
 
-Timestamps are RFC 3339 strings in UTC. Migrations are numbered files in
-`server/internal/store/migrations`, applied in order and tracked in `PRAGMA user_version`.
+Timestamps are RFC 3339 strings in UTC. The schema lives in `server/internal/store/migrations`
+(numbered files, applied in order, tracked in `PRAGMA user_version`). A database from before the
+tasks reset (no `team_tasks` table) is refused at startup with "delete the file and start again";
+its data is not migrated.
+
+```
+tasks ──< team_tasks >── teams
+              │
+              ├──< prompts      (agent versions, numbered per (team, task))
+              ├──< notes
+              └──< runs ──< messages, tool_calls (robot), llm_calls
+active_tasks: one row per team, points at an assigned team_task
+robots: every robot the lab knows, so runs can reference it
+```
+
+**The key of everything a team produces is the pair (team, task)**, `(team_id, task_id)`.
+`prompts`, `notes` and `runs` carry both columns with a composite foreign key to `team_tasks`, so
+queries per pair need no join and the database refuses rows for a pair that was never assigned.
+In Go the pair is one type, `store.TeamTask{Team, Task}`; every team-scoped store function takes
+it (`SavePrompt(ctx, tt, text)`, `ListNotes(ctx, tt)`, `LastRun(ctx, tt)`, …). Finer scopes:
+(team, task, robot) through `robot_id` on messages and tool calls, and (team, task, robot, agent
+version) through `runs.prompt_id`. The agent version is the prompt version; the run records the
+model next to it.
 
 | Table | Content |
 | --- | --- |
-| `teams` | ID, name (unique, case-insensitive), secret token, color, chosen model provider |
+| `teams` | ID, name (unique among teams not deleted, case-insensitive), secret token, color, chosen model provider, `deleted_at` |
+| `tasks` | ID, title, body (Markdown for the team), starter prompt, state (`draft`, `open`, `closed`), created, published and closed time |
+| `team_tasks` | a task assigned to a team: assigned time, accepted time |
+| `active_tasks` | the task a team works in (one row per team, must be an assigned pair) |
+| `robots` | device ID (stable across renames), first seen; every configured robot is registered at startup |
 | `assignments` | robot → owner (`team:<id>`), alias (unique per owner) |
-| `prompts` | team, version, text, time |
-| `runs` | team, prompt version, model, kind (`run` or `conversation`), start, end, end reason, tokens, cost, report |
-| `messages` | run, sequence, source, kind, text, data, time |
-| `tool_calls` | run, sequence, name, arguments, result, duration |
+| `prompts` | (team, task), version (from 1 per pair), text, time |
+| `runs` | (team, task), kind (`run` or `conversation`), prompt (agent version), model, start, end, end reason, tokens, cost, report |
+| `messages` | run, sequence, source, kind, text, data, robot ID and alias at that moment, time |
+| `tool_calls` | run, sequence, name, arguments, result, duration, robot ID and alias at that moment |
 | `llm_calls` | run, provider, model, tokens in and out, duration, cost |
-| `notes` | team, text, origin run and message, author (`agent` or `team`), time |
+| `notes` | (team, task), text, origin run and message, author (`agent` or `team`), time |
 | `settings` | lab-wide settings: lab code, released models, conversations on or off |
+
+**Deleting a team** is a soft delete: `deleted_at` is set, its robots are freed, the team
+disappears from the control room and its link stops working; its tasks, prompts, notes and runs
+stay, so results and history stay consistent. Its name is free again.
+
+**Temporary bridge:** until teams accept tasks themselves, `lab` creates a shared task `default`
+("Freies Arbeiten") and assigns, accepts and activates it for every team that joins
+(`server/internal/lab/bridge.go`). Team routes and the agent work in the team's active task; a
+team without one gets 409 "Eurem Team ist noch keine Aufgabe zugewiesen."
 
 ### HTTP routes
 

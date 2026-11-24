@@ -34,19 +34,20 @@ func parseTime(s string) time.Time {
 	return t
 }
 
-// SavePrompt stores text as the next version for team and returns it.
-func (s *Store) SavePrompt(ctx context.Context, team, text string) (Prompt, error) {
+// SavePrompt stores text as the next version of the pair and returns it.
+// Versions count per (team, task), from 1.
+func (s *Store) SavePrompt(ctx context.Context, tt TeamTask, text string) (Prompt, error) {
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return Prompt{}, err
 	}
 	defer tx.Rollback()
 	var v int
-	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(version), 0) + 1 FROM prompts WHERE team_id = ?`, team).Scan(&v); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(version), 0) + 1 FROM prompts WHERE team_id = ? AND task_id = ?`, tt.Team, tt.Task).Scan(&v); err != nil {
 		return Prompt{}, err
 	}
 	at := now()
-	res, err := tx.ExecContext(ctx, `INSERT INTO prompts (team_id, version, text, created_at) VALUES (?, ?, ?, ?)`, team, v, text, at)
+	res, err := tx.ExecContext(ctx, `INSERT INTO prompts (team_id, task_id, version, text, created_at) VALUES (?, ?, ?, ?, ?)`, tt.Team, tt.Task, v, text, at)
 	if err != nil {
 		return Prompt{}, err
 	}
@@ -57,9 +58,9 @@ func (s *Store) SavePrompt(ctx context.Context, team, text string) (Prompt, erro
 	return Prompt{ID: id, Version: v, Text: text, CreatedAt: parseTime(at), Chars: len([]rune(text))}, nil
 }
 
-// ListPrompts returns all versions of team, newest first, without text.
-func (s *Store) ListPrompts(ctx context.Context, team string) ([]Prompt, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT version, created_at, length(text) FROM prompts WHERE team_id = ? ORDER BY version DESC`, team)
+// ListPrompts returns all versions of the pair, newest first, without text.
+func (s *Store) ListPrompts(ctx context.Context, tt TeamTask) ([]Prompt, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT version, created_at, length(text) FROM prompts WHERE team_id = ? AND task_id = ? ORDER BY version DESC`, tt.Team, tt.Task)
 	if err != nil {
 		return nil, err
 	}
@@ -78,12 +79,12 @@ func (s *Store) ListPrompts(ctx context.Context, team string) ([]Prompt, error) 
 }
 
 // GetPrompt returns one version; version 0 means the latest.
-func (s *Store) GetPrompt(ctx context.Context, team string, version int) (Prompt, error) {
-	q := `SELECT id, version, text, created_at FROM prompts WHERE team_id = ? AND version = ?`
-	args := []any{team, version}
+func (s *Store) GetPrompt(ctx context.Context, tt TeamTask, version int) (Prompt, error) {
+	q := `SELECT id, version, text, created_at FROM prompts WHERE team_id = ? AND task_id = ? AND version = ?`
+	args := []any{tt.Team, tt.Task, version}
 	if version == 0 {
-		q = `SELECT id, version, text, created_at FROM prompts WHERE team_id = ? ORDER BY version DESC LIMIT 1`
-		args = args[:1]
+		q = `SELECT id, version, text, created_at FROM prompts WHERE team_id = ? AND task_id = ? ORDER BY version DESC LIMIT 1`
+		args = args[:2]
 	}
 	var p Prompt
 	var at string
@@ -99,9 +100,9 @@ func (s *Store) GetPrompt(ctx context.Context, team string, version int) (Prompt
 	return p, nil
 }
 
-// ListNotes returns the notes of team, oldest first.
-func (s *Store) ListNotes(ctx context.Context, team string) ([]Note, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT id, text, author, created_at FROM notes WHERE team_id = ? ORDER BY id`, team)
+// ListNotes returns the notes of the pair, oldest first.
+func (s *Store) ListNotes(ctx context.Context, tt TeamTask) ([]Note, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT id, text, author, created_at FROM notes WHERE team_id = ? AND task_id = ? ORDER BY id`, tt.Team, tt.Task)
 	if err != nil {
 		return nil, err
 	}
@@ -120,16 +121,16 @@ func (s *Store) ListNotes(ctx context.Context, team string) ([]Note, error) {
 }
 
 // AddNote creates a note written by the team.
-func (s *Store) AddNote(ctx context.Context, team, text, author string) (Note, error) {
-	return s.AddNoteFrom(ctx, team, text, author, 0, 0)
+func (s *Store) AddNote(ctx context.Context, tt TeamTask, text, author string) (Note, error) {
+	return s.AddNoteFrom(ctx, tt, text, author, 0, 0)
 }
 
 // AddNoteFrom creates a note and records which run and message it came from,
 // so a note planted by another agent can be traced. Zero IDs mean unknown.
-func (s *Store) AddNoteFrom(ctx context.Context, team, text, author string, runID, msgID int64) (Note, error) {
+func (s *Store) AddNoteFrom(ctx context.Context, tt TeamTask, text, author string, runID, msgID int64) (Note, error) {
 	at := now()
-	res, err := s.DB.ExecContext(ctx, `INSERT INTO notes (team_id, text, author, created_at, origin_run_id, origin_msg_id) VALUES (?, ?, ?, ?, ?, ?)`,
-		team, text, author, at, nullID(runID), nullID(msgID))
+	res, err := s.DB.ExecContext(ctx, `INSERT INTO notes (team_id, task_id, text, author, created_at, origin_run_id, origin_msg_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		tt.Team, tt.Task, text, author, at, nullID(runID), nullID(msgID))
 	if err != nil {
 		return Note{}, err
 	}
@@ -137,14 +138,14 @@ func (s *Store) AddNoteFrom(ctx context.Context, team, text, author string, runI
 	return Note{ID: id, Text: text, Author: author, CreatedAt: parseTime(at)}, nil
 }
 
-// UpdateNote changes the text of a note of team.
-func (s *Store) UpdateNote(ctx context.Context, team string, id int64, text string) error {
-	return s.affectOne(ctx, `UPDATE notes SET text = ? WHERE id = ? AND team_id = ?`, text, id, team)
+// UpdateNote changes the text of a note of the pair.
+func (s *Store) UpdateNote(ctx context.Context, tt TeamTask, id int64, text string) error {
+	return s.affectOne(ctx, `UPDATE notes SET text = ? WHERE id = ? AND team_id = ? AND task_id = ?`, text, id, tt.Team, tt.Task)
 }
 
-// DeleteNote removes a note of team.
-func (s *Store) DeleteNote(ctx context.Context, team string, id int64) error {
-	return s.affectOne(ctx, `DELETE FROM notes WHERE id = ? AND team_id = ?`, id, team)
+// DeleteNote removes a note of the pair.
+func (s *Store) DeleteNote(ctx context.Context, tt TeamTask, id int64) error {
+	return s.affectOne(ctx, `DELETE FROM notes WHERE id = ? AND team_id = ? AND task_id = ?`, id, tt.Team, tt.Task)
 }
 
 func (s *Store) affectOne(ctx context.Context, q string, args ...any) error {
