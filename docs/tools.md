@@ -127,6 +127,20 @@ and has a description as a tool of its own:
   team tool of the version, nor a built-in tool, nor one of the team's robots, the deploy answers
   a warning and still deploys.
 
+## Tool set of a task
+
+A task says which tools the agent gets (`agent_tools`, set on the draft, fixed when published):
+
+- `all` (default): every built-in tool and the team tools of the deployed version.
+- `team_tools`: the team's deployed own tools plus `read_sensors`, `say`, `finish`, `tell_team`,
+  `remember` and `forget`. These six move no robot, so the comparison of how teams cut their tools
+  (stage 5) still measures the team tools: everything that moves a robot is the team's.
+
+A call of a tool that is not on the list answers like any unknown tool ("Das Werkzeug … gibt es
+nicht. Verfügbar: …"), so the agent can correct itself; the server logs `tool not offered`.
+Conversation mode lists the same tools. The console and "Ausführen" stay available outside runs;
+in the challenge the lab lead counts them as interventions.
+
 ## Block texts
 
 Every by-hand tool has one line in `server/internal/tools/blocks.go`: the German sentence of its

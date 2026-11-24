@@ -337,7 +337,7 @@ func (a *actor) process(parent context.Context, r *run, pending []Message) []Mes
 		if err != nil {
 			a.m.Log.Error("load team tools", "team", a.team, "err", err)
 		}
-		defs := append(a.m.Tools.Definitions(env), a.m.teamToolDefs(a.team, teamTools)...)
+		defs := append(allowedDefs(a.m.Tools.Definitions(env), a.m.toolSet(ctx, r.task.Task)), a.m.teamToolDefs(a.team, teamTools)...)
 		resp, call, err := a.m.LLM.ChatWith(ctx, r.provider, llm.Request{Messages: messages, Tools: defs})
 		if err != nil {
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
@@ -369,7 +369,7 @@ func (a *actor) process(parent context.Context, r *run, pending []Message) []Mes
 		}
 
 		a.setState(StateActing)
-		a.runTools(ctx, r, env, msg.ToolCalls, teamTools)
+		a.runTools(ctx, r, env, msg.ToolCalls, teamTools, defs)
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			r.limitReached = "time_limit"
 			return nil
@@ -403,7 +403,11 @@ func (a *actor) drainTalk() []Message {
 // acts on no robot (finish, wait_for, say, ...) waits for all earlier calls
 // and holds up all later ones. Each call is logged when it ends; the history
 // and the store get the results in call order, as the model sent them.
-func (a *actor) runTools(ctx context.Context, r *run, env *tools.Env, calls []llm.ToolCall, teamTools map[string]teamTool) {
+func (a *actor) runTools(ctx context.Context, r *run, env *tools.Env, calls []llm.ToolCall, teamTools map[string]teamTool, defs []llm.Tool) {
+	offered := map[string]bool{}
+	for _, d := range defs {
+		offered[d.Name] = true
+	}
 	type outcome struct {
 		ran    bool
 		result json.RawMessage
@@ -441,9 +445,13 @@ func (a *actor) runTools(ctx context.Context, r *run, env *tools.Env, calls []ll
 			start := time.Now()
 			var result json.RawMessage
 			var steps []teamToolStep
-			if isTeamTool {
+			switch {
+			case isTeamTool:
 				result, steps = a.runTeamTool(ctx, env, tc.Function.Name, tt, tc.Function.Arguments)
-			} else {
+			case !offered[tc.Function.Name]:
+				result = unknownTool(tc.Function.Name, defs) // not in this task's tool set
+				a.m.Log.Info("tool not offered", "team", a.team, "task", r.task.Task, "tool", tc.Function.Name, "run", r.id)
+			default:
 				result = a.m.Tools.Call(ctx, env, tc.Function.Name, tc.Function.Arguments)
 			}
 			d := time.Since(start)

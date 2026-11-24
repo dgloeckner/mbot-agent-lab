@@ -4,15 +4,24 @@ import { parseTaskFile } from './taskfile'
 describe('parseTaskFile', () => {
   it('reads title, task text and starter prompt', () => {
     const t = parseTaskFile('---\ntitle: Labyrinth\n---\n\n## Aufgabe\n\nFindet **Blau**.\n\n## Startprompt\n\n# Feldwissen\nFahr los.\n')
-    expect(t).toEqual({ title: 'Labyrinth', body: 'Findet **Blau**.', starter: '# Feldwissen\nFahr los.' })
+    expect(t).toEqual({ title: 'Labyrinth', body: 'Findet **Blau**.', starter: '# Feldwissen\nFahr los.', agentTools: 'all' })
   })
   it('reads English headings and Windows line ends', () => {
     const t = parseTaskFile('---\r\ntitle: "Maze"\r\n---\r\n## Task\r\nFind blue.\r\n## Starter prompt\r\nGo.\r\n')
-    expect(t).toEqual({ title: 'Maze', body: 'Find blue.', starter: 'Go.' })
+    expect(t).toEqual({ title: 'Maze', body: 'Find blue.', starter: 'Go.', agentTools: 'all' })
   })
   it('takes a pasted text without structure as the task text', () => {
-    expect(parseTaskFile('# Rennen\n\nFahrt eine Runde.')).toEqual({ title: 'Rennen', body: 'Fahrt eine Runde.', starter: '' })
-    expect(parseTaskFile('Nur Text.')).toEqual({ title: '', body: 'Nur Text.', starter: '' })
+    expect(parseTaskFile('# Rennen\n\nFahrt eine Runde.')).toEqual({ title: 'Rennen', body: 'Fahrt eine Runde.', starter: '', agentTools: 'all' })
+    expect(parseTaskFile('Nur Text.')).toEqual({ title: '', body: 'Nur Text.', starter: '', agentTools: 'all' })
+  })
+})
+
+describe('agent_tools', () => {
+  it('reads the tool set of a task and refuses an unknown value', () => {
+    expect(parseTaskFile('---\ntitle: Challenge\nagent_tools: team_tools\n---\n## Aufgabe\nLos.').agentTools).toBe('team_tools')
+    const bad = parseTaskFile('---\ntitle: Challenge\nagent_tools: einige\n---\n## Aufgabe\nLos.')
+    expect(bad.agentTools).toBe('all')
+    expect(bad.error).toContain('einige')
   })
 })
 
@@ -36,6 +45,7 @@ describe('docs/lab/aufgaben', () => {
       expect(t.body.length).toBeGreaterThan(50)
       expect(t.starter.length).toBeGreaterThan(50)
       expect(t.body).not.toContain('## ')
+      expect(t.error).toBeUndefined()
     })
   }
 })

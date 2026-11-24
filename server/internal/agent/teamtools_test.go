@@ -128,3 +128,42 @@ func TestTeamToolWithTwoRobotsAndAnAbort(t *testing.T) {
 		t.Error("the summary holds a floor trace")
 	}
 }
+
+func TestTeamToolsOnlyTask(t *testing.T) {
+	f := newFixture(t, config.Budgets{})
+	if _, err := f.st.DB.Exec(`UPDATE tasks SET agent_tools = 'team_tools' WHERE id = ?`, testTask); err != nil {
+		t.Fatal(err)
+	}
+	saveTool(t, f.st, "rot", "p1", "quadrat", "Fährt ein Quadrat.", squareTree, true)
+	f.deploy(t, "rot", "Los.")
+	f.model.next = func(n int, req llm.Request) llm.Message {
+		switch n {
+		case 1:
+			return toolCall("c1", "drive", `{"cm":20}`)
+		case 2:
+			return toolCall("c2", "quadrat", `{}`)
+		}
+		return toolCall("c3", "finish", `{"report":"fertig"}`)
+	}
+	if err := f.m.Start(context.Background(), "rot"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the run to finish", func() bool { return !f.m.Status("rot").Running })
+	reqs := f.model.calls()
+	var names []string
+	for _, tl := range reqs[0].Tools {
+		names = append(names, tl.Name)
+	}
+	if got := strings.Join(names, ","); got != "read_sensors,say,tell_team,remember,forget,finish,quadrat" {
+		t.Errorf("tools = %s", got)
+	}
+	results := map[string]string{}
+	for _, m := range reqs[2].Messages {
+		if m.Role == llm.RoleTool {
+			results[m.Name] = m.Content
+		}
+	}
+	if !strings.Contains(results["drive"], `gibt es nicht`) || !strings.Contains(results["quadrat"], `"end":"done"`) {
+		t.Errorf("results = %v", results)
+	}
+}

@@ -134,7 +134,7 @@ async function openTask(id: string) {
 
 async function newTask() {
   try {
-    editing.value = await call('POST', '/tasks', { title: 'Neue Aufgabe', body: '', starter: '' })
+    editing.value = await call('POST', '/tasks', { title: 'Neue Aufgabe', body: '', starter: '', agent_tools: 'all' })
     void act(Promise.resolve())
   } catch (e) {
     say((e as Error).message, true)

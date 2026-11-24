@@ -209,6 +209,9 @@ function TaskPanel() {
     <div class="task-panel scroll">
       <h2 class="task-panel-title">{t.title}</h2>
       <p class="panel-intro">Euer Agent sieht diesen Text nicht. Schreibt in euren Prompt, was er wissen muss.</p>
+      {t.agent_tools === 'team_tools' && (
+        <p class="task-tool-rule">In dieser Aufgabe darf euer Agent nur eure eigenen Werkzeuge nutzen, dazu read_sensors, say, tell_team, remember, forget und finish.</p>
+      )}
       <TaskText task={t} />
     </div>
   )
@@ -407,8 +410,16 @@ function consoleBlocked(): string | null {
   return null
 }
 
+/** In a task with the tool set team_tools: the built-in tools the agent does not have. */
+function missingInTask(): Set<string> | null {
+  if (task.value?.agent_tools !== 'team_tools') return null
+  const kept = new Set(session.value!.team_only_tools ?? [])
+  return new Set(session.value!.tools.filter((t) => !kept.has(t.name)).map((t) => t.name))
+}
+
 function ToolsPanel() {
   const tools = session.value!.tools
+  const missing = missingInTask()
   const groups = [...new Set(tools.map((t) => t.group))]
   const open = useSignal<string | null>(null)
   const picked = useSignal<string>('')
@@ -444,6 +455,12 @@ function ToolsPanel() {
           Erst anhalten: Solange euer Agent läuft, könnt ihr nichts selbst ausführen.
         </p>
       )}
+      {missing && (
+        <p class="console-hint task-tool-rule" role="note">
+          In dieser Aufgabe hat euer Agent nur eure eigenen Werkzeuge und {(session.value!.team_only_tools ?? []).join(', ')}. Die anderen
+          eingebauten fehlen ihm, ihr dürft sie aber selbst ausführen.
+        </p>
+      )}
       <OwnTools blocked={blocked} robot={robot} />
       {groups.map((g) => (
         <section key={g}>
@@ -459,7 +476,10 @@ function ToolsPanel() {
                     {byHand ? (
                       <button class="tool" aria-expanded={isOpen} onClick={() => (open.value = isOpen ? null : t.name)}>
                         <code>{t.name}</code>
-                        <span class="tool-params">{t.params}</span>
+                        <span class="tool-params">
+                          {t.params}
+                          {missing?.has(t.name) && <span class="tool-tag tag-missing">nicht beim Agenten</span>}
+                        </span>
                         <svg class="tool-chevron" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24">
                           <path d={isOpen ? 'M5 9l7 7 7-7' : 'M9 5l7 7-7 7'} />
                         </svg>
@@ -469,7 +489,9 @@ function ToolsPanel() {
                       <button class="tool" data-ready={t.ready} onClick={() => editorBridge.insert?.('`' + t.name + '`')} title="In den Prompt einfügen">
                         <code>{t.name}</code>
                         <span class="tool-params">{t.params}</span>
-                        <span class="tool-tag">{t.ready ? 'nur Agent' : 'kommt bald'}</span>
+                        <span class={`tool-tag${t.ready && missing?.has(t.name) ? ' tag-missing' : ''}`}>
+                          {!t.ready ? 'kommt bald' : missing?.has(t.name) ? 'nicht beim Agenten' : 'nur Agent'}
+                        </span>
                         <span class="tool-summary">
                           {t.summary}
                           {!t.ready && ' Euer Agent hat es noch nicht.'}

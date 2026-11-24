@@ -419,6 +419,32 @@ class SmokeTest(LabCase):
         print("e2e: quadrat %s -> %s, %.1f cm off" % (start, end, off), file=sys.stderr)
         self.assertLess(off, 10, (start, end))
 
+    def test_team_tools_only_task(self):
+        """Challenge rule: the agent has only the team's own tools. Its call of
+        a built-in motion tool comes back as unknown; its team tool runs."""
+        self.request("POST", "/admin/api/login", {"password": self.admin_password}, expect=(204,))
+        self.robot_online(ROBOT)
+        team = self.request("POST", "/api/join", {"code": self.lab_code, "name": "Nur Eigene"},
+                            opener=urllib.request.build_opener(), expect=(201,))
+        task = self.request("POST", "/admin/api/tasks", {"title": "Challenge", "body": "Nur eigene Werkzeuge.", "agent_tools": "team_tools"}, expect=(201,))
+        self.request("POST", "/admin/api/tasks/%s/publish" % task["id"])
+        self.request("POST", "/admin/api/tasks/%s/assign" % task["id"], {"teams": [team["id"]]})
+        self.team_request(team, "POST", "/tasks/%s/accept" % task["id"], {"prompt": "empty"})
+        self.request("POST", "/admin/api/assign", {"robot": ROBOT, "team": team["id"]}, expect=(204,))
+        self.follow_team_log(team["token"])
+        self.wait_for(lambda: any(r["online"] for r in self.team_request(team, "GET", "/api/session")["robots"]), "robot assigned")
+        time.sleep(1.5)
+        ex = json.loads((ROOT / "docs" / "examples" / "programs" / "quadrat.json").read_text(encoding="utf-8"))
+        self.team_request(team, "POST", "/programs", {"name": "quadrat", "description": "Fährt ein Quadrat.", "blockly": ex["blockly"]}, expect=(201,))
+        self.team_request(team, "POST", "/prompt", {"text": "Fahre mit `quadrat` ein Quadrat."}, expect=(201,))
+        self.team_request(team, "POST", "/start", expect=(202,))
+        self.wait_for(lambda: self.log_entries(lambda e: e.get("kind") == "run_end"), "the end of the run")
+        calls = {(e.get("data") or {}).get("name"): (e.get("data") or {}).get("result") for e in
+                 self.log_entries(lambda e: e.get("kind") == "tool" and e.get("source") == "agent" and not (e.get("data") or {}).get("program"))}
+        print("e2e: restricted task: drive_until -> %s; quadrat -> %s" % (calls.get("drive_until"), calls.get("quadrat")), file=sys.stderr)
+        self.assertIn("gibt es nicht", calls["drive_until"]["error"])
+        self.assertEqual(calls["quadrat"]["end"], "done")
+
     def test_two_tasks_and_a_switch(self):
         """A team works in two tasks and switches between them: prompt, notes
         and runs always belong to the active task. Starting before accepting a

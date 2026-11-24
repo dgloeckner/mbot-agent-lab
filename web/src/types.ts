@@ -151,6 +151,8 @@ export interface TeamTask {
   status: TeamTaskStatus
   assigned_at: string
   accepted_at?: string
+  /** all: the agent has every tool; team_tools: only the team's own and a few that move no robot. */
+  agent_tools?: 'all' | 'team_tools'
 }
 
 export type PromptChoice = 'starter' | 'empty' | 'copy'
@@ -169,6 +171,8 @@ export interface Session {
   versions: PromptVersion[]
   notes: Note[]
   tools: ToolInfo[]
+  /** The built-in tools the agent keeps in a task with agent_tools team_tools. */
+  team_only_tools?: string[]
   limits: { prompt_chars: number; message_chars: number; note_chars: number }
 }
 

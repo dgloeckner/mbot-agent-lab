@@ -740,3 +740,17 @@
 .task-import .btn {
   justify-self: start;
 }
+
+.task-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.task-rule {
+  margin: 8px 0;
+  padding: 6px 10px;
+  border-left: 3px solid var(--accent, #2b6cee);
+  font-weight: 600;
+}

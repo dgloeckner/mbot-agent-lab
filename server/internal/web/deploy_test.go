@@ -69,3 +69,31 @@ func TestDeployVersionsWithTeamTools(t *testing.T) {
 		t.Errorf("unknown version: %d", code)
 	}
 }
+
+func TestTaskToolSetRoutes(t *testing.T) {
+	srv := newTestServer(t)
+	c := adminClient(t, srv)
+	code, raw := adminCall(t, c, srv, "POST", "/admin/api/tasks", `{"title":"Challenge","body":"Nur eigene Werkzeuge.","agent_tools":"team_tools"}`)
+	task, _ := raw.(map[string]any)
+	if code != http.StatusCreated || task["agent_tools"] != "team_tools" {
+		t.Fatalf("create: %d %v", code, task)
+	}
+	id := task["id"].(string)
+	if code, got := adminCall(t, c, srv, "PUT", "/admin/api/tasks/"+id, `{"title":"Challenge","body":"x","agent_tools":"all"}`); code != http.StatusOK || got.(map[string]any)["agent_tools"] != "all" {
+		t.Errorf("edit the draft: %d %v", code, got)
+	}
+	adminCall(t, c, srv, "PUT", "/admin/api/tasks/"+id, `{"title":"Challenge","body":"x","agent_tools":"team_tools"}`)
+	adminCall(t, c, srv, "POST", "/admin/api/tasks/"+id+"/publish", "")
+	if code, _ := adminCall(t, c, srv, "PUT", "/admin/api/tasks/"+id, `{"title":"Challenge","body":"x","agent_tools":"all"}`); code != http.StatusConflict {
+		t.Errorf("edit after publishing: %d", code)
+	}
+	if code, got := adminCall(t, c, srv, "GET", "/admin/api/tasks/"+id, ""); code != http.StatusOK || got.(map[string]any)["agent_tools"] != "team_tools" {
+		t.Errorf("read: %d %v", code, got)
+	}
+	adminCall(t, c, srv, "POST", "/admin/api/tasks/"+id+"/assign", `{"teams":["rot"]}`)
+	do(t, srv, "POST", "/t/tok-rot/tasks/"+id+"/accept", `{"prompt":"empty"}`)
+	_, sess := do(t, srv, "GET", "/t/tok-rot/api/session", "")
+	if sess["task"].(map[string]any)["agent_tools"] != "team_tools" {
+		t.Errorf("session task = %v", sess["task"])
+	}
+}

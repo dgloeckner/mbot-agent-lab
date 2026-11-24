@@ -162,7 +162,7 @@ model next to it.
 | Table | Content |
 | --- | --- |
 | `teams` | ID, name (unique among teams not deleted, case-insensitive), secret token, color, chosen model provider, `deleted_at` |
-| `tasks` | ID, title, body (Markdown for the team), starter prompt, state (`draft`, `open`, `closed`), created, published and closed time |
+| `tasks` | ID, title, body (Markdown for the team), starter prompt, state (`draft`, `open`, `closed`), tool set of the agent (`agent_tools`: `all` or `team_tools`), created, published and closed time |
 | `team_tasks` | a task assigned to a team: assigned time, accepted time, withdrawn time |
 | `active_tasks` | the task a team works in (one row per team, must be an assigned pair) |
 | `robots` | device ID (stable across renames), first seen; every configured robot is registered at startup |
@@ -192,8 +192,13 @@ The control room prepares tasks and assigns them to teams; the rules live in `in
 (`tasks.go`).
 
 - **Lifecycle:** `draft` → `open` (published) → `closed`. Only drafts can be edited or deleted.
-  Publishing needs a title and a text and fixes title, text and starter prompt: all teams and
-  the results refer to the same text. "Duplicate" creates a new draft from a task in any state.
+  Publishing needs a title and a text and fixes title, text, starter prompt and the agent's tool
+  set: all teams and the results refer to the same task.
+- **Tool set** (`agent_tools`): `all`, or `team_tools` for the challenge: the agent gets only the
+  team's deployed own tools and a few that move no robot (`tools.md`, "Tool set of a task"). The
+  task editor has the checkbox "Agent darf nur eigene Werkzeuge des Teams nutzen"; task files set
+  it with `agent_tools` in the front matter. The team page names the rule in "Aufgabe" and marks
+  the built-in tools the agent does not have in "Werkzeuge". "Duplicate" creates a new draft from a task in any state.
 - **Assigning:** only open tasks, to listed teams or to all current teams (`"all"`); teams that
   join later get nothing automatically. Assigning twice changes nothing. An assignment the team
   has not accepted can be withdrawn (`team_tasks.withdrawn_at`); assigning again makes it new.
@@ -262,7 +267,7 @@ Control room (`/admin`, admin password, session cookie):
 | `PUT /admin/api/teams/{id}`, `PUT …/color`, `DELETE …` | rename, recolor, delete a team |
 | `POST /admin/api/stop-all` | emergency stop for all robots |
 | `PUT /admin/api/models`, `PUT /admin/api/conversation` | released models; conversations on or off |
-| `GET/POST /admin/api/tasks` | list tasks; create a draft `{title, body, starter}` |
+| `GET/POST /admin/api/tasks` | list tasks; create a draft `{title, body, starter, agent_tools}` |
 | `GET/PUT/DELETE /admin/api/tasks/{id}` | read a task with its text; edit or delete a draft |
 | `POST /admin/api/tasks/{id}/publish`, `/close`, `/duplicate` | publish a draft, close an open task, copy any task into a new draft |
 | `POST /admin/api/tasks/{id}/assign` | assign `{teams: ["t…", …]}` or `{teams: "all"}`; answers the teams that got it now |
@@ -452,7 +457,7 @@ embed compiling without a build. No CDN assets. Rarely used views are lazy-loade
     deleted; a published task is shown read-only with "Duplizieren" and "Aufgabe schließen"
     (with confirmation: running runs end).
     A draft can be filled from a task file (`docs/lab/aufgaben/{de,en}/*.md`: front matter with
-    `title`, sections `## Aufgabe`/`## Task` and `## Startprompt`/`## Starter prompt`) by upload
+    `title` and optional `agent_tools`, sections `## Aufgabe`/`## Task` and `## Startprompt`/`## Starter prompt`) by upload
     or paste; the browser parses it (`web/src/admin/taskfile.ts`), the server never reads files.
   - **Assigning:** drag an open task onto a team card, or pick a team or "An alle Teams" in the
     task's "Zuweisen …" menu (keyboard and screen readers, like robot assignment). Each team

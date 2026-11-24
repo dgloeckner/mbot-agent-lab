@@ -97,3 +97,27 @@ func TestSaveProgramRules(t *testing.T) {
 }
 
 func pairOf(team, task string) store.TeamTask { return store.TeamTask{Team: team, Task: task} }
+
+func TestAgentToolsIsATaskOption(t *testing.T) {
+	ctx := context.Background()
+	s, _ := taskService(t)
+	task, err := s.CreateTask(ctx, TaskInput{Title: "Challenge", Body: "x", AgentTools: "team_tools"})
+	if err != nil || task.AgentTools != "team_tools" {
+		t.Fatalf("create = %+v, %v", task, err)
+	}
+	if _, err := s.CreateTask(ctx, TaskInput{Title: "Kaputt", AgentTools: "einige"}); err == nil {
+		t.Error("an unknown tool set was accepted")
+	}
+	if dup, _ := s.DuplicateTask(ctx, task.ID); dup.AgentTools != "team_tools" {
+		t.Errorf("duplicate = %+v", dup)
+	}
+	if _, err := s.PublishTask(ctx, task.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.UpdateTask(ctx, task.ID, TaskInput{Title: "Challenge", Body: "x", AgentTools: "all"}); !conflict(err) {
+		t.Errorf("change after publishing: %v", err)
+	}
+	if got, _ := s.Task(ctx, task.ID); got.AgentTools != "team_tools" {
+		t.Errorf("after the refused change = %+v", got)
+	}
+}

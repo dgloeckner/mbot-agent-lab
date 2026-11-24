@@ -2335,3 +2335,18 @@ kbd {
   display: flex;
   gap: 8px;
 }
+
+.task-tool-rule {
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--surface);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.tag-missing {
+  margin-left: 8px;
+  border-color: var(--warn);
+  color: var(--warn);
+  font-family: var(--font-ui);
+}

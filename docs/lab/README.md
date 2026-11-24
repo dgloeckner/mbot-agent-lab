@@ -51,6 +51,12 @@ Was ist das Ziel, woran merkt man, dass es geschafft ist, worauf muss man achten
 Ein erster Prompt, den die Teams übernehmen können. Freiwillig.
 ```
 
+Für die Challenge (Stufe 5) kommt in die Kopfzeilen `agent_tools: team_tools`: Dann hat der
+Agent in dieser Aufgabe nur die deployten eigenen Werkzeuge des Teams und `read_sensors`, `say`,
+`tell_team`, `remember`, `forget` und `finish`. Ohne die Zeile (oder mit `agent_tools: all`) hat er
+alle Werkzeuge; ein anderer Wert wird beim Import abgelehnt. Im Leitstand ist das die Checkbox
+„Agent darf nur eigene Werkzeuge des Teams nutzen“; nach dem Veröffentlichen ist sie fest.
+
 Auf Englisch heißen die Abschnitte `## Task` und `## Starter prompt`. Jede Datei gibt es in
 `aufgaben/de/` und `aufgaben/en/` mit gleichem Namen; ein Test prüft, dass sich alle importieren
 lassen.

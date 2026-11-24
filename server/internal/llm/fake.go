@@ -70,10 +70,12 @@ func (f Fake) Chat(ctx context.Context, req Request) (Response, error) {
 	}
 	last := req.Messages[len(req.Messages)-1]
 
+	// force calls a tool even when it is not offered, as models sometimes do.
+	force := false
 	reply := func(text, tool string, args map[string]any) (Response, error) {
 		msg := Message{Role: RoleAssistant, Content: text}
 		if tool != "" {
-			if _, ok := has[tool]; !ok {
+			if _, ok := has[tool]; !ok && !force {
 				msg.Content = text + " (Das Werkzeug " + tool + " fehlt mir gerade.)"
 			} else {
 				// With several robots, every robot does the same in one
@@ -115,6 +117,12 @@ func (f Fake) Chat(ctx context.Context, req Request) (Response, error) {
 		if isTeamTool("ein_feld") && isTeamTool("rechts") && isTeamTool("links") && !teamToolUsed {
 			return reply("Ich folge der rechten Wand, Feld für Feld.", "rechts", map[string]any{})
 		}
+		// Only the team's tools (tool set team_tools): it tries a built-in motion
+		// tool once anyway and learns from the answer that it does not exist.
+		if _, ok := has["drive_until"]; len(teamTools) > 0 && !ok && moves == 0 && !teamToolUsed {
+			force = true
+			return reply("Ich fahre erst einmal bis zur Wand.", "drive_until", map[string]any{"max_cm": 120})
+		}
 		// A tool the team built comes first: that is what the team deployed it for.
 		if len(teamTools) > 0 && !teamToolUsed {
 			return reply("Ich nutze euer Werkzeug "+teamTools[0]+".", teamTools[0], map[string]any{})
@@ -143,6 +151,9 @@ func (f Fake) Chat(ctx context.Context, req Request) (Response, error) {
 			}
 			return reply("Wand, ich drehe nach links.", "links", map[string]any{})
 		}
+	}
+	if _, offered := has[lastTool]; lastTool != "" && !offered && len(teamTools) > 0 && !teamToolUsed {
+		return reply("Das Werkzeug gibt es hier nicht. Dann nehme ich euer Werkzeug "+teamTools[0]+".", teamTools[0], map[string]any{})
 	}
 	if isTeamTool(lastTool) {
 		var tr struct {

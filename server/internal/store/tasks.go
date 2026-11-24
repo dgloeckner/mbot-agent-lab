@@ -33,7 +33,16 @@ type Task struct {
 	CreatedAt   time.Time `json:"created_at"`
 	PublishedAt time.Time `json:"published_at,omitzero"`
 	ClosedAt    time.Time `json:"closed_at,omitzero"`
+	// AgentTools is AgentToolsAll or AgentToolsTeam.
+	AgentTools string `json:"agent_tools"`
 }
+
+// Tool sets of a task: the agent gets every tool, or only the team's own
+// deployed tools and a few that move no robot.
+const (
+	AgentToolsAll  = "all"
+	AgentToolsTeam = "team_tools"
+)
 
 // CreateTask inserts a task. CreatedAt is set by the store.
 func (s *Store) CreateTask(ctx context.Context, t Task) (Task, error) {
@@ -45,8 +54,11 @@ func (s *Store) CreateTask(ctx context.Context, t Task) (Task, error) {
 	if t.State == TaskClosed {
 		closed = at
 	}
-	_, err := s.DB.ExecContext(ctx, `INSERT INTO tasks (id, title, body, starter, state, created_at, published_at, closed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		t.ID, t.Title, t.Body, t.Starter, t.State, at, published, closed)
+	if t.AgentTools == "" {
+		t.AgentTools = AgentToolsAll
+	}
+	_, err := s.DB.ExecContext(ctx, `INSERT INTO tasks (id, title, body, starter, state, created_at, published_at, closed_at, agent_tools) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		t.ID, t.Title, t.Body, t.Starter, t.State, at, published, closed, t.AgentTools)
 	if isUnique(err) {
 		return Task{}, ErrConflict
 	}
@@ -56,12 +68,12 @@ func (s *Store) CreateTask(ctx context.Context, t Task) (Task, error) {
 	return s.Task(ctx, t.ID)
 }
 
-const taskColumns = `id, title, body, starter, state, created_at, COALESCE(published_at, ''), COALESCE(closed_at, '')`
+const taskColumns = `id, title, body, starter, state, created_at, COALESCE(published_at, ''), COALESCE(closed_at, ''), agent_tools`
 
 func scanTask(sc interface{ Scan(...any) error }) (Task, error) {
 	var t Task
 	var created, published, closed string
-	err := sc.Scan(&t.ID, &t.Title, &t.Body, &t.Starter, &t.State, &created, &published, &closed)
+	err := sc.Scan(&t.ID, &t.Title, &t.Body, &t.Starter, &t.State, &created, &published, &closed, &t.AgentTools)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Task{}, ErrNotFound
 	}
@@ -132,7 +144,7 @@ func (s *Store) AllTeamTasks(ctx context.Context) (map[string][]TeamTaskInfo, er
 
 func (s *Store) teamTasks(ctx context.Context, filter string, args ...any) (map[string][]TeamTaskInfo, error) {
 	rows, err := s.DB.QueryContext(ctx, `SELECT tt.team_id, tt.assigned_at, COALESCE(tt.accepted_at, ''), a.task_id IS NOT NULL,
-		t.id, t.title, t.body, t.starter, t.state, t.created_at, COALESCE(t.published_at, ''), COALESCE(t.closed_at, '')
+		t.id, t.title, t.body, t.starter, t.state, t.created_at, COALESCE(t.published_at, ''), COALESCE(t.closed_at, ''), t.agent_tools
 		FROM team_tasks tt JOIN tasks t ON t.id = tt.task_id
 		LEFT JOIN active_tasks a ON a.team_id = tt.team_id AND a.task_id = tt.task_id
 		WHERE tt.withdrawn_at IS NULL`+filter+` ORDER BY tt.assigned_at, t.id`, args...)
@@ -145,7 +157,7 @@ func (s *Store) teamTasks(ctx context.Context, filter string, args ...any) (map[
 		var i TeamTaskInfo
 		var team, assigned, accepted, created, published, closed string
 		var active bool
-		if err := rows.Scan(&team, &assigned, &accepted, &active, &i.ID, &i.Title, &i.Body, &i.Starter, &i.State, &created, &published, &closed); err != nil {
+		if err := rows.Scan(&team, &assigned, &accepted, &active, &i.ID, &i.Title, &i.Body, &i.Starter, &i.State, &created, &published, &closed, &i.AgentTools); err != nil {
 			return nil, err
 		}
 		i.AssignedAt, i.AcceptedAt = parseTime(assigned), parseTime(accepted)
@@ -220,8 +232,11 @@ func (s *Store) Tasks(ctx context.Context) ([]Task, error) {
 // UpdateDraft changes title, body and starter prompt of a draft.
 // ErrNotFound means there is no draft with that ID.
 func (s *Store) UpdateDraft(ctx context.Context, t Task) error {
-	return s.affectOne(ctx, `UPDATE tasks SET title = ?, body = ?, starter = ? WHERE id = ? AND state = 'draft'`,
-		t.Title, t.Body, t.Starter, t.ID)
+	if t.AgentTools == "" {
+		t.AgentTools = AgentToolsAll
+	}
+	return s.affectOne(ctx, `UPDATE tasks SET title = ?, body = ?, starter = ?, agent_tools = ? WHERE id = ? AND state = 'draft'`,
+		t.Title, t.Body, t.Starter, t.AgentTools, t.ID)
 }
 
 // DeleteDraft removes a draft. ErrNotFound means there is no draft with that ID.

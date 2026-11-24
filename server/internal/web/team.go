@@ -124,6 +124,8 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request, team store.Team
 		"versions":        versions,
 		"notes":           notes,
 		"tools":           s.Agents.Tools.CatalogFor(&tools.Env{TeamID: team.ID}),
+		// In a task with the tool set team_tools the agent keeps only these built-in tools.
+		"team_only_tools": agent.TeamOnlyToolNames(),
 		"limits": map[string]int{
 			"prompt_chars": MaxPromptChars, "message_chars": MaxMessageChars, "note_chars": MaxNoteChars,
 		},

@@ -25,6 +25,55 @@ import (
 // TeamToolNote is appended to the description of every team tool.
 const TeamToolNote = "Dies ist ein Werkzeug, das das Team selbst gebaut hat. Es läuft ohne Rückfragen durch und meldet am Ende, ob es fertig wurde oder wo es abbrach."
 
+// TeamOnlyTools are the built-in tools the agent keeps in a task with the
+// tool set team_tools: they move no robot. Everything that moves a robot
+// comes from the team's own tools.
+var TeamOnlyTools = map[string]bool{"read_sensors": true, "say": true, "finish": true, "tell_team": true, "remember": true, "forget": true}
+
+// TeamOnlyToolNames returns TeamOnlyTools in catalog order.
+func TeamOnlyToolNames() []string {
+	var out []string
+	for _, info := range tools.Catalog {
+		if TeamOnlyTools[info.Name] {
+			out = append(out, info.Name)
+		}
+	}
+	return out
+}
+
+// toolSet returns the task's tool set (store.AgentToolsAll or AgentToolsTeam).
+func (m *Manager) toolSet(ctx context.Context, task string) string {
+	t, err := m.Store.Task(ctx, task)
+	if err != nil || t.AgentTools == "" {
+		return store.AgentToolsAll
+	}
+	return t.AgentTools
+}
+
+// allowedDefs filters the built-in tools for a task's tool set.
+func allowedDefs(defs []llm.Tool, set string) []llm.Tool {
+	if set != store.AgentToolsTeam {
+		return defs
+	}
+	out := defs[:0:0]
+	for _, d := range defs {
+		if TeamOnlyTools[d.Name] {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+// unknownTool answers a call of a tool the agent does not have, like the
+// registry answers an unknown tool, so the agent can correct itself.
+func unknownTool(name string, defs []llm.Tool) json.RawMessage {
+	names := make([]string, len(defs))
+	for i, d := range defs {
+		names[i] = d.Name
+	}
+	return mustJSON(map[string]any{"ok": false, "error": fmt.Sprintf("Das Werkzeug %q gibt es nicht. Verfügbar: %s.", name, strings.Join(names, ", "))})
+}
+
 // teamTool is a team tool of a version, ready to run.
 type teamTool struct {
 	id   string
