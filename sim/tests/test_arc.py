@@ -91,7 +91,16 @@ class ArcTest(unittest.TestCase):
         spec = {"walls": box(300, 300), "fields": stripes, "start": {"x": 150, "y": 100, "heading": 0}}
         res = SkillRun(spec, seed=8).run("drive_arc", {"radius_cm": 150, "deg": 15})
         floor = res["data"]["floor"]
-        widths = {p[1]: nxt[0] - pos for (pos, p), nxt in zip(floor, floor[1:]) if p[1] in "rgb"}
+        # A stripe lasts as long as probe L1 sees its color. When the robot
+        # leaves it at a slant, a short pattern like "wbbb" follows "bbbb":
+        # still the same stripe under L1, so it is measured together.
+        widths, cur, start = {}, None, 0
+        for pos, p in floor:
+            c = p[1] if p[1] in "rgb" else None
+            if c != cur:
+                if cur:
+                    widths[cur] = pos - start
+                cur, start = c, pos
         self.assertEqual(sorted(widths), ["b", "g", "r"], floor)
         for w in widths.values():
             self.assertAlmostEqual(w, 3, delta=1, msg=floor)
