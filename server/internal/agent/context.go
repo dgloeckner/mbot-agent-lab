@@ -9,6 +9,7 @@ import (
 
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/llm"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/memory"
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/store"
 )
 
 // platformRules come first in every system message. The team prompt follows.
@@ -78,7 +79,7 @@ func (a *actor) addInbox(ctx context.Context, r *run, msgs []Message) {
 		if m.From == SourceRobot && m.Robot != "" {
 			source = SourceRobot + ":" + m.Robot // which robot, for the protocol of a conversation
 		}
-		if id := a.store(ctx, r, source, m.Kind, m.Text, m.Data); id != 0 {
+		if id := a.store(ctx, r, source, m.Kind, m.Text, m.Data, store.RobotRef{ID: m.RobotID, Alias: m.Robot}); id != 0 {
 			r.lastMsgID = id
 		}
 	}

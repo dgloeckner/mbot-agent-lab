@@ -157,6 +157,9 @@ func newFixture(t *testing.T, budgets config.Budgets) *fixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
+	for _, id := range []string{"mbot-1", "mbot-2"} {
+		_ = st.SeeRobot(ctx, id)
+	}
 	for _, tm := range []store.Team{{ID: "rot", Name: "Rot", Token: "a", Color: "red"}, {ID: "blau", Name: "Blau", Token: "b", Color: "blue"}} {
 		_, _ = st.CreateTeam(ctx, tm)
 		activateTestTask(t, st, tm.ID)

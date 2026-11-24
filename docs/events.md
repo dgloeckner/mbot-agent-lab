@@ -33,15 +33,15 @@ protocol (`messages`, `tool_calls`, `llm_calls`) stays the detailed record per r
 | `task.accepted` | team | team, task | `prompt` (`starter`, `empty`, `copy`) | `lab.AcceptTask` |
 | `task.activated` | team | team, task | — | `lab.AcceptTask`, `lab.ActivateTask` |
 | `prompt.deployed` | team | team, task, prompt | `version`, `chars`, `restart`; on accept also `source` (`starter`, `copy`) and `from_task` | team route `POST prompt`, `lab.AcceptTask` |
-| `run.started` | team | team, task, prompt, run | `model`, `provider` | not written yet (agent) |
-| `run.ended` | team, agent, system | team, task, prompt, run | `reason`, `tokens_in`, `tokens_out`, `cost_micro_eur` | not written yet (agent) |
-| `run.finished` | agent | team, task, prompt, run | `report` (the agent's claim, not a result) | not written yet (agent) |
+| `run.started` | team | team, task, prompt, run | `model`, `provider` | agent actor, run start |
+| `run.ended` | team, agent, admin, system | team, task, prompt, run | `reason`, `tokens_in`, `tokens_out`, `cost_micro_eur` | agent actor, every run end; actor `agent` for `finish`, `team` for a stop or restart by the team, `admin` for the control room (stop all, `task_closed`, team deleted), `system` for limits and server stops |
+| `run.finished` | agent | team, task, prompt, run | `report` (the agent's claim, not a result) | agent actor, before `run.ended` when the agent called `finish` |
 | `robot.assigned` | admin | team, robot, task if active | `alias` | `lab.AssignRobot` |
 | `robot.renamed` | team | team, robot, task if active | `alias`, `old` | `lab.RenameRobot` |
 | `robot.released` | admin | team, robot, task if active | `alias` | `lab.AssignRobot` (moved or freed), `lab.DeleteTeam` |
-| `robot.event` | robot | team, task, robot, prompt, run | `kind` (`obstacle_near`, `tilted`, `color_changed`, …), `data` | not written yet (agent) |
-| `note.added` | team, agent | team, task | `note_id`, `author` | team route `POST notes` |
-| `note.deleted` | team, agent | team, task | `note_id`, `author` | team route `DELETE notes/{id}` |
+| `robot.event` | robot | team, task, robot, prompt, run | `kind` (`obstacle_near`, `tilted`, `color_changed`, …), `data` | agent actor, every robot message that reaches a run |
+| `note.added` | team, agent | team, task (and run for the agent) | `note_id`, `author` | team route `POST notes`, tool `remember` |
+| `note.deleted` | team, agent | team, task (and run for the agent) | `note_id`, `author` | team route `DELETE notes/{id}`, tool `forget` |
 
 ## Example query
 

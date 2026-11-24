@@ -270,6 +270,12 @@ func TestServerTools(t *testing.T) {
 	if got["ok"] != true {
 		t.Errorf("forget = %v", got)
 	}
+	for _, kind := range []string{store.EventNoteAdded, store.EventNoteDeleted} {
+		evs, _ := st.Events(ctx, kind)
+		if len(evs) != 1 || evs[0].Actor != store.ActorAgent || evs[0].Team != "rot" || evs[0].Task != "a1" {
+			t.Errorf("%s events = %+v", kind, evs)
+		}
+	}
 
 	sayDef := find(r, env, "say")
 	to := sayDef["properties"].(map[string]any)["to"].(map[string]any)["enum"].([]any)

@@ -275,10 +275,25 @@ team). It calls the model only when a message wakes it. Everything that happens 
   control room cancels the running model call and tool calls through the `context` and stops the
   robots.
 
+### Working in a task
+
+A run or conversation starts in the team's active task and keeps it to the end (switching is
+refused during a run). Prompt and notes come from that (team, task); runs and conversations are
+stored with it; `remember` and `forget` act on its notes; a conversation's "last run" is the last
+run of the same task. Without an active task, or in a closed task, a start is refused with a
+German message. Closing the task ends a running run (reason `task_closed`) and an open
+conversation; switching tasks ends an open conversation. **The task text is never in the
+agent's context:** turning the task into a prompt is what the teams learn.
+
+Tool calls of robot tools and robot messages record the robot's device ID and its name at that
+moment (`robot_id`, `robot_alias`). The actor writes the events `run.started`, `run.ended`,
+`run.finished` and `robot.event` (every robot message that reaches a run); the tool registry
+writes `note.added` and `note.deleted` for `remember` and `forget`.
+
 ### Context per model call
 
-- **System:** fixed platform rules (German; extra rules for several robots), the team prompt in
-  its newest version, the notes.
+- **System:** fixed platform rules (German; extra rules for several robots), the team prompt of
+  the run's task in its newest version, the notes of that task. Not the task text.
 - **History:** the last messages of the run verbatim (`max_history_messages`); older ones are
   left out. Summaries of long runs are not implemented.
 - **Inbox:** one JSON line per new message with sender, age, kind, text and data. The sender field
@@ -297,7 +312,7 @@ team). It calls the model only when a message wakes it. Everything that happens 
 | Layer | Written by | Seen by the model | Purpose |
 | --- | --- | --- | --- |
 | Working context | runtime | yes, sliding window | the current run |
-| Notes | the agent via `remember`, the team on its page | yes, every round, size-limited | learning across runs |
+| Notes | the agent via `remember`, the team on its page | yes, every round, size-limited | learning across the runs of one task |
 | Protocol | runtime (`messages`, `tool_calls`, `llm_calls`) | no | comparing report and protocol ("Lügendetektor"), evaluation |
 
 Each note stores its origin: the run and the message after which it was written.

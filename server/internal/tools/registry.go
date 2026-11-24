@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"sync"
@@ -41,6 +42,13 @@ type Env struct {
 	Say func(to, text string) []string
 	// Finish ends the run with a report. Set by the agent runtime.
 	Finish func(report string)
+}
+
+// record writes an event after the fact; a failure is only logged.
+func (r *Registry) record(e store.Event) {
+	if err := r.Store.AddEvent(context.Background(), e); err != nil {
+		slog.Error("record event", "kind", e.Kind, "team", e.Team, "err", err)
+	}
 }
 
 func (e *Env) pair() store.TeamTask { return store.TeamTask{Team: e.TeamID, Task: e.TaskID} }
@@ -175,8 +183,18 @@ func (r *Registry) call(ctx context.Context, env *Env, name, rawArgs string) any
 // Scope is what one call acts on. The agent runtime runs the calls of one
 // model response at the same time when their scopes do not overlap.
 type Scope struct {
-	Robots []string // IDs of the robots the call acts on
-	Shared bool     // the call acts on no robot: it keeps its place among all calls
+	Robots  []string // IDs of the robots the call acts on
+	Aliases []string // what the team calls them, in the same order
+	Shared  bool     // the call acts on no robot: it keeps its place among all calls
+}
+
+// Robot is the one robot the call acts on, for the protocol; the zero value
+// when it acts on none or on several.
+func (s Scope) Robot() store.RobotRef {
+	if len(s.Robots) != 1 {
+		return store.RobotRef{}
+	}
+	return store.RobotRef{ID: s.Robots[0], Alias: s.Aliases[0]}
 }
 
 // Overlaps reports whether two calls must keep their order. A call that will
@@ -221,6 +239,7 @@ func (r *Registry) Scope(env *Env, name, rawArgs string) Scope {
 	s := Scope{}
 	for _, rb := range targets {
 		s.Robots = append(s.Robots, rb.ID)
+		s.Aliases = append(s.Aliases, rb.Alias)
 	}
 	return s
 }
@@ -644,6 +663,8 @@ func builtins() []*tool {
 				if err != nil {
 					return fail("Die Notiz konnte nicht gespeichert werden.")
 				}
+				c.r.record(store.Event{Kind: store.EventNoteAdded, Actor: store.ActorAgent, Team: c.env.TeamID, Task: c.env.TaskID, Run: c.env.RunID,
+					Data: map[string]any{"note_id": n.ID, "author": "agent"}})
 				return map[string]any{"ok": true, "note_id": n.ID}
 			},
 		},
@@ -653,9 +674,12 @@ func builtins() []*tool {
 			props:    static(map[string]any{"note_id": map[string]any{"type": "integer"}}),
 			required: []string{"note_id"},
 			run: func(ctx context.Context, c *call) any {
-				if err := c.r.Store.DeleteNote(ctx, c.env.pair(), int64(c.num("note_id", 0))); err != nil {
+				id := int64(c.num("note_id", 0))
+				if err := c.r.Store.DeleteNote(ctx, c.env.pair(), id); err != nil {
 					return fail("Diese Notiz gibt es nicht.")
 				}
+				c.r.record(store.Event{Kind: store.EventNoteDeleted, Actor: store.ActorAgent, Team: c.env.TeamID, Task: c.env.TaskID, Run: c.env.RunID,
+					Data: map[string]any{"note_id": id, "author": "agent"}})
 				return map[string]any{"ok": true}
 			},
 		},

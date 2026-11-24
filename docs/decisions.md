@@ -75,6 +75,7 @@ and goes here, not into `CLAUDE.md`. How the system works today: `architecture.m
 | Tasks are shared | one task row, assigned to teams through `team_tasks`; never copied per team | one text, comparable results |
 | No task, nothing works | a team without an accepted task cannot deploy, start a run or talk with its agent; robots can still be assigned | everything a team produces belongs to a task |
 | Active task | owned by the server (`active_tasks`), not the browser; switching is refused during a run | all PCs of a team follow a switch; a run keeps one task |
+| Task text | for the team, never in the agent's context | turning the task into a prompt is what the teams learn |
 | Event log | one table with the scope as real columns, one writer (`store.AddEvent`), written after the fact | results read one place at the finest scope; logging never blocks a robot or a model call |
 
 ## Documentation

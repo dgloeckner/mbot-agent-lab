@@ -39,6 +39,7 @@ type control struct {
 type run struct {
 	id            int64
 	task          store.TeamTask // the task the run works in, fixed for the run
+	promptID      int64          // the agent version the run started with
 	promptVersion int
 	provider      string // model provider of the whole run
 	started       time.Time
@@ -180,6 +181,10 @@ func (a *actor) loop(ctx context.Context) {
 		case msg := <-a.inbox:
 			if cur != nil {
 				pending = append(pending, msg)
+				if msg.From == SourceRobot && msg.RobotID != "" {
+					a.m.record(store.Event{Kind: store.EventRobotEvent, Actor: store.ActorRobot, Team: a.team, Task: cur.task.Task,
+						Robot: msg.RobotID, Prompt: cur.promptID, Run: cur.id, Data: map[string]any{"kind": msg.Kind, "data": msg.Data}})
+				}
 			}
 		case msg := <-a.talk:
 			msgs := append([]Message{msg}, a.drainTalk()...)
@@ -242,7 +247,7 @@ func (a *actor) startRun(ctx context.Context) (*run, error) {
 	if a.m.runLength > 0 {
 		length = a.m.runLength
 	}
-	r := &run{id: id, task: task, promptVersion: p.Version, provider: provider, started: now, deadline: now.Add(length)}
+	r := &run{id: id, task: task, promptID: p.ID, promptVersion: p.Version, provider: provider, started: now, deadline: now.Add(length)}
 	a.updateStatus(func(s *Status) {
 		*s = Status{State: StateWaiting, Running: true, RunID: id, Task: task.Task, Provider: provider, Model: model, StartedAt: now}
 	})
@@ -257,7 +262,9 @@ func (a *actor) startRun(ctx context.Context) (*run, error) {
 		}()
 	}
 	a.log(live.SourceSystem, "run_start", "", map[string]any{"run": id, "version": p.Version, "model": model})
-	a.m.Log.Info("run started", "team", a.team, "run", id, "prompt", p.Version, "model", model)
+	a.m.record(store.Event{Kind: store.EventRunStarted, Actor: store.ActorTeam, Team: a.team, Task: task.Task, Prompt: p.ID, Run: id,
+		Data: map[string]any{"model": model, "provider": provider}})
+	a.m.Log.Info("run started", "team", a.team, "task", task.Task, "run", id, "prompt", p.Version, "model", model)
 	return r, nil
 }
 
@@ -266,6 +273,16 @@ func (a *actor) endRun(r *run, reason, by string) {
 	if err := a.m.Store.EndRun(ctx, r.id, reason, r.report); err != nil {
 		a.m.Log.Error("end run", "run", r.id, "err", err)
 	}
+	scope := store.Event{Team: a.team, Task: r.task.Task, Prompt: r.promptID, Run: r.id}
+	if reason == "finish" {
+		e := scope
+		e.Kind, e.Actor, e.Data = store.EventRunFinished, store.ActorAgent, map[string]string{"report": r.report}
+		a.m.record(e)
+	}
+	e := scope
+	e.Kind, e.Actor = store.EventRunEnded, endActor(reason, by)
+	e.Data = map[string]any{"reason": reason, "tokens_in": r.tokensIn, "tokens_out": r.tokensOut, "cost_micro_eur": a.getStatus().CostMicroEUR}
+	a.m.record(e)
 	if reason == "stop" || reason == "restart" || reason == "team_deleted" || reason == "server_stop" || reason == "time_limit" || reason == "task_closed" {
 		// Leave no robot driving on a stopped run. Tools were cancelled already.
 		for _, rb := range a.m.Robots.TeamRobots(a.team) {
@@ -332,7 +349,7 @@ func (a *actor) process(parent context.Context, r *run, pending []Message) []Mes
 		msg.Role = llm.RoleAssistant
 		r.history = append(r.history, msg)
 		if msg.Content != "" {
-			a.store(ctx, r, "agent", "text", msg.Content, nil)
+			a.store(ctx, r, "agent", "text", msg.Content, nil, store.RobotRef{})
 			a.log(live.SourceAgent, "text", msg.Content, nil)
 		}
 		if limit := a.m.Budgets.MaxTokensPerRun; limit > 0 && r.tokensIn+r.tokensOut >= limit {
@@ -426,7 +443,7 @@ func (a *actor) runTools(ctx context.Context, r *run, env *tools.Env, calls []ll
 		}
 		r.history = append(r.history, llm.Message{Role: llm.RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: string(out[i].result)})
 		r.seq++
-		if err := a.m.Store.AddToolCall(context.Background(), r.id, r.seq, tc.Function.Name, json.RawMessage(validJSON(tc.Function.Arguments)), out[i].result, out[i].d, store.RobotRef{}); err != nil {
+		if err := a.m.Store.AddToolCall(context.Background(), r.id, r.seq, tc.Function.Name, json.RawMessage(validJSON(tc.Function.Arguments)), out[i].result, out[i].d, scopes[i].Robot()); err != nil {
 			a.m.Log.Error("store tool call", "err", err)
 		}
 	}
@@ -466,9 +483,9 @@ func (a *actor) account(r *run, call llm.Call) {
 	}
 }
 
-func (a *actor) store(ctx context.Context, r *run, source, kind, text string, data json.RawMessage) int64 {
+func (a *actor) store(ctx context.Context, r *run, source, kind, text string, data json.RawMessage, robot store.RobotRef) int64 {
 	r.seq++
-	id, err := a.m.Store.AddMessage(context.WithoutCancel(ctx), r.id, r.seq, source, kind, text, data, store.RobotRef{})
+	id, err := a.m.Store.AddMessage(context.WithoutCancel(ctx), r.id, r.seq, source, kind, text, data, robot)
 	if err != nil {
 		a.m.Log.Error("store message", "err", err)
 	}
@@ -502,4 +519,22 @@ func validJSON(s string) string {
 	}
 	b, _ := json.Marshal(s)
 	return string(b)
+}
+
+// endActor says who ended a run, for the event log.
+func endActor(reason, by string) string {
+	switch reason {
+	case "finish":
+		return store.ActorAgent
+	case "restart":
+		return store.ActorTeam
+	case "stop":
+		if by == "Team" {
+			return store.ActorTeam
+		}
+		return store.ActorAdmin
+	case "task_closed", "team_deleted":
+		return store.ActorAdmin
+	}
+	return store.ActorSystem
 }

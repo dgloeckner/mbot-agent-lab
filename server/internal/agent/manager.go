@@ -32,13 +32,14 @@ const (
 
 // Message is one entry in an agent's inbox.
 type Message struct {
-	From  string // team | robot | agent:<name> | system
-	Robot string // robot name for robot messages
-	Kind  string // chat | event | info | ...
-	Text  string
-	Data  json.RawMessage
-	At    time.Time
-	Wake  bool // whether this message alone wakes the agent
+	From    string // team | robot | agent:<name> | system
+	Robot   string // robot name for robot messages
+	RobotID string // device ID for robot messages
+	Kind    string // chat | event | info | ...
+	Text    string
+	Data    json.RawMessage
+	At      time.Time
+	Wake    bool // whether this message alone wakes the agent
 }
 
 // Agent states, also shown by the robots' LEDs.
@@ -135,7 +136,7 @@ func (m *Manager) Run(ctx context.Context) {
 			}
 			for _, rb := range m.Robots.Snapshot() {
 				if rb.ID == ev.RobotID && rb.Owner != "" {
-					m.Deliver(rb.Owner, Message{From: SourceRobot, Robot: rb.Alias, Kind: kind, Data: ev.Event.Data, At: ev.At, Wake: wakingEvents[kind]})
+					m.Deliver(rb.Owner, Message{From: SourceRobot, Robot: rb.Alias, RobotID: rb.ID, Kind: kind, Data: ev.Event.Data, At: ev.At, Wake: wakingEvents[kind]})
 				}
 			}
 		}
@@ -170,16 +171,38 @@ func (m *Manager) Status(teamID string) Status {
 // StartError is a reason why a run cannot start. Its text is German.
 type StartError struct{ Msg string }
 
-// ErrNoTask is the German refusal for a team without an active task.
-var ErrNoTask = &StartError{"Eurem Team ist noch keine Aufgabe zugewiesen."}
+// Refusals to start a run or a conversation, in German.
+var (
+	ErrNoTask     = &StartError{"Eurem Team ist noch keine Aufgabe zugewiesen."}
+	ErrTaskClosed = &StartError{"Diese Aufgabe ist geschlossen. Ihr könnt alles ansehen, aber nichts mehr starten."}
+)
 
-// activeTask returns the task the team works in, or ErrNoTask.
+// activeTask returns the task the team works in: ErrNoTask without one,
+// ErrTaskClosed when the control room closed it. A run or conversation keeps
+// the task it started in.
 func (m *Manager) activeTask(ctx context.Context, teamID string) (store.TeamTask, error) {
 	tt, err := m.Store.ActiveTask(ctx, teamID)
 	if errors.Is(err, store.ErrNotFound) {
 		return store.TeamTask{}, ErrNoTask
 	}
-	return tt, err
+	if err != nil {
+		return tt, err
+	}
+	t, err := m.Store.Task(ctx, tt.Task)
+	if err != nil {
+		return tt, err
+	}
+	if t.State == store.TaskClosed {
+		return tt, ErrTaskClosed
+	}
+	return tt, nil
+}
+
+// record writes an event after the fact; a failure is only logged.
+func (m *Manager) record(e store.Event) {
+	if err := m.Store.AddEvent(context.Background(), e); err != nil {
+		m.Log.Error("record event", "kind", e.Kind, "team", e.Team, "err", err)
+	}
 }
 
 func (e *StartError) Error() string { return e.Msg }

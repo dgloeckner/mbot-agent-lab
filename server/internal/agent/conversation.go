@@ -306,7 +306,9 @@ func (a *actor) converse(parent context.Context, msgs []Message) {
 			}
 			start := time.Now()
 			var result json.RawMessage
+			var robot store.RobotRef
 			if conversationTools[tc.Function.Name] {
+				robot = a.m.Tools.Scope(env, tc.Function.Name, tc.Function.Arguments).Robot()
 				result = a.m.Tools.Call(ctx, env, tc.Function.Name, tc.Function.Arguments)
 			} else {
 				result, _ = json.Marshal(map[string]any{"ok": false, "error": "Im Gespräch nicht verfügbar: gerade läuft kein Lauf. Sag dem Team, was du im nächsten Lauf tun würdest."})
@@ -314,7 +316,7 @@ func (a *actor) converse(parent context.Context, msgs []Message) {
 			d := time.Since(start)
 			c.history = append(c.history, llm.Message{Role: llm.RoleTool, ToolCallID: tc.ID, Name: tc.Function.Name, Content: string(result)})
 			c.seq++
-			if err := a.m.Store.AddToolCall(context.Background(), c.id, c.seq, tc.Function.Name, json.RawMessage(validJSON(tc.Function.Arguments)), result, d, store.RobotRef{}); err != nil {
+			if err := a.m.Store.AddToolCall(context.Background(), c.id, c.seq, tc.Function.Name, json.RawMessage(validJSON(tc.Function.Arguments)), result, d, robot); err != nil {
 				a.m.Log.Error("store tool call", "err", err)
 			}
 			a.talkLog(live.SourceAgent, "tool", "", map[string]any{
