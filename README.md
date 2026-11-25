@@ -222,6 +222,9 @@ wake-up, so they do not burn tokens.
   `fallback` providers need their key; the server leaves out any other provider whose key
   variable is not set and logs it at startup. Teams run on `default` unless they choose another
   released provider (see "Control room and teams"); the fallback applies to every team.
+  Locally, put the keys into `server/.env.local` (dotenv format, `export` allowed, git-ignored);
+  Nx loads it for every `server` task, and Claude Code copies it into new worktrees
+  (`.worktreeinclude`).
 - **Claude:** the key comes from a Claude Console organization. Claude Max, Ultra and Team plans
   include monthly API credits for such an organization (claim them on claude.ai under Settings →
   Billing); the subscription login itself is not an API credential. Claude's thinking blocks go
