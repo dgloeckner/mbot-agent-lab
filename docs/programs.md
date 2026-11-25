@@ -51,7 +51,7 @@ file holds the Blockly state of the tool (`blockly`) and the tree the server der
 ## Validation
 
 `programs.Validate` checks name, description and tree and answers a list of problems, each with
-the block id (empty for name and description) and a German text. An invalid program can be
+the block id or, for name and description, the field (`name`, `description`), and a German text. An invalid program can be
 stored but not run.
 
 - **Tools:** only tools the registry flags as by hand. An agent-only tool, an unknown tool or a
@@ -203,7 +203,10 @@ team can try a built-in tool on the right while it builds on the left.
   wins. A `programs` event for the open tool from another PC reloads it, unless a change of this
   PC is still waiting to be saved.
 - **Problems:** a block the server refuses gets a red outline and a warning icon with the reason;
-  problems of name or description stand below the workspace.
+  a problem of name or description stands under its field, which gets a red frame; problems of
+  the whole tool (empty, too many blocks) stand below the workspace.
+- **Name field:** takes only what the name rule allows. Capitals become small letters, umlauts
+  are spelled out (`ü` → `ue`), spaces and dashes become `_`, other characters are dropped.
 - **Running:** "Ausführen" and "Einzelschritt" save first and start the run; the `program` events
   mark the running block (`highlightBlock`) and fill the "Ablauf": every step with its result in
   words, the rounds of a loop as separator lines, the end with where and why it stopped. In single

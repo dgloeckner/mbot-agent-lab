@@ -42,8 +42,15 @@ type Catalog interface {
 // about (empty for the name and the description). Text is German.
 type Problem struct {
 	Block string `json:"block,omitempty"`
+	Field string `json:"field,omitempty"` // FieldName or FieldDescription: the input the problem is about
 	Text  string `json:"text"`
 }
+
+// Fields of a team tool besides its blocks that a problem can be about.
+const (
+	FieldName        = "name"
+	FieldDescription = "description"
+)
 
 // Validate checks name, description and tree. An invalid program can be
 // stored but not run.
@@ -54,7 +61,7 @@ func Validate(p *Program, cat Catalog) []Problem {
 	}
 	out = append(out, ValidateName(p.Name, cat)...)
 	if n := utf8.RuneCountInString(p.Description); n > MaxDescription {
-		add("", "Die Beschreibung hat %d Zeichen, erlaubt sind %d.", n, MaxDescription)
+		out = append(out, Problem{Field: FieldDescription, Text: fmt.Sprintf("Die Beschreibung hat %d Zeichen, erlaubt sind %d.", n, MaxDescription)})
 	}
 	if len(p.Body) == 0 {
 		add("", "Das Werkzeug ist leer. Zieht Blöcke hinein.")
@@ -138,9 +145,9 @@ func Validate(p *Program, cat Catalog) []Problem {
 func ValidateName(name string, cat Catalog) []Problem {
 	switch {
 	case !nameRule.MatchString(name):
-		return []Problem{{Text: "Der Name braucht 3 bis 30 Zeichen: kleine Buchstaben ohne Umlaute, Ziffern und _."}}
+		return []Problem{{Field: FieldName, Text: "Der Name braucht 3 bis 30 Zeichen: kleine Buchstaben ohne Umlaute, Ziffern und _."}}
 	case cat.Known(name):
-		return []Problem{{Text: fmt.Sprintf("%s ist schon ein eingebautes Werkzeug. Wählt einen anderen Namen.", name)}}
+		return []Problem{{Field: FieldName, Text: fmt.Sprintf("%s ist schon ein eingebautes Werkzeug. Wählt einen anderen Namen.", name)}}
 	}
 	return nil
 }

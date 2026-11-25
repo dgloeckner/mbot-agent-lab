@@ -77,15 +77,21 @@ export function stepLine(e: ProgramEvent): StepLine {
   return { kind: 'step', block: e.block, text: `${t.call} → ${t.outcome}`, failed: t.failed }
 }
 
-/** Problems per block, and the ones about name or description. */
-export function problemsByBlock(problems: ProgramProblem[]): { byBlock: Record<string, string[]>; general: string[] } {
+/** Problems per block, per input field (name, description), and the rest about the whole tool. */
+export function problemsByBlock(problems: ProgramProblem[]): {
+  byBlock: Record<string, string[]>
+  byField: Record<string, string[]>
+  general: string[]
+} {
   const byBlock: Record<string, string[]> = {}
+  const byField: Record<string, string[]> = {}
   const general: string[] = []
   for (const p of problems) {
     if (p.block) (byBlock[p.block] ??= []).push(p.text)
+    else if (p.field) (byField[p.field] ??= []).push(p.text)
     else general.push(p.text)
   }
-  return { byBlock, general }
+  return { byBlock, byField, general }
 }
 
 /**
@@ -120,6 +126,16 @@ export function createSaver<T>(save: (value: T) => Promise<void>, delayMs = 1500
       latest = null
     },
   }
+}
+
+/**
+ * What a team may type as a tool name: lower-case letters, digits and _, at
+ * most 30 (the server's rule). Capitals become small, umlauts are spelled
+ * out, spaces and dashes become _, everything else is dropped.
+ */
+export function toolName(raw: string): string {
+  const spelled = raw.toLowerCase().replace(/[äöüß]/g, (c) => ({ ä: 'ae', ö: 'oe', ü: 'ue', ß: 'ss' })[c] ?? '')
+  return spelled.replace(/[\s-]/g, '_').replace(/[^a-z0-9_]/g, '').slice(0, 30)
 }
 
 /** A free default name for a new team tool: werkzeug_1, werkzeug_2, … */
