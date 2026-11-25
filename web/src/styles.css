@@ -2162,10 +2162,37 @@ kbd {
   font-family: var(--font-mono);
 }
 
+.tool-meta input[aria-invalid] {
+  border-color: var(--stop);
+  box-shadow: 0 0 0 1px var(--stop);
+}
+
+.field-problem {
+  grid-column: 1 / -1;
+  color: var(--stop);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
 .blockly-host {
   flex: 1;
   min-height: 320px;
   position: relative;
+}
+
+/* Blockly paints the category list light grey and lets the labels inherit the
+   page color; in the dark theme that is light on light. Use the page tokens. */
+.blockly-host .blocklyToolbox {
+  background: var(--surface-2);
+  border-right: 1px solid var(--line);
+}
+
+.blockly-host .blocklyToolboxCategoryLabel {
+  color: var(--ink);
+}
+
+.blockly-host .blocklyToolboxSelected .blocklyToolboxCategoryLabel {
+  color: #fff;
 }
 
 .block-problem > .blocklyPath {

@@ -7,7 +7,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
 import * as Blockly from 'blockly/core'
 import { api } from '../api'
 import { defineBlocks, MEDIA } from '../blocklySetup'
-import { problemsByBlock } from '../toolrun'
+import { problemsByBlock, toolName } from '../toolrun'
 import {
   agent,
   busy,
@@ -59,7 +59,15 @@ function Ablauf() {
   )
 }
 
-function Workspace({ detail, onProblems }: { detail: ProgramDetail; onProblems: (p: ProgramProblem[]) => void }) {
+function Workspace({
+  detail,
+  problems,
+  onProblems,
+}: {
+  detail: ProgramDetail
+  problems: ProgramProblem[]
+  onProblems: (p: ProgramProblem[]) => void
+}) {
   const host = useRef<HTMLDivElement>(null)
   const ws = useRef<Blockly.WorkspaceSvg | null>(null)
   const meta = useRef({ name: detail.name, description: detail.description })
@@ -143,6 +151,7 @@ function Workspace({ detail, onProblems }: { detail: ProgramDetail; onProblems: 
         key={detail.id + shown.at}
         name={shown.name}
         description={shown.description}
+        problems={problemsByBlock(problems).byField}
         onChange={(m) => {
           meta.current = m
           save()
@@ -153,8 +162,22 @@ function Workspace({ detail, onProblems }: { detail: ProgramDetail; onProblems: 
   )
 }
 
-function MetaFields(props: { name: string; description: string; onChange: (m: { name: string; description: string }) => void }) {
-  const { onChange } = props
+function FieldProblems({ id, texts }: { id: string; texts?: string[] }) {
+  if (!texts?.length) return null
+  return (
+    <span class="field-problem" id={id} role="status">
+      {texts.join(' ')}
+    </span>
+  )
+}
+
+function MetaFields(props: {
+  name: string
+  description: string
+  problems: Record<string, string[]>
+  onChange: (m: { name: string; description: string }) => void
+}) {
+  const { onChange, problems } = props
   const [name, setName] = useState(props.name)
   const [description, setDescription] = useState(props.description)
   const ro = readOnly.value
@@ -167,9 +190,22 @@ function MetaFields(props: { name: string; description: string; onChange: (m: { 
           disabled={ro}
           maxLength={30}
           spellcheck={false}
+          autocapitalize="off"
+          placeholder="z. B. vor_und_zurueck"
+          title="Kleine Buchstaben, Ziffern und _"
+          aria-invalid={problems.name ? true : undefined}
+          aria-describedby={problems.name ? 'tool-name-problem' : undefined}
           onInput={(ev) => {
-            setName(ev.currentTarget.value)
-            onChange({ name: ev.currentTarget.value, description })
+            // Only allowed characters reach the field; keep the caret where the team typed.
+            const el = ev.currentTarget
+            const caret = toolName(el.value.slice(0, el.selectionStart ?? el.value.length)).length
+            const clean = toolName(el.value)
+            if (clean !== el.value) {
+              el.value = clean
+              el.setSelectionRange(caret, caret)
+            }
+            setName(clean)
+            onChange({ name: clean, description })
           }}
         />
       </label>
@@ -180,12 +216,16 @@ function MetaFields(props: { name: string; description: string; onChange: (m: { 
           disabled={ro}
           maxLength={200}
           placeholder="Was das Werkzeug tut und wann es fertig ist."
+          aria-invalid={problems.description ? true : undefined}
+          aria-describedby={problems.description ? 'tool-desc-problem' : undefined}
           onInput={(ev) => {
             setDescription(ev.currentTarget.value)
             onChange({ name, description: ev.currentTarget.value })
           }}
         />
       </label>
+      <FieldProblems id="tool-name-problem" texts={problems.name} />
+      <FieldProblems id="tool-desc-problem" texts={problems.description} />
     </div>
   )
 }
@@ -289,7 +329,7 @@ export default function ToolEditor() {
       ) : (
         <div class="tool-body">
           <div class="tool-canvas">
-            <Workspace key={detail.id} detail={detail} onProblems={setProblems} />
+            <Workspace key={detail.id} detail={detail} problems={problems} onProblems={setProblems} />
             {general.length > 0 && (
               <ul class="tool-problems" role="status">
                 {general.map((t) => (

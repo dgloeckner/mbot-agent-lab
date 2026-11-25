@@ -390,23 +390,23 @@ func TestReturn(t *testing.T) {
 func TestValidation(t *testing.T) {
 	cat := registry()
 	cases := []struct {
-		name, program, block, want string
+		name, program, block, field, want string
 	}{
-		{"agent-only tool", `{"name":"abc","body":[` + call("f", "finish", `{"report":"x"}`) + `]}`, "f", "nur der Agent"},
-		{"unknown tool", `{"name":"abc","body":[` + call("f", "fly", `{}`) + `]}`, "f", "gibt es nicht"},
-		{"value out of range", `{"name":"abc","body":[` + call("d", "drive", `{"cm":500}`) + `]}`, "d", "zwischen -300 und 300"},
-		{"missing argument", `{"name":"abc","body":[` + call("d", "drive", `{}`) + `]}`, "d", `"cm"`},
-		{"robot in a block", `{"name":"abc","body":[` + call("d", "drive", `{"cm":5,"robot":"rot"}`) + `]}`, "d", "Roboter"},
-		{"text too long", `{"name":"abc","body":[` + call("s", "show_text", `{"text":"`+strings.Repeat("x", 61)+`"}`) + `]}`, "s", "60 Zeichen"},
-		{"name rule", `{"name":"Fahre!","body":[` + call("d", "drive", `{"cm":5}`) + `]}`, "", "3 bis 30"},
-		{"built-in name", `{"name":"drive_until","body":[` + call("d", "drive", `{"cm":5}`) + `]}`, "", "eingebautes"},
-		{"planned name", `{"name":"gesture","body":[` + call("d", "drive", `{"cm":5}`) + `]}`, "", "eingebautes"},
-		{"description", `{"name":"abc","description":"` + strings.Repeat("x", 201) + `","body":[` + call("d", "drive", `{"cm":5}`) + `]}`, "", "201 Zeichen"},
-		{"empty", `{"name":"abc","body":[]}`, "", "leer"},
-		{"contains on reason", `{"name":"abc","body":[{"id":"i","type":"if","cond":{"id":"c","source":"result","field":"reason","op":"contains","value":"w"},"body":[]}]}`, "c", "Boden"},
-		{"lt on text", `{"name":"abc","body":[{"id":"i","type":"if","cond":{"id":"c","source":"sensor","field":"distance_cm","op":"lt","value":"nah"},"body":[]}]}`, "c", "Zahl"},
-		{"unknown sensor", `{"name":"abc","body":[{"id":"i","type":"if","cond":{"id":"c","source":"sensor","field":"light","op":"lt","value":3},"body":[]}]}`, "c", "light"},
-		{"duplicate id", `{"name":"abc","body":[` + call("d", "drive", `{"cm":5}`) + `,` + call("d", "drive", `{"cm":5}`) + `]}`, "d", "zweimal"},
+		{"agent-only tool", `{"name":"abc","body":[` + call("f", "finish", `{"report":"x"}`) + `]}`, "f", "", "nur der Agent"},
+		{"unknown tool", `{"name":"abc","body":[` + call("f", "fly", `{}`) + `]}`, "f", "", "gibt es nicht"},
+		{"value out of range", `{"name":"abc","body":[` + call("d", "drive", `{"cm":500}`) + `]}`, "d", "", "zwischen -300 und 300"},
+		{"missing argument", `{"name":"abc","body":[` + call("d", "drive", `{}`) + `]}`, "d", "", `"cm"`},
+		{"robot in a block", `{"name":"abc","body":[` + call("d", "drive", `{"cm":5,"robot":"rot"}`) + `]}`, "d", "", "Roboter"},
+		{"text too long", `{"name":"abc","body":[` + call("s", "show_text", `{"text":"`+strings.Repeat("x", 61)+`"}`) + `]}`, "s", "", "60 Zeichen"},
+		{"name rule", `{"name":"Fahre!","body":[` + call("d", "drive", `{"cm":5}`) + `]}`, "", "name", "3 bis 30"},
+		{"built-in name", `{"name":"drive_until","body":[` + call("d", "drive", `{"cm":5}`) + `]}`, "", "name", "eingebautes"},
+		{"planned name", `{"name":"gesture","body":[` + call("d", "drive", `{"cm":5}`) + `]}`, "", "name", "eingebautes"},
+		{"description", `{"name":"abc","description":"` + strings.Repeat("x", 201) + `","body":[` + call("d", "drive", `{"cm":5}`) + `]}`, "", "description", "201 Zeichen"},
+		{"empty", `{"name":"abc","body":[]}`, "", "", "leer"},
+		{"contains on reason", `{"name":"abc","body":[{"id":"i","type":"if","cond":{"id":"c","source":"result","field":"reason","op":"contains","value":"w"},"body":[]}]}`, "c", "", "Boden"},
+		{"lt on text", `{"name":"abc","body":[{"id":"i","type":"if","cond":{"id":"c","source":"sensor","field":"distance_cm","op":"lt","value":"nah"},"body":[]}]}`, "c", "", "Zahl"},
+		{"unknown sensor", `{"name":"abc","body":[{"id":"i","type":"if","cond":{"id":"c","source":"sensor","field":"light","op":"lt","value":3},"body":[]}]}`, "c", "", "light"},
+		{"duplicate id", `{"name":"abc","body":[` + call("d", "drive", `{"cm":5}`) + `,` + call("d", "drive", `{"cm":5}`) + `]}`, "d", "", "zweimal"},
 	}
 	for _, c := range cases {
 		p, err := Parse([]byte(c.program))
@@ -416,12 +416,12 @@ func TestValidation(t *testing.T) {
 		problems := Validate(p, cat)
 		found := false
 		for _, pr := range problems {
-			if pr.Block == c.block && strings.Contains(pr.Text, c.want) {
+			if pr.Block == c.block && pr.Field == c.field && strings.Contains(pr.Text, c.want) {
 				found = true
 			}
 		}
 		if !found {
-			t.Errorf("%s: problems %+v, want %q at %q", c.name, problems, c.want, c.block)
+			t.Errorf("%s: problems %+v, want %q at block %q field %q", c.name, problems, c.want, c.block, c.field)
 		}
 	}
 	// 61 blocks are too many.

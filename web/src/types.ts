@@ -210,6 +210,8 @@ export interface Session {
 /** A problem of a team tool, at its block (empty: name or description). */
 export interface ProgramProblem {
   block?: string
+  /** The input the problem is about, when it is not a block. */
+  field?: 'name' | 'description'
   text: string
 }
 

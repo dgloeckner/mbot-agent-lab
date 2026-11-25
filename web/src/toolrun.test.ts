@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createSaver, freeName, idleRun, problemsByBlock, reduceRun, shouldReload } from './toolrun'
+import { createSaver, freeName, idleRun, problemsByBlock, reduceRun, shouldReload, toolName } from './toolrun'
 import type { ProgramEvent } from './types'
 
 const ev = (e: Partial<ProgramEvent>): ProgramEvent => ({ run: 'r1', program: 'p1', phase: 'before', ...e }) as ProgramEvent
@@ -68,10 +68,24 @@ describe('team tool helpers', () => {
     expect(shouldReload(null, 'p1', null, 'x')).toBe(false)
   })
   it('turns problems into warnings per block', () => {
-    expect(problemsByBlock([{ block: 'd', text: 'zu weit' }, { block: 'd', text: 'noch was' }, { text: 'Name fehlt' }])).toEqual({
+    expect(
+      problemsByBlock([
+        { block: 'd', text: 'zu weit' },
+        { block: 'd', text: 'noch was' },
+        { field: 'name', text: 'Name fehlt' },
+        { text: 'zu viele Blöcke' },
+      ]),
+    ).toEqual({
       byBlock: { d: ['zu weit', 'noch was'] },
-      general: ['Name fehlt'],
+      byField: { name: ['Name fehlt'] },
+      general: ['zu viele Blöcke'],
     })
+  })
+  it('lets only allowed characters into a tool name', () => {
+    expect(toolName('vorUndZurück')).toBe('vorundzurueck')
+    expect(toolName('Bis zur-Wand!')).toBe('bis_zur_wand')
+    expect(toolName('Straße 2')).toBe('strasse_2')
+    expect(toolName('x'.repeat(40))).toHaveLength(30)
   })
   it('finds a free default name', () => {
     expect(freeName(['werkzeug_1', 'quadrat'])).toBe('werkzeug_2')
