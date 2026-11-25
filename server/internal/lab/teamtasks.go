@@ -116,6 +116,16 @@ func (s *Service) AcceptTask(ctx context.Context, teamID, taskID, choice, fromTa
 		return info, err
 	}
 	s.Record(ctx, store.Event{Kind: store.EventTaskAccepted, Actor: store.ActorTeam, Team: teamID, Task: taskID, Data: map[string]string{"prompt": choice}})
+	if choice == PromptCopy {
+		// The team tools of the other task come along with its prompt.
+		n, err := s.Store.CopyPrograms(ctx, store.TeamTask{Team: teamID, Task: fromTask}, tt, func() string { return "p" + randomString(8) })
+		if err != nil {
+			return info, err
+		}
+		if n > 0 {
+			s.Log.Info("team tools copied", "team", teamID, "from", fromTask, "to", taskID, "count", n)
+		}
+	}
 	if strings.TrimSpace(text) != "" {
 		p, err := s.Store.SavePrompt(ctx, tt, text)
 		if err != nil {

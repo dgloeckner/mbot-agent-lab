@@ -35,6 +35,7 @@ var (
 	ErrOffline      = errors.New("robot offline")
 	ErrNotAccepted  = errors.New("robot speaks an unsupported protocol version")
 	ErrTimeout      = errors.New("no result from robot")
+	ErrNoFreshState = errors.New("no fresh state from robot")
 )
 
 // Robot is a snapshot of one robot for the UI and for tools like list_robots.
@@ -308,6 +309,38 @@ func (r *Registry) handle(topic string, payload []byte) {
 		if ch, ok := r.pending[id+"/"+res.ID]; ok {
 			ch <- res // buffered, exactly one result is delivered
 			delete(r.pending, id+"/"+res.ID)
+		}
+	}
+}
+
+// FreshState waits until the robot reports a state received after the given
+// time and returns the robot with it. A reading from before the last motion
+// is never used. It fails after timeout or when ctx ends.
+func (r *Registry) FreshState(ctx context.Context, robotID string, after time.Time, timeout time.Duration) (Robot, error) {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	tick := time.NewTicker(20 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		r.mu.Lock()
+		rb, ok := r.robots[robotID]
+		var snap Robot
+		if ok {
+			snap = *rb
+		}
+		r.mu.Unlock()
+		switch {
+		case !ok:
+			return Robot{}, ErrUnknownRobot
+		case snap.StateAt.After(after):
+			return snap, nil
+		}
+		select {
+		case <-tick.C:
+		case <-deadline.C:
+			return snap, ErrNoFreshState
+		case <-ctx.Done():
+			return snap, ctx.Err()
 		}
 	}
 }

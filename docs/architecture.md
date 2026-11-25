@@ -2,7 +2,7 @@
 
 Current state of the mBot2 Agent Lab. This document describes the system as it is; a PR that
 changes behaviour updates it in the same PR. Why things are the way they are: `decisions.md`.
-MQTT: `protocol.md`. Tools: `tools.md`. Event log: `events.md`. The line field: `field.md`.
+MQTT: `protocol.md`. Tools: `tools.md`. Team tools: `programs.md`. Event log: `events.md`. The line field: `field.md`.
 
 ## Purpose
 
@@ -90,6 +90,7 @@ Skills, events, the trip log and the floor trace are specified in `protocol.md`.
 | `live` | per-team log hub for SSE, with a backlog for reconnecting browsers |
 | `agent` | one actor per team: inbox, wake rules, context, budgets, runs and conversations |
 | `tools` | tool registry: model-facing German descriptions, JSON schemas, handlers |
+| `programs` | team tools: tree format, validation and interpreter; knows no tool names, asks the registry |
 | `llm` | OpenAI-compatible client and Claude (official Anthropic Go SDK), retries, fallback, cost; `Fake` scripted test model |
 | `memory` | history trimming and notes formatting for the context |
 | `web` | HTTP handlers, SSE, admin session, embedded pages |
@@ -141,7 +142,8 @@ its data is not migrated.
 ```
 tasks ──< team_tasks >── teams
               │
-              ├──< prompts      (agent versions, numbered per (team, task))
+              ├──< prompts      (agent versions, numbered per (team, task)) ──< prompt_programs
+              ├──< programs     (team tools: working state)
               ├──< notes
               └──< runs ──< messages, tool_calls (robot), llm_calls
 active_tasks: one row per team, points at an assigned team_task
@@ -149,7 +151,7 @@ robots: every robot the lab knows, so runs can reference it
 ```
 
 **The key of everything a team produces is the pair (team, task)**, `(team_id, task_id)`.
-`prompts`, `notes` and `runs` carry both columns with a composite foreign key to `team_tasks`, so
+`prompts`, `notes`, `programs` and `runs` carry both columns with a composite foreign key to `team_tasks`, so
 queries per pair need no join and the database refuses rows for a pair that was never assigned.
 In Go the pair is one type, `store.TeamTask{Team, Task}`; every team-scoped store function takes
 it (`SavePrompt(ctx, tt, text)`, `ListNotes(ctx, tt)`, `LastRun(ctx, tt)`, …). Finer scopes:
@@ -160,17 +162,19 @@ model next to it.
 | Table | Content |
 | --- | --- |
 | `teams` | ID, name (unique among teams not deleted, case-insensitive), secret token, color, chosen model provider, `deleted_at` |
-| `tasks` | ID, title, body (Markdown for the team), starter prompt, state (`draft`, `open`, `closed`), created, published and closed time |
+| `tasks` | ID, title, body (Markdown for the team), starter prompt, state (`draft`, `open`, `closed`), tool set of the agent (`agent_tools`: `all` or `team_tools`), created, published and closed time |
 | `team_tasks` | a task assigned to a team: assigned time, accepted time, withdrawn time |
 | `active_tasks` | the task a team works in (one row per team, must be an assigned pair) |
 | `robots` | device ID (stable across renames), first seen; every configured robot is registered at startup |
 | `assignments` | robot → owner (`team:<id>`), alias (unique per owner) |
 | `prompts` | (team, task), version (from 1 per pair), text, time |
-| `runs` | (team, task), kind (`run` or `conversation`), prompt (agent version), model, start, end, end reason, tokens, cost, report |
+| `prompt_programs` | the team tools frozen with a version: prompt, team tool id, name, description, Blockly state, tree, problems |
+| `runs` | (team, task), kind (`run`, `conversation` or `manual`), prompt (agent version), model, start, end, end reason, tokens, cost, report |
 | `messages` | run, sequence, source, kind, text, data, robot ID and alias at that moment, time |
-| `tool_calls` | run, sequence, name, arguments, result, duration, robot ID and alias at that moment |
+| `tool_calls` | run, sequence, name, arguments, result, duration, robot ID and alias at that moment, the team tool it belongs to |
 | `llm_calls` | run, provider, model, tokens in and out, duration, cost |
 | `notes` | (team, task), text, origin run and message, author (`agent` or `team`), time |
+| `programs` | team tools of a (team, task): stable id, name (unique per pair), description, Blockly state, derived tree and problems, update time |
 | `settings` | lab-wide settings: lab code, released models, conversations on or off |
 | `events` | the event log: kind, actor, scope (team, task, robot, prompt, run) as real columns, small JSON data; see `events.md` |
 
@@ -188,8 +192,13 @@ The control room prepares tasks and assigns them to teams; the rules live in `in
 (`tasks.go`).
 
 - **Lifecycle:** `draft` → `open` (published) → `closed`. Only drafts can be edited or deleted.
-  Publishing needs a title and a text and fixes title, text and starter prompt: all teams and
-  the results refer to the same text. "Duplicate" creates a new draft from a task in any state.
+  Publishing needs a title and a text and fixes title, text, starter prompt and the agent's tool
+  set: all teams and the results refer to the same task.
+- **Tool set** (`agent_tools`): `all`, or `team_tools` for the challenge: the agent gets only the
+  team's deployed own tools and a few that move no robot (`tools.md`, "Tool set of a task"). The
+  task editor has the checkbox "Agent darf nur eigene Werkzeuge des Teams nutzen"; task files set
+  it with `agent_tools` in the front matter. The team page names the rule in "Aufgabe" and marks
+  the built-in tools the agent does not have in "Werkzeuge". "Duplicate" creates a new draft from a task in any state.
 - **Assigning:** only open tasks, to listed teams or to all current teams (`"all"`); teams that
   join later get nothing automatically. Assigning twice changes nothing. An assignment the team
   has not accepted can be withdrawn (`team_tasks.withdrawn_at`); assigning again makes it new.
@@ -203,7 +212,7 @@ The control room prepares tasks and assigns them to teams; the rules live in `in
 - **Accepting** (team, `lab/teamtasks.go`): the team accepts an assigned, open task and it
   becomes active. The chosen start prompt becomes version 1 of the new pair: the task's starter
   prompt (`starter`; no version if it has none), nothing (`empty`), or the newest prompt of
-  another task the team accepted (`copy`).
+  another task the team accepted (`copy`); `copy` also copies that task's team tools.
 - **The active task** (`active_tasks`) is owned by the server, so all PCs of a team follow a
   switch. A team switches between accepted tasks; switching and accepting are refused while a
   run is active, and an open conversation ends (`agent.Manager.TaskActivated`).
@@ -233,10 +242,18 @@ a closed task writes answer 409 and reads work. Stop always works.
 | `GET tasks/{id}` | one assigned task with its text (the "Aufgabe" tab) |
 | `POST tasks/{id}/accept` | accept and activate: `{prompt: "starter" \| "empty" \| "copy", from_task?}` |
 | `POST tasks/{id}/activate` | switch to another accepted task; 409 while a run is active |
-| `GET prompts`, `GET prompts/{version}`, `POST prompt` | prompt versions; deploy, optionally with restart |
-| `POST start`, `POST stop` | start or stop a run |
+| `GET prompts`, `GET prompts/{version}`, `POST prompt` | versions (each with the team tools that are new, changed or removed against the version before); deploy, optionally with restart: answers the version's team tools and a warning |
+| `POST prompts/{version}/restore` | restore a version: team tools here, prompt text for the draft; SSE `programs` |
+| `GET prompts/{version}/tools?against=now\|{n}` | team tools that differ between the version and the working state (default) or version n: `{left, right, tools}`, the older state on the left, version 0 is the working state; reads work in a closed task |
+| `GET prompts/{version}/tools/{id}?against=now\|{n}` | one team tool in both states (`{left, right}` with `version` and the stored tool or null) and the changes between them (`docs/programs.md`, "Comparing versions"); 404 for an unknown version or a tool in neither |
+| `POST start`, `POST stop` | start or stop a run; stop also cancels a running by-hand call; start answers 409 while one runs |
+| `POST tools/{name}` | run one by-hand tool (body: its arguments, `robot` with several robots) and answer its result as the agent would get it; 409 while a run is active |
+| `GET programs`, `GET programs/{id}` | team tools of the active task (name, description, valid, problems); one with its Blockly state |
+| `POST programs`, `PUT programs/{id}`, `DELETE programs/{id}` | create, replace (last write wins) or delete a team tool: `{name, description, blockly}`; the server derives tree and problems, stores invalid tools too and answers the problems per block; at most 12 per task |
+| `POST programs/{id}/run`, `POST program-runs/{id}/continue` | run a team tool on a robot `{robot?, step?}`; let a single-step run take its next call (`programs.md`, "Running a team tool") |
+| `GET blocks` | Blockly block definitions and toolbox of the tool editor, built from the registry (`programs.md`, "Blocks") |
 | `POST message`, `POST conversation/new` | message to the own agent; start a new conversation |
-| `GET events` | SSE: `log`, `robots`, `agent`, `totals`, `models`, `task` (active task changed), `tasks` (assigned, withdrawn, accepted or closed); `Last-Event-ID` catches up |
+| `GET events` | SSE: `log`, `robots`, `agent`, `totals`, `models`, `task` (active task changed), `tasks` (assigned, withdrawn, accepted or closed), `programs` (a team tool was saved or deleted; `id`), `program` (a step of a running team tool); `Last-Event-ID` catches up |
 | `GET/POST notes`, `PUT/DELETE notes/{id}` | notes |
 | `PUT name`, `PUT model` | rename the team, choose the model |
 | `PUT robots/{robot}/alias`, `POST robots/{robot}/identify` | rename a robot, make it blink and beep |
@@ -252,11 +269,15 @@ Control room (`/admin`, admin password, session cookie):
 | `PUT /admin/api/teams/{id}`, `PUT …/color`, `DELETE …` | rename, recolor, delete a team |
 | `POST /admin/api/stop-all` | emergency stop for all robots |
 | `PUT /admin/api/models`, `PUT /admin/api/conversation` | released models; conversations on or off |
-| `GET/POST /admin/api/tasks` | list tasks; create a draft `{title, body, starter}` |
+| `GET/POST /admin/api/tasks` | list tasks; create a draft `{title, body, starter, agent_tools}` |
 | `GET/PUT/DELETE /admin/api/tasks/{id}` | read a task with its text; edit or delete a draft |
 | `POST /admin/api/tasks/{id}/publish`, `/close`, `/duplicate` | publish a draft, close an open task, copy any task into a new draft |
 | `POST /admin/api/tasks/{id}/assign` | assign `{teams: ["t…", …]}` or `{teams: "all"}`; answers the teams that got it now |
 | `DELETE /admin/api/tasks/{id}/assign/{team}` | withdraw an assignment the team has not accepted |
+| `GET /admin/api/tasks/{id}/runs` | "Läufe": per team its runs with the four measures and tools, best run and rank |
+| `POST /admin/api/runs/{id}/confirm` | score a run `{success}`; the last answer counts |
+| `POST /admin/api/runs/{id}/intervention` | note an intervention `{kind: "moved"}` |
+| `POST /admin/api/teams/{id}/start` | start a team's run from the control room (same rules as the team's start) |
 
 ## Agent runtime
 
@@ -294,6 +315,7 @@ writes `note.added` and `note.deleted` for `remember` and `forget`.
 
 - **System:** fixed platform rules (German; extra rules for several robots), the team prompt of
   the run's task in its newest version, the notes of that task. Not the task text.
+- **Tools:** the built-in tools and the team tools of the newest version (valid, described).
 - **History:** the last messages of the run verbatim (`max_history_messages`); older ones are
   left out. Summaries of long runs are not implemented.
 - **Inbox:** one JSON line per new message with sender, age, kind, text and data. The sender field
@@ -317,11 +339,20 @@ writes `note.added` and `note.deleted` for `remember` and `forget`.
 
 Each note stores its origin: the run and the message after which it was written.
 
-### Deploying prompts
+### Deploying prompts and team tools
 
-Every deploy creates a new version; old versions stay. A plain deploy takes effect at the next
-model call, never in the middle of a tool call. "Deploy and restart" begins a new run. Each run
-stores its prompt version.
+Every deploy creates a new version; old versions stay. A version is the prompt text and every team
+tool of the pair, valid or not (`prompt_programs`); a deploy in which only a tool changed creates a
+new version with the same text. A plain deploy takes effect at the next model call, never in the
+middle of a tool call. "Deploy and restart" begins a new run. Each run stores its version.
+
+- The agent gets the team tools of the newest version that are valid and have a description
+  (`tools.md`, "Team tools as agent tools").
+- The deploy answers the version with its team tools (whether the agent has each, and why not) and
+  a warning for names in code style the agent has no tool for.
+- **Zurück:** `POST prompts/{version}/restore` replaces the working state with a version: the team
+  tools of the pair (also ones deleted since, with their ids) and, on the page, the prompt draft.
+  Nothing is deleted from the history; the next deploy is a new version.
 
 ### Budgets and end conditions
 
@@ -340,6 +371,25 @@ a run's and its tokens count into the team totals. The context has conversation 
 as text, the team, prompt and notes, and the numbered protocol of the last run. Only
 `read_sensors` and `remember` can be called. It ends when a run starts, with "Neues Gespräch" or
 at its token budget. The control room can switch conversations off for the lab.
+
+### By hand
+
+Stage 1 of the learning path: the team is the agent. `POST tools/{name}` runs one tool the
+registry flags as by hand (`docs/tools.md`) on one of the team's robots, without a language
+model (`agent.Manager.Manual`, through `tools.Registry.CallManual`). Unknown and agent-only tools
+answer `ok: false` like any mistake; arguments are checked against the tool's schema.
+
+- **No driver, no pause:** by-hand calls work only while no run is active (409 "Erst anhalten:
+  Euer Agent fährt gerade."), and a run cannot start while a by-hand call runs. An open
+  conversation does not block: the agent moves no robot there. Two PCs of a team are not
+  locked against each other; the robot answers a second motion command with `busy`.
+- **Stop** cancels a running by-hand call (its result ends with `stopped`) and stops the robots.
+- **Storage:** by-hand calls are stored like the agent's tool calls, under a `runs` row of kind
+  `manual` of the (team, task): no model, no tokens, no cost. It ends when a run starts, the team
+  switches tasks or the task is closed; the next by-hand call opens a new one.
+- **Log:** one live log entry per call with source `team` and kind `tool`, in the shape of the
+  agent's tool entries; the server writes one `INFO` line `tool by hand` (team, task, robot,
+  tool, reason), and `tool by hand refused` during a run.
 
 ### Talking between agents
 
@@ -363,7 +413,42 @@ embed compiling without a build. No CDN assets. Rarely used views are lazy-loade
 
 - **Team page** (`/t/{token}`): prompt editor (CodeMirror, Markdown, tool name completion),
   preview, history with diffs against deployed versions and local snapshots, live log over SSE,
-  conversation tab, notes, tool catalog, robots with rename and "Finden", usage, model choice.
+  conversation tab, notes, tools and console, robots with rename and "Finden", usage, model choice.
+  - **Console** (tab "Werkzeuge"): every tool of the catalog; a click on a by-hand tool opens it
+    in place (lazy-loaded `ToolConsole`): a form built from the tool's JSON schema in the session
+    (`web/src/console.ts`), "Ausführen" (`POST tools/{name}`) and the result below: one sentence
+    in the protocol's words, the key fields, the floor trace as a band (four rows, one per probe)
+    and the JSON on demand. "In den Prompt einfügen" stays as a second action. Agent-only tools
+    carry "nur Agent" and do not open. With several robots a robot picker sits above the list.
+    While a run is active the forms are disabled ("Erst anhalten"); a closed task is read-only.
+    By-hand calls appear in the protocol as "Ihr"; without a run the protocol offers "Selbst
+    steuern", which opens the tab.
+  - **Versions:** "Eigene Werkzeuge" shows per tool whether the agent has it ("beim Agenten",
+    "geändert" since the last deploy, "noch nicht deployt", or "nicht beim Agenten" with the
+    reason). The prompt editor completes the names of team tools. "Deployen" also sits in the
+    tool editor. The history shows per version the team tools that are new, changed or removed;
+    "Diese Version wiederherstellen" restores prompt and team tools and first asks, naming what
+    is not deployed yet and would be lost.
+  - **Tool comparison** (history, `web/src/components/ToolDiffView.tsx`, lazy-loaded with
+    Blockly): for the selected version a row of chips, "Prompt" and one per team tool that
+    differs ("neu", "geändert", "entfernt"), against "Euer Stand jetzt" or, with "Vergleichen
+    mit", another version (the prompt chip then compares the two version texts). A tool chip
+    shows two read-only Blockly workspaces, the older state left, each loaded from its stored
+    state and as high as its blocks (scrolling sideways), side by side when the pane is at least
+    620 px wide and one above the other below. Marks per block id from the server's changes: a
+    changed value outlines its field on both sides, a new block has a solid outline (right), a
+    removed one a dashed outline (left), a moved one a dotted outline (both); the legend gives
+    each its sign (→ + − ↕), so no mark relies on color. Name and description changes stand as
+    text above. A new tool shows only on the right ("Gab es in Version n noch nicht."), a
+    removed one only on the left. Pure helpers in `web/src/tooldiff.ts`.
+  - **Team tools** (tab "Werkzeuge", group "Eigene Werkzeuge" above the built-in tools): name,
+    description, "bereit" or "hat Fehler", "Neues Werkzeug", per tool "Bearbeiten" and
+    "Ausführen" with the end of the last run below. "Bearbeiten" opens the tool editor in the left
+    pane: its head switches between "Prompt" and "Werkzeug bauen", the side pane stays. The editor
+    (`web/src/components/ToolEditor.tsx`, Blockly, lazy-loaded) has a picker of the team's tools,
+    "Ausführen", "Einzelschritt" ("Weiter") and "Stopp" in its head, name and description, the
+    block categories and the workspace, and the "Ablauf" beside it. Details: `programs.md`,
+    "Editor".
   Browser storage (`web/src/storage.ts`) holds only the draft, draft snapshots and UI preferences.
   - **Tasks:** the team band shows the active task with a picker: accepted tasks to switch to
     (disabled during a run, "Erst anhalten") and new tasks with a badge. Without an active task
@@ -390,18 +475,35 @@ embed compiling without a build. No CDN assets. Rarely used views are lazy-loade
     deleted; a published task is shown read-only with "Duplizieren" and "Aufgabe schließen"
     (with confirmation: running runs end).
     A draft can be filled from a task file (`docs/lab/aufgaben/{de,en}/*.md`: front matter with
-    `title`, sections `## Aufgabe`/`## Task` and `## Startprompt`/`## Starter prompt`) by upload
+    `title` and optional `agent_tools`, sections `## Aufgabe`/`## Task` and `## Startprompt`/`## Starter prompt`) by upload
     or paste; the browser parses it (`web/src/admin/taskfile.ts`), the server never reads files.
   - **Assigning:** drag an open task onto a team card, or pick a team or "An alle Teams" in the
     task's "Zuweisen …" menu (keyboard and screen readers, like robot assignment). Each team
     card lists its tasks with status (zugewiesen, angenommen, aktiv) and "Zurückziehen" while the
     team has not accepted. Pure helpers in `web/src/admin/tasks.ts`.
+  - **Runs** ("Läufe" on a published task, `web/src/admin/RunsView.tsx`, lazy-loaded): the
+    ranking and, per team, every agent run with version, end, success, time to the goal, model
+    calls, interventions and the tools it had (team tools and built-in ones). Buttons per run:
+    "geschafft", "nicht" (`run.confirmed`), "+ von Hand bewegt" (`run.intervention`); per team
+    "Lauf starten". The view reloads when the board's `scores` counter or an agent changes.
+    Measures and ranking are computed by the server (`store.TaskRuns`, `lab.Rank`,
+    `docs/events.md`); `web/src/admin/runs.ts` only words them.
 
 ## Simulator
 
 `sim/` runs the real bundled robot script under CPython with fakes for `cyberpi`, `mbot2` and
 `mbuild` (`sim/fakes/`) and a 2D world (`sim/world.py`) with optional seeded sensor noise. MQTT is
 real. The floor is a drawing of tape bands seen by four probes. Assumed robot geometry in
-`sim/mbot2.json`. Worlds: `arena`, `labyrinth`, `linie`, `gitter` (generated by `sim/grid.py`
-together with `docs/lab/feld/bauplan.svg`). `sim/tests` run the real bundle in-process; `sim/e2e`
-starts `labserver` with the scripted model and one simulated robot and drives the lab over HTTP.
+`sim/mbot2.json`. Worlds: `arena`, `labyrinth`, `labyrinth_rechts` (up, right, down to blue:
+solvable by turning right at every wall), `labyrinth_gestoert` (the same with a box in the top
+corridor, a detour through the middle and the blue field in a side corridor: turning right at every
+wall no longer arrives, following the right-hand wall cell by cell does), `linie`, `gitter`
+(generated by `sim/grid.py` together with `docs/lab/feld/bauplan.svg`). A second robot in the way
+is a second simulated robot, not world geometry. `--delay-ms` puts a TCP proxy (`sim/netdelay.py`)
+between each robot and the broker that delays every packet in both directions, like the guest
+Wi-Fi, so nothing works in the simulator that would come too late on a real robot. `sim/tests` run
+the real bundle in-process; `sim/e2e` starts `labserver` with the scripted model and simulated
+robots and drives the lab over HTTP. `sim/e2e/test_walkthrough.py` is the challenge walk-through with
+150 ms delay: the rigid team tool `labyrinth` arrives in `labyrinth_rechts` and not in
+`labyrinth_gestoert`; the scripted agent with the small cut (`ein_feld`, `rechts`, `links`,
+`read_sensors`) arrives in both.

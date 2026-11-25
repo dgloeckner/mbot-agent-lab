@@ -1,8 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
 import { useSignal } from '@preact/signals'
-import { clock, describe, describeTool, logGroup, relativeTime } from '../format'
+import { clock, describe, describeTool, logGroup, programEnd, relativeTime } from '../format'
 import {
   addNote,
+  editTool,
+  newTool,
+  runTeamTool,
+  teamTools,
+  toolRun,
   agent,
   conversation,
   conversationUnread,
@@ -22,7 +27,7 @@ import {
 } from '../state'
 import { lazyComponent } from '../lazy'
 import type { SideTab } from '../storage'
-import type { LogEntry, Note } from '../types'
+import type { LogEntry, Note, ProgramInfo } from '../types'
 import { SendIcon } from './icons'
 
 type Filter = 'all' | 'robot' | 'team' | 'agent' | 'system'
@@ -118,11 +123,18 @@ function NoRunHint() {
         Gerade läuft kein Lauf.{' '}
         {talk ? 'Fragen an euren Agenten stellt ihr im Gespräch.' : 'Startet einen Lauf, dann liest euer Agent eure Nachrichten.'}
       </p>
-      {talk && (
-        <button class="btn btn-small" onClick={() => updatePrefs({ sideTab: 'conversation' })}>
-          Zum Gespräch
-        </button>
-      )}
+      <div class="composer-hint-actions">
+        {!readOnly.value && (
+          <button class="btn btn-small" onClick={() => updatePrefs({ sideTab: 'tools' })}>
+            Selbst steuern
+          </button>
+        )}
+        {talk && (
+          <button class="btn btn-small" onClick={() => updatePrefs({ sideTab: 'conversation' })}>
+            Zum Gespräch
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -197,6 +209,9 @@ function TaskPanel() {
     <div class="task-panel scroll">
       <h2 class="task-panel-title">{t.title}</h2>
       <p class="panel-intro">Euer Agent sieht diesen Text nicht. Schreibt in euren Prompt, was er wissen muss.</p>
+      {t.agent_tools === 'team_tools' && (
+        <p class="task-tool-rule">In dieser Aufgabe darf euer Agent nur eure eigenen Werkzeuge nutzen, dazu read_sensors, say, tell_team, remember, forget und finish.</p>
+      )}
       <TaskText task={t} />
     </div>
   )
@@ -322,41 +337,171 @@ function NotesPanel() {
   )
 }
 
+const ToolConsole = lazyComponent(() => import('./ToolConsole'))
+
+/** Whether the agent has a team tool: deployed, changed since the last deploy, or left out. */
+function agentState(t: ProgramInfo): { kind: string; label: string; title: string } {
+  if (t.deploy === 'new') return { kind: 'new', label: 'noch nicht deployt', title: 'Euer Agent bekommt es mit dem nächsten Deploy.' }
+  const base = t.agent ? 'beim Agenten' : `nicht beim Agenten: ${t.why ?? ''}`
+  if (t.deploy === 'changed') return { kind: 'changed', label: `${base}, geändert`, title: 'Seit dem letzten Deploy geändert: der Agent hat noch die deployte Fassung.' }
+  return { kind: t.agent ? 'agent' : 'left', label: base, title: t.agent ? 'Euer Agent kann es benutzen.' : 'Nur gültige Werkzeuge mit Beschreibung bekommt der Agent.' }
+}
+
+const runningText = (n: number) => `Läuft … ${n === 1 ? '1 Schritt' : `${n} Schritte`}`
+
+/** "Eigene Werkzeuge": the team's tools above the built-in ones. */
+function OwnTools({ blocked, robot }: { blocked: string | null; robot?: string }) {
+  const list = teamTools.value
+  const run = toolRun.value
+  return (
+    <section class="own-tools">
+      <div class="own-tools-head">
+        <h3>Eigene Werkzeuge</h3>
+        {!readOnly.value && (
+          <button class="btn btn-small" onClick={() => void newTool()}>
+            Neues Werkzeug
+          </button>
+        )}
+      </div>
+      {list.length === 0 ? (
+        <p class="panel-intro">Noch keine. Baut aus Blöcken ein eigenes Werkzeug, zum Beispiel „fahre ein Quadrat“.</p>
+      ) : (
+        <ul class="tools">
+          {list.map((t) => (
+            <li key={t.id} class="own-tool">
+              <div class="own-tool-row">
+                <code>{t.name}</code>
+                <span class={`tool-tag ${t.valid ? 'tag-ok' : 'tag-bad'}`}>{t.valid ? 'bereit' : 'hat Fehler'}</span>
+                <span class={`tool-tag tag-agent`} data-state={agentState(t).kind} title={agentState(t).title}>
+                  {agentState(t).label}
+                </span>
+                <span class="spacer" />
+                <button class="btn-link" onClick={() => editTool(t.id)}>
+                  Bearbeiten
+                </button>
+                <button
+                  class="btn btn-small btn-accent"
+                  disabled={!t.valid || blocked !== null || run.running}
+                  title={blocked ?? (t.valid ? undefined : 'Erst die Fehler beheben.')}
+                  onClick={() => void runTeamTool(t.id, false, robot)}
+                >
+                  Ausführen
+                </button>
+              </div>
+              {t.description && <span class="tool-summary">{t.description}</span>}
+              {run.program === t.id && (run.running || run.result) && (
+                <p class="own-tool-run" data-ok={run.result ? run.result.end === 'done' : undefined}>
+                  {run.running ? runningText(run.lines.filter((l) => l.kind === 'step').length) : programEnd(t.name, run.result!)}
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+/** Why the console is off right now, or null. */
+function consoleBlocked(): string | null {
+  if (readOnly.value) return 'Die Aufgabe ist geschlossen.'
+  if (agent.value.running) return 'Erst anhalten: Euer Agent fährt gerade.'
+  if (robots.value.length === 0) return 'Eurem Team ist gerade kein Roboter zugeteilt.'
+  return null
+}
+
+/** In a task with the tool set team_tools: the built-in tools the agent does not have. */
+function missingInTask(): Set<string> | null {
+  if (task.value?.agent_tools !== 'team_tools') return null
+  const kept = new Set(session.value!.team_only_tools ?? [])
+  return new Set(session.value!.tools.filter((t) => !kept.has(t.name)).map((t) => t.name))
+}
+
 function ToolsPanel() {
   const tools = session.value!.tools
+  const missing = missingInTask()
   const groups = [...new Set(tools.map((t) => t.group))]
+  const open = useSignal<string | null>(null)
+  const picked = useSignal<string>('')
+  const team = robots.value
+  const robot = team.length > 1 ? (team.find((r) => r.alias === picked.value)?.alias ?? team[0].alias) : undefined
+  const blocked = consoleBlocked()
   return (
     <div class="tools-panel scroll">
-      <p class="panel-intro">Diese Werkzeuge kann euer Agent benutzen. Klickt eins an, um seinen Namen in den Prompt einzufügen. Beim Schreiben schlägt der Editor ab drei Buchstaben passende Werkzeuge vor; <kbd>Tab</kbd> übernimmt den Vorschlag.</p>
-      {robots.value.length > 1 && (
+      <p class="panel-intro">
+        Diese Werkzeuge hat euer Agent. Solange kein Lauf läuft, könnt ihr sie selbst ausprobieren: anklicken, Werte eintragen, ausführen. Beim
+        Schreiben schlägt der Editor ab drei Buchstaben passende Werkzeuge vor; <kbd>Tab</kbd> übernimmt den Vorschlag.
+      </p>
+      {team.length > 1 && (
+        <div class="robot-picker">
+          <span id="robot-picker-label">Roboter</span>
+          <div class="chips" role="group" aria-labelledby="robot-picker-label">
+            {team.map((r) => (
+              <button key={r.id} class="chip" aria-pressed={r.alias === robot} onClick={() => (picked.value = r.alias)}>
+                {r.alias}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {team.length > 1 && (
         <p class="panel-intro multi-robot">
-          Euer Agent steuert {robots.value.length} Roboter: {robots.value.map((r, i) => (
-            <span key={r.id}>
-              {i > 0 && (i === robots.value.length - 1 ? ' und ' : ', ')}
-              <button class="tool-inline" onClick={() => editorBridge.insert?.(r.alias)}>{r.alias}</button>
-            </span>
-          ))}
-          . Bewegungs-Werkzeuge bekommen dann den Parameter <code>robot</code> mit einem dieser Namen, <code>stop</code> geht auch mit <code>alle</code>.
+          Euer Agent steuert {team.length} Roboter. Bewegungs-Werkzeuge bekommen dann den Parameter <code>robot</code> mit einem dieser Namen,{' '}
+          <code>stop</code> geht auch mit <code>alle</code>.
         </p>
       )}
+      {blocked && agent.value.running && (
+        <p class="console-hint" role="status">
+          Erst anhalten: Solange euer Agent läuft, könnt ihr nichts selbst ausführen.
+        </p>
+      )}
+      {missing && (
+        <p class="console-hint task-tool-rule" role="note">
+          In dieser Aufgabe hat euer Agent nur eure eigenen Werkzeuge und {(session.value!.team_only_tools ?? []).join(', ')}. Die anderen
+          eingebauten fehlen ihm, ihr dürft sie aber selbst ausführen.
+        </p>
+      )}
+      <OwnTools blocked={blocked} robot={robot} />
       {groups.map((g) => (
         <section key={g}>
           <h3>{g}</h3>
           <ul class="tools">
             {tools
               .filter((t) => t.group === g)
-              .map((t) => (
-                <li key={t.name}>
-                  <button class="tool" data-ready={t.ready} onClick={() => editorBridge.insert?.('`' + t.name + '`')} title="In den Prompt einfügen">
-                    <code>{t.name}</code>
-                    {t.params && <span class="tool-params">{t.params}</span>}
-                    <span class="tool-summary">
-                      {t.summary}
-                      {!t.ready && ' Kommt bald, euer Agent hat es noch nicht.'}
-                    </span>
-                  </button>
-                </li>
-              ))}
+              .map((t) => {
+                const byHand = t.ready && t.manual
+                const isOpen = byHand && open.value === t.name
+                return (
+                  <li key={t.name} class={isOpen ? 'tool-open' : undefined}>
+                    {byHand ? (
+                      <button class="tool" aria-expanded={isOpen} onClick={() => (open.value = isOpen ? null : t.name)}>
+                        <code>{t.name}</code>
+                        <span class="tool-params">
+                          {t.params}
+                          {missing?.has(t.name) && <span class="tool-tag tag-missing">nicht beim Agenten</span>}
+                        </span>
+                        <svg class="tool-chevron" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24">
+                          <path d={isOpen ? 'M5 9l7 7 7-7' : 'M9 5l7 7-7 7'} />
+                        </svg>
+                        <span class="tool-summary">{t.summary}</span>
+                      </button>
+                    ) : (
+                      <button class="tool" data-ready={t.ready} onClick={() => editorBridge.insert?.('`' + t.name + '`')} title="In den Prompt einfügen">
+                        <code>{t.name}</code>
+                        <span class="tool-params">{t.params}</span>
+                        <span class={`tool-tag${t.ready && missing?.has(t.name) ? ' tag-missing' : ''}`}>
+                          {!t.ready ? 'kommt bald' : missing?.has(t.name) ? 'nicht beim Agenten' : 'nur Agent'}
+                        </span>
+                        <span class="tool-summary">
+                          {t.summary}
+                          {!t.ready && ' Euer Agent hat es noch nicht.'}
+                        </span>
+                      </button>
+                    )}
+                    {isOpen && <ToolConsole tool={t} robot={robot} blocked={blocked} />}
+                  </li>
+                )
+              })}
           </ul>
         </section>
       ))}

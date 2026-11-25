@@ -39,14 +39,22 @@ type LogEntry struct {
 	Task string `json:"task_id,omitempty"`
 
 	// Signal is set on notices that are not log entries: they tell the
-	// team's pages to reload (SignalTask, SignalTasks). Never in the backlog.
+	// team's pages to reload (SignalTask, SignalTasks, SignalPrograms). Never
+	// in the backlog. Ref names what changed, e.g. a team tool.
 	Signal string `json:"-"`
+	Ref    string `json:"-"`
+	// Payload replaces the default data of a signal (SignalProgram).
+	Payload json.RawMessage `json:"-"`
 }
 
 // Signals to the pages of a team.
 const (
 	SignalTask  = "task"  // the active task changed: reload prompt, notes, log, conversation
 	SignalTasks = "tasks" // a task was assigned, withdrawn, accepted or closed: reload the task list
+	// SignalPrograms: a team tool was saved or deleted (Ref: its id); reload the list and, if open, the tool.
+	SignalPrograms = "programs"
+	// SignalProgram: a step of a running team tool (Payload); the page marks the block.
+	SignalProgram = "program"
 )
 
 // backlogSize is how many entries per team are kept for clients that
@@ -91,6 +99,20 @@ func (h *Hub) Signal(team, signal string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.signal(team, LogEntry{Signal: signal, Task: h.task[team]})
+}
+
+// SignalRef is Signal with the id of what changed.
+func (h *Hub) SignalRef(team, signal, ref string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.signal(team, LogEntry{Signal: signal, Task: h.task[team], Ref: ref})
+}
+
+// SignalData sends a signal with its own data to the team's pages.
+func (h *Hub) SignalData(team, signal string, payload json.RawMessage) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.signal(team, LogEntry{Signal: signal, Task: h.task[team], Payload: payload})
 }
 
 func (h *Hub) signal(team string, e LogEntry) {

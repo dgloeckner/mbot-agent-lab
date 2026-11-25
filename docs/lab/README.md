@@ -4,6 +4,9 @@ Material für die Lab-Leitung. Das Lab-Material ist auf Deutsch; Aufgaben gibt e
 Englisch mit gleichem Dateinamen.
 
 - `aufgaben/de/`, `aufgaben/en/`: fertige Aufgaben zum Importieren in den Leitstand.
+- `werkzeuge.md`: Leitfaden für den Lernpfad mit eigenen Werkzeugen (Stufen 1 bis 5), Rollen im
+  Team, die Labyrinth-Challenge, ihre Wertung, Nachbesprechung, Aufbau des Labyrinths und ein
+  Zeitplan.
 - `feld/`: Bauplan und Aufbau des Linienfelds.
 
 ## Wie ein Lab-Tag mit Aufgaben läuft
@@ -25,7 +28,16 @@ Englisch mit gleichem Dateinamen.
 6. **Arbeiten.** Prompt-Versionen, Notizen, Läufe, Gespräch und Protokoll gehören immer zur aktiven
    Aufgabe. Über den Aufgaben-Wähler oben auf der Teamseite wechselt das Team zwischen seinen
    Aufgaben; alle Rechner des Teams wechseln mit. Während eines Laufs geht das nicht.
-7. **Schließen.** Wenn die Zeit um ist: Aufgabe öffnen, „Aufgabe schließen“. Laufende Läufe enden
+7. **Werten.** Im Leitstand bei der Aufgabe auf „Läufe“ klicken. Für jeden Lauf eines Agenten
+   steht dort: Version, wie er endete, Zeit bis zum Ziel, Modellaufrufe, Eingriffe und welche
+   Werkzeuge der Agent hatte. Ob ein Lauf geschafft ist, entscheidet ihr, nicht der Agent: Er
+   meldet nur „fertig“. Nach jedem Lauf „✓ geschafft“ oder „✗ nicht“ klicken (ein zweiter Klick
+   überschreibt). Wenn jemand den Roboter während des Laufs anfasst oder zurücksetzt:
+   „+ von Hand bewegt“. Stopps des Teams und Werkzeuge, die das Team vor dem Lauf von Hand
+   aufgerufen hat, zählt der Server selbst. Die Rangliste: zuerst geschaffte Läufe, dann wenigste
+   Modellaufrufe, dann kürzeste Zeit; gewertet wird der beste Lauf jedes Teams. Mit
+   „Lauf starten“ startet ihr den Lauf eines Teams selbst, z. B. für den Wertungslauf.
+8. **Schließen.** Wenn die Zeit um ist: Aufgabe öffnen, „Aufgabe schließen“. Laufende Läufe enden
    sofort, danach kann niemand mehr darin deployen oder starten. Alles bleibt lesbar.
 
 ## Wichtig für die Teams
@@ -51,6 +63,12 @@ Was ist das Ziel, woran merkt man, dass es geschafft ist, worauf muss man achten
 Ein erster Prompt, den die Teams übernehmen können. Freiwillig.
 ```
 
+Für die Challenge (Stufe 5) kommt in die Kopfzeilen `agent_tools: team_tools`: Dann hat der
+Agent in dieser Aufgabe nur die deployten eigenen Werkzeuge des Teams und `read_sensors`, `say`,
+`tell_team`, `remember`, `forget` und `finish`. Ohne die Zeile (oder mit `agent_tools: all`) hat er
+alle Werkzeuge; ein anderer Wert wird beim Import abgelehnt. Im Leitstand ist das die Checkbox
+„Agent darf nur eigene Werkzeuge des Teams nutzen“; nach dem Veröffentlichen ist sie fest.
+
 Auf Englisch heißen die Abschnitte `## Task` und `## Starter prompt`. Jede Datei gibt es in
 `aufgaben/de/` und `aufgaben/en/` mit gleichem Namen; ein Test prüft, dass sich alle importieren
 lassen.
@@ -63,3 +81,23 @@ lassen.
 | `zwei-roboter.md` | Zu zweit suchen | Arena oder Labyrinth, zwei Roboter pro Team |
 | `linienfeld.md` | Linienfeld – fahr zur Kreuzung (2,3) | Linienfeld (`feld/`), ein Roboter |
 | `verhandeln.md` | Die Engstelle | mehrere Teams; Übung zu Prompt-Injection |
+| `werkzeuge-1-konsole.md` | Werkzeuge 1: Selbst steuern | Arena oder Labyrinth; Rollen im Team, Werkzeuge von Hand |
+| `werkzeuge-2-wiederholen.md` | Werkzeuge 2: Wiederholen | Arena; erstes eigenes Werkzeug, Schleifen |
+| `werkzeuge-3-entscheiden.md` | Werkzeuge 3: Entscheiden | Labyrinth (`labyrinth_rechts`); Bedingungen, Sonderfälle |
+| `werkzeuge-4-agent.md` | Werkzeuge 4: Euer Agent bekommt eure Werkzeuge | Labyrinth (`labyrinth_rechts`); Beschreibung, Prompt, Deploy |
+| `werkzeuge-5-challenge.md` | Werkzeuge 5: Challenge Labyrinth | `labyrinth_rechts`, dann `labyrinth_gestoert`; `agent_tools: team_tools` |
+
+Die Werkzeug-Aufgaben gehören zusammen; wie man sie durchführt, steht in `werkzeuge.md`.
+
+## Welten im Simulator
+
+Zum Ausprobieren ohne Roboter: `npx nx run sim:run --robots=2 --world=sim/worlds/<welt>.json`.
+
+| Welt | Was |
+| --- | --- |
+| `arena.json` | offene Arena 200 × 200 cm mit farbigen Feldern in den Ecken und einer Linie quer durch |
+| `labyrinth.json` | kleines Labyrinth, 200 × 200 cm, Gänge 50 cm, blaues Zielfeld |
+| `labyrinth_rechts.json` | einfaches Labyrinth (200 × 200 cm, Gänge 50 cm): hoch, rechts, runter zum blauen Feld; „an jeder Wand rechts“ kommt an |
+| `labyrinth_gestoert.json` | dasselbe gestört: Kiste im oberen Gang, Umweg durch die Mitte, blaues Feld im Seitengang; „an jeder Wand rechts“ kommt nicht mehr an, „der rechten Wand Feld für Feld folgen“ schon |
+| `linie.json` | Linie mit Kurven, endet auf einem blauen Feld |
+| `gitter.json` | das Linienfeld (`feld/`); erzeugt von `sim/grid.py` |

@@ -29,11 +29,18 @@ type TaskInput struct {
 	Title   string `json:"title"`
 	Body    string `json:"body"`
 	Starter string `json:"starter"`
+	// AgentTools: "all" (default) or "team_tools".
+	AgentTools string `json:"agent_tools"`
 }
 
 func (in TaskInput) clean() (TaskInput, error) {
 	in.Title = strings.Join(strings.Fields(in.Title), " ")
+	if in.AgentTools == "" {
+		in.AgentTools = store.AgentToolsAll
+	}
 	switch {
+	case in.AgentTools != store.AgentToolsAll && in.AgentTools != store.AgentToolsTeam:
+		return in, userErr("Werkzeuge des Agenten: %q gibt es nicht, nur all oder team_tools.", in.AgentTools)
 	case in.Title == "":
 		return in, userErr("Gebt der Aufgabe einen Titel.")
 	case utf8.RuneCountInString(in.Title) > MaxTaskTitle:
@@ -66,7 +73,7 @@ func (s *Service) CreateTask(ctx context.Context, in TaskInput) (store.Task, err
 	if err != nil {
 		return store.Task{}, err
 	}
-	return s.Store.CreateTask(ctx, store.Task{ID: "a" + randomString(6), Title: in.Title, Body: in.Body, Starter: in.Starter, State: store.TaskDraft})
+	return s.Store.CreateTask(ctx, store.Task{ID: "a" + randomString(6), Title: in.Title, Body: in.Body, Starter: in.Starter, State: store.TaskDraft, AgentTools: in.AgentTools})
 }
 
 // UpdateTask changes a draft. Published tasks are fixed: all teams and the
@@ -81,7 +88,7 @@ func (s *Service) UpdateTask(ctx context.Context, id string, in TaskInput) (stor
 	if err := s.draft(ctx, id, "bearbeiten"); err != nil {
 		return store.Task{}, err
 	}
-	if err := s.Store.UpdateDraft(ctx, store.Task{ID: id, Title: in.Title, Body: in.Body, Starter: in.Starter}); err != nil {
+	if err := s.Store.UpdateDraft(ctx, store.Task{ID: id, Title: in.Title, Body: in.Body, Starter: in.Starter, AgentTools: in.AgentTools}); err != nil {
 		return store.Task{}, err
 	}
 	return s.Store.Task(ctx, id)
@@ -178,7 +185,7 @@ func (s *Service) DuplicateTask(ctx context.Context, id string) (store.Task, err
 	if utf8.RuneCountInString(title) > MaxTaskTitle {
 		title = t.Title
 	}
-	return s.Store.CreateTask(ctx, store.Task{ID: "a" + randomString(6), Title: title, Body: t.Body, Starter: t.Starter, State: store.TaskDraft})
+	return s.Store.CreateTask(ctx, store.Task{ID: "a" + randomString(6), Title: title, Body: t.Body, Starter: t.Starter, State: store.TaskDraft, AgentTools: t.AgentTools})
 }
 
 // AssignTask gives an open task to teams, or to every current team with

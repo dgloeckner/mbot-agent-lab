@@ -68,7 +68,7 @@ and goes here, not into `CLAUDE.md`. How the system works today: `architecture.m
 | Topic | Decision | Why |
 | --- | --- | --- |
 | Scope | the pair (team, task) is the key of everything a team produces: prompt versions, notes, runs, conversations; finer scopes add robot and agent version | results per task and team need no guessing |
-| Agent version | the prompt version (`prompts.id`); a model change is not a new version, the run records the model | results can still be split by model |
+| Agent version | the prompt version (`prompts.id`), which also freezes the pair's team tools; a model change is not a new version, the run records the model | results can still be split by model |
 | Schema changes for tasks | full reset, no data migration; an old database is refused with a clear message | tables in their final form, no `ALTER` chain |
 | Deleting teams | soft delete (`deleted_at`) | results and history stay consistent |
 | Published tasks | fixed: only drafts can be edited; to change one, duplicate it | all teams and the results page refer to the same text |
@@ -81,8 +81,8 @@ and goes here, not into `CLAUDE.md`. How the system works today: `architecture.m
 ## Team tools
 
 Teams build their own tools from blocks in the browser, run them by hand and hand them to their
-agent with the prompt. How it works: `architecture.md` and, from the interpreter on,
-`programs.md`.
+agent with the prompt. How it works: `architecture.md` and `programs.md`; how a lab day uses
+them: `lab/werkzeuge.md`.
 
 | Topic | Decision | Why |
 | --- | --- | --- |
@@ -95,14 +95,14 @@ agent with the prompt. How it works: `architecture.md` and, from the interpreter
 | Versions | one deploy freezes the prompt and all team tools of the pair under one version; "zurück" restores both; the agent version stays `prompts.id` and covers the team tools | a run points at one version; comparison and rollback stay whole |
 | History | what changed in a team tool between two versions is shown as the old and the new blocks side by side, with marks | teams explain their changes in the debrief |
 | No driver, no pause | by-hand calls and "Ausführen" work only while no run is active; a team tool the agent calls runs inside that call; the robot answers a second motion command with `busy`; stop always works | one rule instead of a driver role and a pause state |
-| One writer per team | saving a team tool is "last write wins": no version check, no conflict dialog, no lock; other open PCs of the team reload what changed; the lab material recommends roles | a team coordinates among its people; several PCs stay useful for reading along |
+| One writer per team | saving a team tool is "last write wins": no version check, no conflict dialog, no lock; other open PCs of the team reload what changed; the lab material recommends roles (`lab/werkzeuge.md`) | a team coordinates among its people; several PCs stay useful for reading along |
 | By hand is a property of the tool | the registry flags which built-in tools a person or a team tool may use; a new tool is agent-only until flagged; console, blocks and interpreter read the registry and keep no tool list | one place decides, nothing drifts |
 | Console | the "Werkzeuge" tab is the console; by-hand calls appear in the protocol as "Ihr" | no new tab; the team sees its own actions next to the agent's |
 | The browser never runs anything | it shows and sends states; the server checks every rule | rules hold for every PC and every client |
 | Error rule | a tool that ends normally (its reason is a normal end in the registry) lets the team tool go on; an unexpected end is handled only by an `if` on the result that names that reason or has an `else`; a loop condition never handles one; otherwise the team tool ends `aborted` | a failed `turn` must not disappear inside `wiederhole bis` |
 | Last result | display and sound tools (`set_leds`, `show_text`, `play_sound`, `identify`) do not replace the "last result" | a light between a drive and its `wenn` must not change what the `wenn` tests |
 | `gib zurück` | the return block is part of the first version: a team shapes what its tool reports | the agent reads what the team chose to tell it |
-| Agent tool set | "the agent may only use the team's own tools" is an option of the task (`agent_tools`), fixed when the task is published, not a lab-wide switch | all teams in a challenge play by the same rule |
+| Agent tool set | "the agent may only use the team's own tools" is an option of the task (`agent_tools`: `all` or `team_tools`), fixed when the task is published, not a lab-wide switch; with `team_tools` the agent keeps `read_sensors`, `say`, `finish`, `tell_team`, `remember` and `forget`, which move no robot | all teams in a challenge play by the same rule; what moves a robot is the team's |
 | Sensor conditions | a sensor condition waits for a robot `state` newer than the last result before it compares | a reading from before the last motion is never used |
 | Storage of by-hand work | by-hand calls and runs of team tools are stored under a `runs` row of kind `manual` of the pair; no tokens, no cost | the protocol of a task stays in one place |
 | Tests in the browser | browser end-to-end tests (Playwright, `web:e2e`) run in CI next to `sim:e2e` | pages are checked the way teams use them |
@@ -113,6 +113,6 @@ agent with the prompt. How it works: `architecture.md` and, from the interpreter
 
 | Topic | Decision | Why |
 | --- | --- | --- |
-| Long-term docs | `architecture.md`, `decisions.md`, `protocol.md`, `tools.md`, `events.md` describe the current state; a PR that changes behaviour updates them | docs stay true without reading history |
+| Long-term docs | `architecture.md`, `decisions.md`, `protocol.md`, `tools.md`, `events.md`, `programs.md` describe the current state; a PR that changes behaviour updates them | docs stay true without reading history |
 | Protocol | `protocol.md` is the source of truth for MQTT; changing a message changes `docs/examples/protocol/*` too | server, robot and simulator test against the same examples |
 | Field | `field.md` is the original field handoff (German), kept as written with the approved deviations on top | record of the field design |

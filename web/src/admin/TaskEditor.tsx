@@ -7,10 +7,17 @@ import { createMarkdownField } from '../editor'
 import { parseTaskFile, type TaskFile } from './taskfile'
 import { STATE_LABEL, type TaskDetail } from './tasks'
 
+export interface TaskFields {
+  title: string
+  body: string
+  starter: string
+  agent_tools: 'all' | 'team_tools'
+}
+
 export interface TaskEditorProps {
   task: TaskDetail
-  onSave: (t: { title: string; body: string; starter: string }) => Promise<boolean>
-  onPublish: (t: { title: string; body: string; starter: string }) => Promise<boolean>
+  onSave: (t: TaskFields) => Promise<boolean>
+  onPublish: (t: TaskFields) => Promise<boolean>
   onDuplicate: () => void
   onClose: () => void // close the dialog
   onCloseTask: () => void // close the task for every team
@@ -29,9 +36,11 @@ function MarkdownField(props: { value: string; label: string; placeholder: strin
 /** Fills a draft from a task file (docs/lab/aufgaben): upload or paste. */
 function Import({ onImport }: { onImport: (t: TaskFile) => void }) {
   const [text, setText] = useState('')
+  const [error, setError] = useState<string | null>(null)
   const apply = (raw: string) => {
     const t = parseTaskFile(raw)
-    if (!t.body) return
+    setError(t.error ?? null)
+    if (!t.body || t.error) return
     onImport(t)
     setText('')
   }
@@ -53,6 +62,7 @@ function Import({ onImport }: { onImport: (t: TaskFile) => void }) {
       <button class="btn btn-small" disabled={!text.trim()} onClick={() => apply(text)}>
         Übernehmen
       </button>
+      {error && <p class="error-text">{error}</p>}
     </details>
   )
 }
@@ -69,10 +79,12 @@ export default function TaskEditor(p: TaskEditorProps) {
   const [title, setTitle] = useState(p.task.title)
   const [body, setBody] = useState(p.task.body)
   const [starter, setStarter] = useState(p.task.starter)
+  const [agentTools, setAgentTools] = useState<'all' | 'team_tools'>(p.task.agent_tools ?? 'all')
   const [tab, setTab] = useState<'write' | 'preview'>(draft ? 'write' : 'preview')
   const [busy, setBusy] = useState(false)
   const [imported, setImported] = useState(0) // remounts the fields after an import
-  const dirty = title !== p.task.title || body !== p.task.body || starter !== p.task.starter
+  const dirty = title !== p.task.title || body !== p.task.body || starter !== p.task.starter || agentTools !== (p.task.agent_tools ?? 'all')
+  const fields = (): TaskFields => ({ title, body, starter, agent_tools: agentTools })
 
   useEffect(() => {
     dlg.current?.showModal()
@@ -133,6 +145,7 @@ export default function TaskEditor(p: TaskEditorProps) {
               if (t.title) setTitle(t.title)
               setBody(t.body)
               setStarter(t.starter)
+              setAgentTools(t.agentTools)
               setImported(imported + 1)
             }}
           />
@@ -140,6 +153,14 @@ export default function TaskEditor(p: TaskEditorProps) {
             <h3>Aufgabentext für das Team</h3>
             <p class="pool-sub">Markdown. Nur das Team sieht ihn, der Agent nie: Daraus einen Prompt zu machen, ist die Aufgabe des Teams.</p>
             <MarkdownField value={body} label="Aufgabentext" placeholder="Was soll das Team erreichen? Woran merkt es, dass es geschafft ist?" readOnly={false} onChange={setBody} />
+          </section>
+          <section>
+            <h3>Werkzeuge des Agenten</h3>
+            <label class="task-check">
+              <input type="checkbox" checked={agentTools === 'team_tools'} onChange={(e) => setAgentTools(e.currentTarget.checked ? 'team_tools' : 'all')} />
+              Agent darf nur eigene Werkzeuge des Teams nutzen
+            </label>
+            <p class="pool-sub">Für die Challenge: Der Agent hat dann nur die deployten Werkzeuge des Teams und read_sensors, say, tell_team, remember, forget und finish. Von Hand dürfen die Teams weiter alles.</p>
           </section>
           <section>
             <h3>Startprompt (freiwillig)</h3>
@@ -154,6 +175,7 @@ export default function TaskEditor(p: TaskEditorProps) {
             <h3>{title || 'Ohne Titel'}</h3>
             <Rendered text={body} />
           </div>
+          {agentTools === 'team_tools' && <p class="task-rule">Agent darf nur eigene Werkzeuge des Teams nutzen.</p>}
           {starter.trim() && (
             <>
               <p class="pool-sub">Startprompt:</p>
@@ -170,7 +192,7 @@ export default function TaskEditor(p: TaskEditorProps) {
               Löschen
             </button>
             <span class="spacer" />
-            <button class="btn btn-quiet" disabled={busy} onClick={() => run(() => p.onSave({ title, body, starter }))}>
+            <button class="btn btn-quiet" disabled={busy} onClick={() => run(() => p.onSave(fields()))}>
               Speichern
             </button>
             <button
@@ -178,7 +200,7 @@ export default function TaskEditor(p: TaskEditorProps) {
               disabled={busy || !title.trim() || !body.trim()}
               title={!body.trim() ? 'Schreibt zuerst einen Aufgabentext.' : undefined}
               onClick={() => {
-                if (confirm('Veröffentlichen? Danach lässt sich der Text nicht mehr ändern, nur duplizieren.')) void run(() => p.onPublish({ title, body, starter }))
+                if (confirm('Veröffentlichen? Danach lässt sich der Text nicht mehr ändern, nur duplizieren.')) void run(() => p.onPublish(fields()))
               }}
             >
               Veröffentlichen

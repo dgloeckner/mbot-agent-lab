@@ -1,5 +1,7 @@
 package tools
 
+import "encoding/json"
+
 // Info describes a tool for people: the team page lists it and offers it as
 // autocompletion in the prompt editor. Summaries are German (student-facing).
 // The model-facing descriptions and JSON schemas live in registry.go.
@@ -9,31 +11,36 @@ type Info struct {
 	Params  string `json:"params"`
 	Summary string `json:"summary"`
 	Ready   bool   `json:"ready"` // false: planned, not offered to agents yet
+
+	// Manual: a person can run it in the console; Schema are its arguments,
+	// the same JSON schema the model sees. Set per team by CatalogFor.
+	Manual bool            `json:"manual"`
+	Schema json.RawMessage `json:"schema,omitempty"`
 }
 
 // Catalog mirrors docs/tools.md.
 var Catalog = []Info{
-	{"drive", "Bewegen", "cm, speed?", "Fährt eine Strecke geradeaus, negativ heißt rückwärts.", true},
-	{"turn", "Bewegen", "degrees", "Dreht auf der Stelle, positiv ist rechts.", true},
-	{"drive_arc", "Bewegen", "radius_cm, degrees, stop_on_color?, speed?", "Fährt eine Kurve oder einen Kreis, positiv ist rechts, auf Wunsch bis zu einer Farbe.", true},
-	{"drive_until", "Bewegen", "max_cm, stop_below_cm?, stop_on_color?", "Fährt, bis eine Wand nah ist, eine Farbe kommt oder die Strecke erreicht ist.", true},
-	{"turn_until_clear", "Bewegen", "direction, min_cm?, max_deg?", "Dreht sich, bis vorne genug Platz ist.", true},
-	{"follow_line_until", "Bewegen", "max_cm, stop_on_color?, stop_at_crossing?", "Folgt einer Linie bis zu einer Farbe, einer Kreuzung oder ihrem Ende.", true},
-	{"retrace_path", "Bewegen", "", "Fährt den bisherigen Weg zurück zum Anfang.", true},
-	{"stop", "Bewegen", "", "Hält sofort an.", true},
-	{"read_sensors", "Wahrnehmen", "", "Liest Abstand, Bodenfarbe, Linie, Richtung und Akku.", true},
-	{"scan", "Wahrnehmen", "from_deg?, to_deg?, step_deg?, face?", "Dreht sich und misst rundum, dann schaut er in die freieste Richtung.", true},
-	{"wait_for", "Wahrnehmen", "event, timeout_s", "Wartet auf ein Ereignis, etwa einen Knopfdruck.", true},
-	{"list_robots", "Wahrnehmen", "", "Zeigt eure Roboter mit Status und Akku.", true},
-	{"set_leds", "Ausdrücken", "color", "Schaltet die Lichter in einer Farbe.", true},
-	{"show_text", "Ausdrücken", "text", "Zeigt bis zu 60 Zeichen auf dem Display.", true},
-	{"play_sound", "Ausdrücken", "name", "Spielt einen Ton.", true},
-	{"play_melody", "Ausdrücken", "notes", "Spielt eine Melodie aus Tonhöhe und Dauer.", false},
-	{"gesture", "Ausdrücken", "kind: nod, shake, spin", "Nicken, Kopfschütteln oder Drehen.", false},
-	{"identify", "Ausdrücken", "", "Blinkt und piept, damit ihr euren Roboter findet.", true},
-	{"say", "Reden", "to, text, emotion?", "Sagt etwas zu einem anderen Agenten oder zu allen.", true},
-	{"tell_team", "Reden", "text", "Schreibt euch eine Nachricht.", true},
-	{"remember", "Merken", "text", "Legt eine Notiz an, die auch im nächsten Lauf bleibt.", true},
-	{"forget", "Merken", "note_id", "Löscht eine Notiz.", true},
-	{"finish", "Abschluss", "report", "Beendet den Lauf mit einem Bericht.", true},
+	{Name: "drive", Group: "Bewegen", Params: "cm, speed?", Summary: "Fährt eine Strecke geradeaus, negativ heißt rückwärts.", Ready: true},
+	{Name: "turn", Group: "Bewegen", Params: "degrees", Summary: "Dreht auf der Stelle, positiv ist rechts.", Ready: true},
+	{Name: "drive_arc", Group: "Bewegen", Params: "radius_cm, degrees, stop_on_color?, speed?", Summary: "Fährt eine Kurve oder einen Kreis, positiv ist rechts, auf Wunsch bis zu einer Farbe.", Ready: true},
+	{Name: "drive_until", Group: "Bewegen", Params: "max_cm, stop_below_cm?, stop_on_color?", Summary: "Fährt, bis eine Wand nah ist, eine Farbe kommt oder die Strecke erreicht ist.", Ready: true},
+	{Name: "turn_until_clear", Group: "Bewegen", Params: "direction, min_cm?, max_deg?", Summary: "Dreht sich, bis vorne genug Platz ist.", Ready: true},
+	{Name: "follow_line_until", Group: "Bewegen", Params: "max_cm, stop_on_color?, stop_at_crossing?", Summary: "Folgt einer Linie bis zu einer Farbe, einer Kreuzung oder ihrem Ende.", Ready: true},
+	{Name: "retrace_path", Group: "Bewegen", Params: "", Summary: "Fährt den bisherigen Weg zurück zum Anfang.", Ready: true},
+	{Name: "stop", Group: "Bewegen", Params: "", Summary: "Hält sofort an.", Ready: true},
+	{Name: "read_sensors", Group: "Wahrnehmen", Params: "", Summary: "Liest Abstand, Bodenfarbe, Linie, Richtung und Akku.", Ready: true},
+	{Name: "scan", Group: "Wahrnehmen", Params: "from_deg?, to_deg?, step_deg?, face?", Summary: "Dreht sich und misst rundum, dann schaut er in die freieste Richtung.", Ready: true},
+	{Name: "wait_for", Group: "Wahrnehmen", Params: "event, timeout_s", Summary: "Wartet auf ein Ereignis, etwa einen Knopfdruck.", Ready: true},
+	{Name: "list_robots", Group: "Wahrnehmen", Params: "", Summary: "Zeigt eure Roboter mit Status und Akku.", Ready: true},
+	{Name: "set_leds", Group: "Ausdrücken", Params: "color", Summary: "Schaltet die Lichter in einer Farbe.", Ready: true},
+	{Name: "show_text", Group: "Ausdrücken", Params: "text", Summary: "Zeigt bis zu 60 Zeichen auf dem Display.", Ready: true},
+	{Name: "play_sound", Group: "Ausdrücken", Params: "name", Summary: "Spielt einen Ton.", Ready: true},
+	{Name: "play_melody", Group: "Ausdrücken", Params: "notes", Summary: "Spielt eine Melodie aus Tonhöhe und Dauer.", Ready: false},
+	{Name: "gesture", Group: "Ausdrücken", Params: "kind: nod, shake, spin", Summary: "Nicken, Kopfschütteln oder Drehen.", Ready: false},
+	{Name: "identify", Group: "Ausdrücken", Params: "", Summary: "Blinkt und piept, damit ihr euren Roboter findet.", Ready: true},
+	{Name: "say", Group: "Reden", Params: "to, text, emotion?", Summary: "Sagt etwas zu einem anderen Agenten oder zu allen.", Ready: true},
+	{Name: "tell_team", Group: "Reden", Params: "text", Summary: "Schreibt euch eine Nachricht.", Ready: true},
+	{Name: "remember", Group: "Merken", Params: "text", Summary: "Legt eine Notiz an, die auch im nächsten Lauf bleibt.", Ready: true},
+	{Name: "forget", Group: "Merken", Params: "note_id", Summary: "Löscht eine Notiz.", Ready: true},
+	{Name: "finish", Group: "Abschluss", Params: "report", Summary: "Beendet den Lauf mit einem Bericht.", Ready: true},
 }

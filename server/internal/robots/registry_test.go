@@ -148,3 +148,25 @@ func TestCommandIDsDifferAcrossRestarts(t *testing.T) {
 		t.Errorf("two server starts produced the same first command ID %q", a)
 	}
 }
+
+func TestFreshStateWaitsForANewerReading(t *testing.T) {
+	bus := &fakeBus{}
+	reg := newOnline(t, bus)
+	ctx := context.Background()
+	bus.deliver("lab/mbot-1/state", `{"distance_cm":50,"seq":1}`)
+	after := time.Now()
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		bus.deliver("lab/mbot-1/state", `{"distance_cm":12,"seq":2}`)
+	}()
+	rb, err := reg.FreshState(ctx, "mbot-1", after, time.Second)
+	if err != nil || rb.State.DistanceCM != 12 {
+		t.Fatalf("fresh state = %+v, %v", rb.State, err)
+	}
+	if _, err := reg.FreshState(ctx, "mbot-1", time.Now(), 60*time.Millisecond); !errors.Is(err, ErrNoFreshState) {
+		t.Errorf("no newer state: %v", err)
+	}
+	if _, err := reg.FreshState(ctx, "mbot-9", after, time.Second); !errors.Is(err, ErrUnknownRobot) {
+		t.Errorf("unknown robot: %v", err)
+	}
+}

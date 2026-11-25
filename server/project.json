@@ -29,7 +29,8 @@
         "default",
         "protocol",
         "{workspaceRoot}/configs/*.example.yaml",
-        "{workspaceRoot}/deploy/local/*.yaml"
+        "{workspaceRoot}/deploy/local/*.yaml",
+        "{workspaceRoot}/docs/examples/programs/**/*"
       ],
       "options": {
         "cwd": "server",

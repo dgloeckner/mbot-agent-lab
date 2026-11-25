@@ -16,34 +16,49 @@ Not offered to agents yet, because the robot does not implement them: `play_melo
 `gesture`. The team page lists them as "kommt bald". `set_leds`
 takes a color only, no pattern.
 
-| Group | Tool | Parameters | Result |
-| --- | --- | --- | --- |
-| Move | `drive` | `cm`, `speed?` | `driven_cm`, `reason`, `floor`, `min_distance_cm` |
-| Move | `turn` | `degrees`, positive is right | `turned_deg`, `reason`, `distance_cm`, `floor` |
-| Move | `drive_arc` | `radius_cm`, `degrees` (positive is right), `stop_on_color?`, `speed?` | `turned_deg`, `driven_cm`, `reason` (`done`, `color`), `distance_cm`, `color`, `floor`, `min_distance_cm` |
-| Move | `drive_until` | `max_cm`, `stop_below_cm?`, `stop_on_color?` | `driven_cm`, `reason`, `distance_cm`, `color`, `floor`, `min_distance_cm` |
-| Move | `turn_until_clear` | `direction`, `min_cm?`, `min_deg?`, `max_deg?` | `turned_deg`, `reason` (`clear`, `max_deg`), `distance_cm`, `floor` |
-| Move | `follow_line_until` | `max_cm`, `stop_on_color?`, `stop_at_crossing?` | `driven_cm`, `reason` (`color`, `crossing`, `line_lost`, `max_cm`), `color`, `floor` |
-| Move | `retrace_path` | none | `segments`, `driven_cm`, `reason` (`done`, `empty`, `obstacle`, `stopped`, `timeout`), `distance_cm` |
-| Move | `stop` | none | `ok` |
-| Sense | `read_sensors` | none | `distance_cm`, `floor` (current pattern), `color`, `line`, `yaw`, `battery`, `tilted` |
-| Sense | `scan` | `from_deg?`, `to_deg?`, `step_deg?`, `face?` | `profile` `[[deg, cm], …]`, `best_deg`, `best_cm`, `turned_deg` |
-| Sense | `wait_for` | `event`, `timeout_s` | `event`, `data` or `reason:"timeout"` |
-| Sense | `list_robots` | none | name, online, battery, color per robot |
-| Express | `set_leds` | `color` or `pattern` | `ok` |
-| Express | `show_text` | `text`, at most 60 characters | `ok` |
-| Express | `play_sound` | `name` | `ok` |
-| Express | `play_melody` | `notes` as a list of pitch and duration | `ok` |
-| Express | `gesture` | `kind`: `nod`, `shake`, `spin` | `ok` |
-| Express | `identify` | none | `ok` |
-| Talk | `say` | `to`, `text` up to 60 characters, `emotion?` | `delivered` |
-| Talk | `tell_team` | `text` | `ok` |
-| Remember | `remember` | `text` | `note_id` |
-| Remember | `forget` | `note_id` | `ok` |
-| Finish | `finish` | `report` | ends the run |
+| Group | Tool | Parameters | Result | By hand | Normal ends |
+| --- | --- | --- | --- | --- | --- |
+| Move | `drive` | `cm`, `speed?` | `driven_cm`, `reason`, `floor`, `min_distance_cm` | yes | `done` |
+| Move | `turn` | `degrees`, positive is right | `turned_deg`, `reason`, `distance_cm`, `floor` | yes | `done` |
+| Move | `drive_arc` | `radius_cm`, `degrees` (positive is right), `stop_on_color?`, `speed?` | `turned_deg`, `driven_cm`, `reason` (`done`, `color`), `distance_cm`, `color`, `floor`, `min_distance_cm` | yes | `done`, `color` |
+| Move | `drive_until` | `max_cm`, `stop_below_cm?`, `stop_on_color?` | `driven_cm`, `reason`, `distance_cm`, `color`, `floor`, `min_distance_cm` | yes | `wall`, `color`, `obstacle`, `max_cm` |
+| Move | `turn_until_clear` | `direction`, `min_cm?`, `min_deg?`, `max_deg?` | `turned_deg`, `reason` (`clear`, `max_deg`), `distance_cm`, `floor` | yes | `clear`, `max_deg` |
+| Move | `follow_line_until` | `max_cm`, `stop_on_color?`, `stop_at_crossing?` | `driven_cm`, `reason` (`color`, `crossing`, `line_lost`, `max_cm`), `color`, `floor` | yes | `color`, `crossing`, `max_cm` |
+| Move | `retrace_path` | none | `segments`, `driven_cm`, `reason` (`done`, `empty`, `obstacle`, `stopped`, `timeout`), `distance_cm` | yes | `done`, `empty` |
+| Move | `stop` | none | `ok` | no | `done` |
+| Sense | `read_sensors` | none | `distance_cm`, `floor` (current pattern), `color`, `line`, `yaw`, `battery`, `tilted` | yes | `done` |
+| Sense | `scan` | `from_deg?`, `to_deg?`, `step_deg?`, `face?` | `profile` `[[deg, cm], …]`, `best_deg`, `best_cm`, `turned_deg` | yes | `done` |
+| Sense | `wait_for` | `event`, `timeout_s` | `event`, `data` or `reason:"timeout"` | yes | the event arrived, `timeout` |
+| Sense | `list_robots` | none | name, online, battery, color per robot | no | `done` |
+| Express | `set_leds` | `color` or `pattern` | `ok` | yes | `done` |
+| Express | `show_text` | `text`, at most 60 characters | `ok` | yes | `done` |
+| Express | `play_sound` | `name` | `ok` | yes | `done` |
+| Express | `play_melody` | `notes` as a list of pitch and duration | `ok` | — | — |
+| Express | `gesture` | `kind`: `nod`, `shake`, `spin` | `ok` | — | — |
+| Express | `identify` | none | `ok` | yes | `done` |
+| Talk | `say` | `to`, `text` up to 60 characters, `emotion?` | `delivered` | no | `done` |
+| Talk | `tell_team` | `text` | `ok` | no | `done` |
+| Remember | `remember` | `text` | `note_id` | no | `done` |
+| Remember | `forget` | `note_id` | `ok` | no | `done` |
+| Finish | `finish` | `report` | ends the run | no | `done` |
 
 ## Rules
 
+- **By hand and normal ends:** the registry flags which tools a person (the console) or a team
+  tool may run without an agent ("by hand"), and which stop reasons count as a normal end. A
+  result without a reason ends normally when it is ok; every other reason is unexpected (for
+  example `drive` with `obstacle`, `follow_line_until` with `line_lost`, any tool with `offline`).
+  `say`, `finish`, `remember` and `forget` need the agent runtime; `tell_team`, `list_robots` and
+  `stop` are pointless by hand (the team sits there, the robots are on the page, stop is a
+  button). **A new tool is agent-only until it is flagged.** Console, blocks and interpreter read
+  both from the registry and keep no tool list of their own. `Registry.CallManual` refuses an
+  agent-only tool with `ok: false` and a German message. The team page gets, per tool, whether it
+  is by hand and its JSON schema (`GET api/session`, `tools[]`), the same schema the model sees.
+  A team runs a by-hand tool with `POST /t/{token}/tools/{name}` while no run is active
+  (`architecture.md`, "By hand").
+- **Arguments are checked** against the tool's schema before a call: type, enum and range of
+  every argument given; unknown keys are ignored, long texts are clamped. A mistake comes back as
+  `ok: false` with a German message naming the argument.
 - **Structured results with a reason:** every motion tool returns `reason`. The agent's ability
   to decide depends on it.
 - **Floor trace instead of a scan tool:** every motion tool except `scan` returns `floor`, what
@@ -86,6 +101,69 @@ takes a color only, no pattern.
   react to one robot while another still moves.
 - **Deliberately no tool for:** Wi-Fi, vendor cloud services, reboot, setting the name, raw motor
   power.
+
+## Team tools as agent tools
+
+A deploy freezes the prompt and every team tool of the (team, task) as one version
+(`programs.md`, "Versions"). The agent gets each team tool of the newest version that is valid
+and has a description as a tool of its own:
+
+- **Name and description** are the team's. The server appends one fixed sentence: "Dies ist ein
+  Werkzeug, das das Team selbst gebaut hat. Es läuft ohne Rückfragen durch und meldet am Ende,
+  ob es fertig wurde oder wo es abbrach." No parameters, except `robot` (required enum) when the
+  team has several robots.
+- **Call:** the team tool runs inside the agent's tool call; the agent waits, messages collect in
+  its inbox meanwhile. Its steps count against the run's time limit, not as model steps or model
+  calls. A tool changed after the deploy applies from the next deploy.
+- **Result for the agent:** `{ok, end, steps, runtime_s, at, last, robot}`, plus `value` from
+  `gib zurück` and `error` (a German sentence) when it did not end `done`. `last` is the last
+  built-in tool's result only; earlier steps, and their floor traces, stay out of the agent's
+  context.
+- **Protocol:** the team sees every step in the log (source agent, `data.program`); the steps are
+  stored as tool calls of the run that name the team tool (`tool_calls.program`), before the
+  call's own row.
+- **Conversation mode** lists the team tools as text, like the other tools.
+- **Deploy warning:** if the prompt names something in code style (`` `name` ``) that is neither a
+  team tool of the version, nor a built-in tool, nor one of the team's robots, the deploy answers
+  a warning and still deploys.
+
+## Tool set of a task
+
+A task says which tools the agent gets (`agent_tools`, set on the draft, fixed when published):
+
+- `all` (default): every built-in tool and the team tools of the deployed version.
+- `team_tools`: the team's deployed own tools plus `read_sensors`, `say`, `finish`, `tell_team`,
+  `remember` and `forget`. These six move no robot, so the comparison of how teams cut their tools
+  (stage 5) still measures the team tools: everything that moves a robot is the team's.
+
+A call of a tool that is not on the list answers like any unknown tool ("Das Werkzeug … gibt es
+nicht. Verfügbar: …"), so the agent can correct itself; the server logs `tool not offered`.
+Conversation mode lists the same tools. The console and "Ausführen" stay available outside runs;
+in the challenge the lab lead counts them as interventions.
+
+## Block texts
+
+Every by-hand tool has one line in `server/internal/tools/blocks.go`: the German sentence of its
+block in the team tool editor, with its fields in order, their defaults and units. Ranges and
+options come from the tool's schema. A new by-hand tool needs one line there and then appears in
+the editor (`docs/programs.md`, "Blocks"); a test fails for a by-hand tool without one.
+
+| Tool | Group | Block text | Fields (default) |
+| --- | --- | --- | --- |
+| `drive` | Fahren | fahre %1 cm | `cm` (20) |
+| `turn` | Fahren | drehe %1 Grad nach %2 | `degrees` (90), rechts/links sets the sign |
+| `drive_arc` | Fahren | fahre eine Kurve nach %1 mit Radius %2 cm, %3 Grad weit | rechts/links, `radius_cm` (30), `degrees` (90) |
+| `drive_until` | Fahren | fahre geradeaus, höchstens %1 cm, bis eine Wand näher als %2 cm ist oder der Boden %3 ist | `max_cm` (100), `stop_below_cm` (15), `stop_on_color` (egal) |
+| `turn_until_clear` | Fahren | drehe nach %1, bis vorne %2 cm frei sind | `direction` (rechts), `min_cm` (40) |
+| `follow_line_until` | Fahren | folge der Linie bis %1, höchstens %2 cm | `stop_on_color` (zur Kreuzung), `max_cm` (100) |
+| `retrace_path` | Fahren | fahre den Weg zurück zum Anfang | — |
+| `scan` | Sensoren | schau dich um von %1 bis %2 Grad und schau dann %3 | `from_deg` (-90), `to_deg` (90), `face` (in die freieste Richtung) |
+| `read_sensors` | Sensoren | lies die Sensoren | — |
+| `wait_for` | Sensoren | warte auf %1, höchstens %2 Sekunden | `event` (Knopf A), `timeout_s` (10) |
+| `set_leds` | Licht und Anzeige | Licht %1 | `color` (grün) |
+| `show_text` | Licht und Anzeige | zeige %1 | `text` (Hallo) |
+| `play_sound` | Licht und Anzeige | spiele den Ton %1 | `name` (hello) |
+| `identify` | Licht und Anzeige | blinke und piepe | — |
 
 ## Mapping to the protocol
 

@@ -94,6 +94,9 @@ function compactResult(result: unknown): string {
   return parts.join(', ') || 'ok'
 }
 
+/** The outcome of a tool result in words, as the protocol shows it. */
+export const resultText = (result: Record<string, any>) => compactResult(result)
+
 /** Tool call for the log: name, arguments and outcome. */
 export function describeTool(d: Record<string, any>): { call: string; outcome: string; failed: boolean } {
   const args = compactArgs(d.args)
@@ -155,9 +158,30 @@ export function describe(e: LogEntry): string {
       const t = describeTool(d)
       return `${t.call} → ${t.outcome}`
     }
+    case 'program_start':
+      return `Werkzeug ${d.name} gestartet${d.step ? ' im Einzelschritt' : ''}${d.robot ? ` mit ${d.robot}` : ''}`
+    case 'program_end':
+      return programEnd(String(d.name), d.result ?? {})
     default:
       return e.text ?? e.kind
   }
+}
+
+const PROGRAM_END: Record<string, string> = {
+  done: 'fertig',
+  aborted: 'abgebrochen',
+  limit: 'Grenze erreicht',
+  stopped: 'gestoppt',
+}
+
+/** "Werkzeug quadrat: fertig nach 8 Schritten, 15,9 s" and, if it did not end well, where and why. */
+export function programEnd(name: string, r: Record<string, any>): string {
+  const steps = r.steps === 1 ? '1 Schritt' : `${r.steps ?? 0} Schritten`
+  const secs = typeof r.runtime_s === 'number' ? `, ${r.runtime_s.toLocaleString('de-DE')} s` : ''
+  let s = `Werkzeug ${name}: ${PROGRAM_END[r.end] ?? r.end} nach ${steps}${secs}`
+  if (r.end !== 'done' && r.error) s += `. ${r.error}${r.at ? ` (bei „${r.at}“)` : ''}`
+  if (r.value !== undefined && r.value !== null) s += `, gibt zurück: ${r.value}`
+  return s
 }
 
 /** Which filter a log entry belongs to. */

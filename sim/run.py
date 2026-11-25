@@ -8,6 +8,7 @@ Passwords come from MBOT<n>_PASSWORD, defaulting to "dev" (see deploy/local).
 
 Example:
     python3 sim/run.py --robots 2 --world sim/worlds/labyrinth.json --trace 1
+    python3 sim/run.py --robots 1 --world sim/worlds/labyrinth_gestoert.json --delay-ms 150
 """
 
 import argparse
@@ -33,6 +34,7 @@ def main(argv=None):
     p.add_argument("--trace", type=float, default=0)
     p.add_argument("--no-noise", action="store_true", help="ideal sensors (default: realistic noise)")
     p.add_argument("--seed", type=int, default=None, help="seed the sensor noise; robot n gets seed+n-1")
+    p.add_argument("--delay-ms", type=int, default=0, help="network delay per packet and direction, like the guest Wi-Fi (default 0)")
     a = p.parse_args(argv)
 
     build = HERE / ".build" / "main.py"
@@ -50,6 +52,8 @@ def main(argv=None):
                "--bundle", str(build), "--trace", str(a.trace)] + (["--no-noise"] if a.no_noise else [])
         if a.seed is not None:
             cmd += ["--seed", str(a.seed + i - 1)]
+        if a.delay_ms > 0:
+            cmd += ["--delay-ms", str(a.delay_ms)]
         procs.append(subprocess.Popen(cmd))
         print("sim: started %s" % robot_id, file=sys.stderr)
 

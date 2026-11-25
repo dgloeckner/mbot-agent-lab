@@ -74,10 +74,10 @@ export function markdownSupport(): LanguageSupport {
   return new LanguageSupport(markdownLanguage)
 }
 
-function toolCompletion(tools: ToolInfo[]) {
+function toolCompletion(tools: () => ToolInfo[]) {
   return (ctx: CompletionContext) => {
     const line = ctx.state.doc.lineAt(ctx.pos)
-    const match = matchTools(line.text.slice(0, ctx.pos - line.from), tools, ctx.explicit)
+    const match = matchTools(line.text.slice(0, ctx.pos - line.from), tools(), ctx.explicit)
     if (!match) return null
     return {
       from: ctx.pos - match.word.length,
@@ -103,7 +103,8 @@ function acceptFirstCompletion(view: EditorView): boolean {
 export interface EditorOptions {
   parent: HTMLElement
   doc: string
-  tools: ToolInfo[]
+  /** The tools to complete: built-in ones and the team's own, read on every completion. */
+  tools: () => ToolInfo[]
   onChange: (text: string) => void
   onSave: () => void
   onDeploy: () => void

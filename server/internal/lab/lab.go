@@ -22,6 +22,7 @@ import (
 
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/config"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/live"
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/programs"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/robots"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/store"
 )
@@ -70,6 +71,8 @@ type Service struct {
 	Hub    *live.Hub
 	Config *config.Config
 	Log    *slog.Logger
+	// Tools converts and validates team tools (the tool registry).
+	Tools programs.BlockCatalog
 
 	// OnTeamEvent, if set, also passes notices about a team's robots and name
 	// to the team's agent (it decides itself whether that wakes it).
