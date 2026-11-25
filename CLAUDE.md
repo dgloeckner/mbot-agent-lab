@@ -10,8 +10,8 @@ with approved deviations on top).
 - Decisions in `docs/decisions.md` are binding. Propose deviations first; do not implement them
   silently. An approved deviation goes into `docs/decisions.md`, not into this file.
 - Long-term docs (`docs/architecture.md`, `docs/decisions.md`, `docs/protocol.md`,
-  `docs/tools.md`, `docs/events.md`) describe the current state, in English, without history. A
-  PR that changes behaviour updates them in the same PR.
+  `docs/tools.md`, `docs/events.md`, `docs/programs.md`) describe the current state, in English,
+  without history. A PR that changes behaviour updates them in the same PR.
 - Grid freedom: robot script, server and web UI know nothing about the line grid (no junction
   coordinates, pitch or color code). Tools report floor letters and never interpret them. Field
   geometry lives only in `sim/grid.py`, the world files and `sim/tests`; reading rules live in
@@ -32,7 +32,8 @@ with approved deviations on top).
   heartbeat, cmd/result, reassignment), store (SQLite via modernc, migrations in
   `store/migrations`), lab (joining, teams, assignments, robot names, lab code: the rules live
   here, web handlers stay thin), live (per-team log hub for SSE), web.
-  agent (one actor per team: inbox, wake rules, context, budgets, runs), tools (registry with
+  agent (one actor per team: inbox, wake rules, context, budgets, runs, by-hand calls), programs
+  (team tools: tree, validation, interpreter; knows no tool names), tools (registry with
   model-facing German descriptions and JSON schemas), llm (OpenAI-compatible client, Claude via
   the official Anthropic Go SDK, retries, fallback, cost; `Fake` scripted test model), memory
   (history trimming, notes formatting). Messages stay in the OpenAI format; a provider keeps its
@@ -76,9 +77,13 @@ the user chose Nx over Make). Run `npm install` once.
 - `npx nx run server:dev`: server with `deploy/local/lab.yaml` (HTTP 127.0.0.1:8080, MQTT :1883,
   dev secrets set in `server/project.json`). Real API keys (`ANTHROPIC_API_KEY`, ...) live in
   git-ignored `server/.env.local`, which Nx loads; never read or print its values.
-- `npx nx run sim:run --robots=2 --world=sim/worlds/labyrinth.json`: simulated robots.
+- `npx nx run sim:run --robots=2 --world=sim/worlds/labyrinth.json`: simulated robots; `--delay-ms=150`
+  delays every packet like the guest Wi-Fi. Challenge worlds: `labyrinth_rechts`, `labyrinth_gestoert`.
 - `npx nx run sim:e2e`: end-to-end smoke test (`sim/e2e/`): builds and starts `labserver` with the
   scripted model, one seeded sim robot, drives join/assign/prompt/start over HTTP. Runs in CI.
+- `npx nx run web:e2e`: browser end-to-end tests (`web/e2e/`, Playwright, Chromium): the same lab as
+  `sim:e2e` (built `labserver`, scripted model, simulated robots), driven through the team page.
+  Screenshots go to the git-ignored `web/e2e/screenshots/`. Runs in CI.
 - `npx nx run robot:bundle [--config=robot/config.py]`: build `robot/dist/main.py`.
 - `npx nx run sim:grid`: regenerate the line field world and build plan after changing `sim/grid.py`.
 - `go test -race ./...` in `server/` before touching agent, robots or tools: they are concurrent.

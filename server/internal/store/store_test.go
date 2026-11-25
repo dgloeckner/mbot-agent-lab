@@ -18,7 +18,7 @@ func TestOpenMigratesAndIsIdempotent(t *testing.T) {
 			t.Fatal(err)
 		}
 		v, err := s.Version(ctx)
-		if err != nil || v != 3 {
+		if err != nil || v != 7 {
 			t.Fatalf("version = %d, %v", v, err)
 		}
 		if _, err := s.DB.ExecContext(ctx, `INSERT OR REPLACE INTO assignments VALUES ('mbot-1','team:rot','ich','2026-11-22T00:00:00Z')`); err != nil {

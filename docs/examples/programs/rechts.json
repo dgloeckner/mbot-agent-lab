@@ -1,0 +1,39 @@
+{
+  "blockly": {
+    "blocks": {
+      "languageVersion": 0,
+      "blocks": [
+        {
+          "type": "program_start",
+          "id": "r_start",
+          "x": 20,
+          "y": 20,
+          "next": {
+            "block": {
+              "type": "tool_turn",
+              "id": "r_turn",
+              "fields": {
+                "degrees": 90,
+                "dir": "right"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "program": {
+    "name": "rechts",
+    "description": "Dreht sich auf der Stelle um 90 Grad nach rechts.",
+    "body": [
+      {
+        "id": "r_turn",
+        "type": "call",
+        "tool": "turn",
+        "args": {
+          "degrees": 90
+        }
+      }
+    ]
+  }
+}

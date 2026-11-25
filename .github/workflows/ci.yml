@@ -15,7 +15,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     env:
       NX_DAEMON: "false"
       NX_NO_CLOUD: "true"
@@ -44,3 +44,17 @@ jobs:
 
       - name: End-to-end smoke test (server + simulated robot + scripted model)
         run: npx nx run sim:e2e --outputStyle=static
+
+      - name: Browser for the page tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser end-to-end tests (team page in Chromium, same lab as sim:e2e)
+        run: npx nx run web:e2e --outputStyle=static
+
+      - name: Screenshots of the page tests
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-e2e-screenshots
+          path: web/e2e/screenshots/
+          if-no-files-found: ignore

@@ -41,6 +41,13 @@ type testLab struct {
 
 func newTestServer(t *testing.T) *testLab {
 	t.Helper()
+	return newTestServerBus(t, nopBus{})
+}
+
+// newTestServerBus is newTestServer with robots on the given bus. A
+// *robotBus answers commands: the robots are online.
+func newTestServerBus(t *testing.T, bus robots.Bus) *testLab {
+	t.Helper()
 	ctx := context.Background()
 	cfg := &config.Config{
 		Server: config.Server{AdminPassword: "pw", LabCode: "TEST"},
@@ -56,7 +63,10 @@ func newTestServer(t *testing.T) *testLab {
 	}
 	t.Cleanup(func() { st.Close() })
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	reg := robots.New(nopBus{}, []robots.Spec{{ID: "mbot-1", Color: "red"}, {ID: "mbot-2", Color: "blue"}, {ID: "mbot-3", Color: "green"}}, log)
+	reg := robots.New(bus, []robots.Spec{{ID: "mbot-1", Color: "red"}, {ID: "mbot-2", Color: "blue"}, {ID: "mbot-3", Color: "green"}}, log)
+	if rb, ok := bus.(*robotBus); ok {
+		rb.online(t, reg)
+	}
 	hub := live.NewHub()
 	svc := &lab.Service{Store: st, Robots: reg, Hub: hub, Config: cfg, Log: log}
 	if err := svc.Start(ctx); err != nil {
@@ -77,8 +87,10 @@ func newTestServer(t *testing.T) *testLab {
 	}
 	models := llm.New(cfg.LLM, log)
 	budgets := config.Budgets{MaxStepsPerWakeup: 3, MaxRunMinutes: 5, MaxHistoryMessages: 40, MaxAgentMessagesPerMinute: 5, MaxConversationMessagesPerMinute: 3}
-	agents := agent.NewManager(agent.Deps{Store: st, Robots: reg, Hub: hub, LLM: models, Tools: tools.NewRegistry(reg, st, hub, budgets), Budgets: budgets, Log: log,
-		TeamProvider: svc.TeamProvider, Conversations: svc.ConversationEnabled})
+	toolReg := tools.NewRegistry(reg, st, hub, budgets)
+	svc.Tools = toolReg
+	agents := agent.NewManager(agent.Deps{Store: st, Robots: reg, Hub: hub, LLM: models, Tools: toolReg, Budgets: budgets, Log: log,
+		TeamProvider: svc.TeamProvider, Conversations: svc.ConversationEnabled, LoadProgram: svc.LoadProgram})
 	runCtx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
 	go agents.Run(runCtx)
@@ -344,5 +356,38 @@ func activateTestTask(t *testing.T, st *store.Store, team string) {
 		if err := step(ctx, tt); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func TestSessionToolsByHand(t *testing.T) {
+	srv := newTestServer(t)
+	tools := func() map[string]map[string]any {
+		_, sess := do(t, srv, "GET", "/t/tok-rot/api/session", "")
+		out := map[string]map[string]any{}
+		for _, x := range sess["tools"].([]any) {
+			info := x.(map[string]any)
+			out[info["name"].(string)] = info
+		}
+		return out
+	}
+	got := tools()
+	if got["drive"]["manual"] != true || got["drive"]["schema"] == nil {
+		t.Errorf("drive = %v", got["drive"])
+	}
+	if got["finish"]["manual"] != false || got["finish"]["schema"] != nil {
+		t.Errorf("finish = %v", got["finish"])
+	}
+	props := got["drive"]["schema"].(map[string]any)["properties"].(map[string]any)
+	if _, ok := props["robot"]; ok {
+		t.Errorf("one robot needs no robot parameter: %v", props)
+	}
+
+	if err := srv.lab.AssignRobot(context.Background(), "mbot-3", "rot"); err != nil {
+		t.Fatal(err)
+	}
+	props = tools()["drive"]["schema"].(map[string]any)["properties"].(map[string]any)
+	robot, ok := props["robot"].(map[string]any)
+	if !ok || len(robot["enum"].([]any)) != 2 {
+		t.Errorf("two robots: robot = %v", props["robot"])
 	}
 }

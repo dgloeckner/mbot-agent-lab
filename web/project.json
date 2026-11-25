@@ -38,8 +38,24 @@
       "inputs": [
         "default",
         "protocol",
-        "{workspaceRoot}/docs/lab/aufgaben/**/*"
+        "{workspaceRoot}/docs/lab/aufgaben/**/*",
+        "{workspaceRoot}/docs/examples/programs/**/*"
       ]
+    },
+    "e2e": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "dependsOn": [
+        {
+          "projects": [
+            "server"
+          ],
+          "target": "build"
+        }
+      ],
+      "options": {
+        "command": "playwright test --config web/playwright.config.ts --trace off"
+      }
     }
   }
 }

@@ -32,6 +32,53 @@ export interface PromptVersion {
   text?: string
   created_at: string
   chars: number
+  /** Team tools that are new, changed or removed in this version (the version list only). */
+  tools?: ToolChange[]
+}
+
+export interface ToolChange {
+  id: string
+  name: string
+  change: 'neu' | 'geändert' | 'entfernt'
+}
+
+/** One difference of a team tool between two states (server: programs.Change). */
+export interface BlockChange {
+  kind: 'value' | 'new' | 'removed' | 'moved' | 'name' | 'description'
+  block?: string
+  field?: string
+  old?: unknown
+  new?: unknown
+}
+
+/** Team tools that differ between two states; version 0 is the working state. */
+export interface ToolChanges {
+  left: number
+  right: number
+  tools: ToolChange[]
+}
+
+/** A team tool as stored in a version or the working state. */
+export interface ToolState {
+  id: string
+  name: string
+  description: string
+  blockly: unknown
+}
+
+/** A team tool in two states, the older on the left; a side's tool is null where it did not exist. */
+export interface ToolDiff {
+  left: { version: number; tool: ToolState | null }
+  right: { version: number; tool: ToolState | null }
+  changes: BlockChange[]
+}
+
+/** A team tool of a deployed version and whether the agent has it. */
+export interface VersionTool {
+  id: string
+  name: string
+  agent: boolean
+  why?: string
 }
 
 export interface Note {
@@ -47,6 +94,22 @@ export interface ToolInfo {
   params: string
   summary: string
   ready: boolean
+  /** A person can run it by hand in the console. */
+  manual: boolean
+  /** JSON schema of the arguments, the one the model sees; only for by-hand tools. */
+  schema?: JSONSchema
+}
+
+/** The subset of JSON Schema the tool registry uses. */
+export interface JSONSchema {
+  type?: string
+  properties?: Record<string, JSONSchema>
+  required?: string[]
+  enum?: string[]
+  minimum?: number
+  maximum?: number
+  maxLength?: number
+  description?: string
 }
 
 export interface LogEntry {
@@ -119,6 +182,8 @@ export interface TeamTask {
   status: TeamTaskStatus
   assigned_at: string
   accepted_at?: string
+  /** all: the agent has every tool; team_tools: only the team's own and a few that move no robot. */
+  agent_tools?: 'all' | 'team_tools'
 }
 
 export type PromptChoice = 'starter' | 'empty' | 'copy'
@@ -137,5 +202,67 @@ export interface Session {
   versions: PromptVersion[]
   notes: Note[]
   tools: ToolInfo[]
+  /** The built-in tools the agent keeps in a task with agent_tools team_tools. */
+  team_only_tools?: string[]
   limits: { prompt_chars: number; message_chars: number; note_chars: number }
+}
+
+/** A problem of a team tool, at its block (empty: name or description). */
+export interface ProgramProblem {
+  block?: string
+  /** The input the problem is about, when it is not a block. */
+  field?: 'name' | 'description'
+  text: string
+}
+
+/** A team tool ("eigenes Werkzeug") in the list. */
+export interface ProgramInfo {
+  id: string
+  name: string
+  description: string
+  valid: boolean
+  problems: ProgramProblem[]
+  updated_at: string
+  /** Against the newest version: as deployed, changed since, or not deployed yet. */
+  deploy?: 'deployed' | 'changed' | 'new'
+  /** Whether the agent has the tool in the newest version, and if not, why. */
+  agent: boolean
+  why?: string
+}
+
+/** A team tool with its Blockly state. */
+export interface ProgramDetail extends ProgramInfo {
+  blockly: unknown
+}
+
+/** How a team tool ended (server: programs.Result). */
+export interface ProgramResult {
+  ok: boolean
+  end: 'done' | 'aborted' | 'limit' | 'stopped'
+  steps: number
+  runtime_s: number
+  at?: string
+  block?: string
+  tool?: string
+  reason?: string
+  error?: string
+  last?: Record<string, any>
+  value?: unknown
+}
+
+/** An SSE "program" event: a step of a running team tool. */
+export interface ProgramEvent {
+  run: string
+  program: string
+  phase: 'start' | 'wait' | 'before' | 'after' | 'end'
+  name?: string
+  robot?: string
+  step?: number | boolean
+  block?: string
+  kind?: 'call' | 'sense'
+  tool?: string
+  args?: Record<string, unknown>
+  round?: number
+  result?: any
+  ms?: number
 }

@@ -95,6 +95,9 @@ type Deps struct {
 	// Conversations reports whether the control room allows conversations
 	// (lab.Service.ConversationEnabled). Nil means allowed.
 	Conversations func() bool
+
+	// LoadProgram loads a team tool of the active task for "Ausführen".
+	LoadProgram ProgramLoader
 }
 
 // Manager owns the actors. Safe for concurrent use.
@@ -104,13 +107,14 @@ type Manager struct {
 	mu     sync.Mutex
 	actors map[string]*actor
 	talks  map[string][]time.Time // team -> recent conversation messages
+	gates  map[string]*gate       // team -> by-hand calls and run starts
 
 	runLength time.Duration // overrides Budgets.MaxRunMinutes in tests
 }
 
 // NewManager creates the runtime. Call Run before use.
 func NewManager(d Deps) *Manager {
-	return &Manager{Deps: d, actors: map[string]*actor{}, talks: map[string][]time.Time{}, ctx: context.Background()}
+	return &Manager{Deps: d, actors: map[string]*actor{}, talks: map[string][]time.Time{}, gates: map[string]*gate{}, ctx: context.Background()}
 }
 
 // Run closes runs a previous server left open, then routes robot events to
@@ -225,6 +229,10 @@ func (m *Manager) Start(ctx context.Context, teamID string) error {
 	if a.getStatus().Running {
 		return &StartError{"Euer Agent läuft schon."}
 	}
+	if err := m.beginStart(teamID); err != nil {
+		return err
+	}
+	defer m.endStart(teamID)
 	a.interrupt() // an answer in the conversation must not hold up the run
 	reply := make(chan error, 1)
 	a.ctrl <- control{kind: ctrlStart, reply: reply}
@@ -239,6 +247,7 @@ func (m *Manager) Start(ctx context.Context, teamID string) error {
 // Stop ends a team's run at once: a running model call or tool is cancelled.
 // by names who stopped it (team, Leitstand).
 func (m *Manager) Stop(teamID, by string) {
+	m.cancelManual(teamID)
 	if a := m.actor(teamID, false); a != nil {
 		a.interrupt()
 		a.ctrl <- control{kind: ctrlStop, reason: "stop", by: by}
@@ -261,6 +270,8 @@ func (m *Manager) StopAll(by string) {
 // TaskClosed ends every run and conversation in a task the control room
 // closed (reason task_closed).
 func (m *Manager) TaskClosed(taskID string) {
+	m.cancelProgramsOfTask(taskID)
+	m.endManualOfTask(taskID)
 	m.mu.Lock()
 	actors := make([]*actor, 0, len(m.actors))
 	for _, a := range m.actors {
@@ -278,6 +289,8 @@ func (m *Manager) TaskClosed(taskID string) {
 // TaskActivated ends the team's open conversation when the team switches to
 // another task. Switching is refused while a run is active.
 func (m *Manager) TaskActivated(teamID, taskID string) {
+	m.cancelManual(teamID) // a team tool keeps the task it started in; leaving the task stops it
+	m.endManual(teamID, "task_switched")
 	if a := m.actor(teamID, false); a != nil {
 		a.ctrl <- control{kind: ctrlTaskSwitched, task: taskID}
 	}
@@ -289,6 +302,8 @@ func (m *Manager) RemoveTeam(teamID string) {
 	a := m.actors[teamID]
 	delete(m.actors, teamID)
 	m.mu.Unlock()
+	m.cancelManual(teamID)
+	m.endManual(teamID, "team_deleted")
 	if a != nil {
 		a.interrupt()
 		a.ctrl <- control{kind: ctrlRemove}

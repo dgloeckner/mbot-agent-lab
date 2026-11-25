@@ -113,12 +113,15 @@ func run(configPath string, log *slog.Logger) error {
 	for _, name := range cfg.LLM.Unkeyed {
 		log.Info("model provider left out: its API key variable is not set", "provider", name)
 	}
+	toolReg := tools.NewRegistry(reg, db, hub, cfg.Budgets)
+	labSvc.Tools = toolReg
 	agents := agent.NewManager(agent.Deps{
 		Store: db, Robots: reg, Hub: hub, LLM: models,
-		Tools:   tools.NewRegistry(reg, db, hub, cfg.Budgets),
+		Tools:   toolReg,
 		Budgets: cfg.Budgets, Log: log,
 		TeamProvider:  labSvc.TeamProvider,
 		Conversations: labSvc.ConversationEnabled,
+		LoadProgram:   labSvc.LoadProgram,
 	})
 	go agents.Run(ctx)
 	labSvc.OnTeamEvent = func(teamID, kind, text string) {

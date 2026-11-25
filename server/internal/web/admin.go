@@ -32,6 +32,10 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 	admin("PUT /admin/api/models", s.adminSetModels)
 	admin("PUT /admin/api/conversation", s.adminSetConversation)
 	s.taskAdminRoutes(admin)
+	admin("GET /admin/api/tasks/{id}/runs", s.adminTaskRuns)
+	admin("POST /admin/api/runs/{id}/confirm", s.adminConfirmRun)
+	admin("POST /admin/api/runs/{id}/intervention", s.adminIntervention)
+	admin("POST /admin/api/teams/{id}/start", s.adminStartRun)
 }
 
 // AdminRobot is one robot as the control room sees it.
@@ -70,6 +74,8 @@ type adminState struct {
 	Teams        []AdminTeam  `json:"teams"`
 	Robots       []AdminRobot `json:"robots"`
 	Tasks        []AdminTask  `json:"tasks"`
+	// Scores changes with every confirmation or intervention; open "Läufe" views reload.
+	Scores int64 `json:"scores"`
 }
 
 func (s *Server) buildAdminState(ctx context.Context) (adminState, error) {
@@ -89,7 +95,7 @@ func (s *Server) buildAdminState(ctx context.Context) (adminState, error) {
 	if err != nil {
 		return adminState{}, err
 	}
-	st := adminState{LabCode: s.Lab.LabCode(), Models: s.Lab.Models(), Conversation: s.Lab.ConversationEnabled(),
+	st := adminState{LabCode: s.Lab.LabCode(), Models: s.Lab.Models(), Conversation: s.Lab.ConversationEnabled(), Scores: s.Lab.ScoresVersion(),
 		Teams: []AdminTeam{}, Robots: []AdminRobot{}, Tasks: []AdminTask{}}
 	for _, t := range tasks {
 		st.Tasks = append(st.Tasks, adminTask(t))

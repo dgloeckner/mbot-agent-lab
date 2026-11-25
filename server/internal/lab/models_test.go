@@ -12,6 +12,7 @@ import (
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/live"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/robots"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/store"
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/tools"
 )
 
 type nopBus struct{}
@@ -26,6 +27,7 @@ func newService(t *testing.T, st *store.Store, providers map[string]config.Provi
 		Store: st, Robots: robots.New(nopBus{}, nil, log), Hub: live.NewHub(), Log: log,
 		Config: &config.Config{Server: config.Server{LabCode: "TEST"}, LLM: config.LLM{Default: "mistral", Providers: providers}},
 	}
+	s.Tools = tools.NewRegistry(s.Robots, st, s.Hub, config.Budgets{})
 	if err := s.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}

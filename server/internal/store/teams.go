@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"time"
 )
@@ -10,13 +11,31 @@ import (
 // ErrNotFound is returned when a row does not exist (or belongs to another team).
 var ErrNotFound = errors.New("not found")
 
-// Prompt is one deployed version of a team prompt.
+// Prompt is one deployed version: the team prompt and, frozen with it, the
+// team tools of the pair (prompt_programs).
 type Prompt struct {
 	ID        int64     `json:"-"`
 	Version   int       `json:"version"`
 	Text      string    `json:"text,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	Chars     int       `json:"chars"`
+	// Tools are the team tools that changed against the version before
+	// (ListPrompts only).
+	Tools []ToolChange `json:"tools,omitempty"`
+}
+
+// Changes of a team tool between two versions.
+const (
+	ToolNew     = "neu"
+	ToolChanged = "geändert"
+	ToolRemoved = "entfernt"
+)
+
+// ToolChange is a team tool that is new, changed or removed in a version.
+type ToolChange struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Change string `json:"change"`
 }
 
 // Note is a team note. Author is "agent" or "team".
@@ -52,30 +71,127 @@ func (s *Store) SavePrompt(ctx context.Context, tt TeamTask, text string) (Promp
 		return Prompt{}, err
 	}
 	id, _ := res.LastInsertId()
+	// The team tools of the pair belong to this version, valid or not.
+	if _, err := tx.ExecContext(ctx, `INSERT INTO prompt_programs (prompt_id, program_id, name, description, blockly, tree, problems)
+		SELECT ?, id, name, description, blockly, tree, problems FROM programs WHERE team_id = ? AND task_id = ?`, id, tt.Team, tt.Task); err != nil {
+		return Prompt{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return Prompt{}, err
 	}
 	return Prompt{ID: id, Version: v, Text: text, CreatedAt: parseTime(at), Chars: len([]rune(text))}, nil
 }
 
-// ListPrompts returns all versions of the pair, newest first, without text.
+// ListPrompts returns all versions of the pair, newest first, without text,
+// each with the team tools that changed against the version before.
 func (s *Store) ListPrompts(ctx context.Context, tt TeamTask) ([]Prompt, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT version, created_at, length(text) FROM prompts WHERE team_id = ? AND task_id = ? ORDER BY version DESC`, tt.Team, tt.Task)
+	rows, err := s.DB.QueryContext(ctx, `SELECT id, version, created_at, length(text) FROM prompts WHERE team_id = ? AND task_id = ? ORDER BY version DESC`, tt.Team, tt.Task)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	out := []Prompt{}
 	for rows.Next() {
 		var p Prompt
 		var at string
-		if err := rows.Scan(&p.Version, &at, &p.Chars); err != nil {
+		if err := rows.Scan(&p.ID, &p.Version, &at, &p.Chars); err != nil {
+			rows.Close()
 			return nil, err
 		}
 		p.CreatedAt = parseTime(at)
 		out = append(out, p)
 	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// Tool changes: each version against the one before (oldest first).
+	var prev []Program
+	for i := len(out) - 1; i >= 0; i-- {
+		cur, err := s.VersionPrograms(ctx, out[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		out[i].Tools = DiffTools(prev, cur)
+		prev = cur
+	}
+	return out, nil
+}
+
+// DiffTools lists the team tools that are new, changed (name, description or
+// blocks) or removed from one state to the next, matched by id.
+func DiffTools(old, cur []Program) []ToolChange {
+	before := map[string]Program{}
+	for _, p := range old {
+		before[p.ID] = p
+	}
+	var out []ToolChange
+	for _, p := range cur {
+		o, ok := before[p.ID]
+		switch {
+		case !ok:
+			out = append(out, ToolChange{ID: p.ID, Name: p.Name, Change: ToolNew})
+		case o.Name != p.Name || o.Description != p.Description || !sameJSON(o.Blockly, p.Blockly):
+			out = append(out, ToolChange{ID: p.ID, Name: p.Name, Change: ToolChanged})
+		}
+		delete(before, p.ID)
+	}
+	for _, p := range old {
+		if _, gone := before[p.ID]; gone {
+			out = append(out, ToolChange{ID: p.ID, Name: p.Name, Change: ToolRemoved})
+		}
+	}
+	return out
+}
+
+func sameJSON(a, b []byte) bool {
+	var x, y any
+	if json.Unmarshal(a, &x) != nil || json.Unmarshal(b, &y) != nil {
+		return string(a) == string(b)
+	}
+	ja, _ := json.Marshal(x)
+	jb, _ := json.Marshal(y)
+	return string(ja) == string(jb)
+}
+
+// VersionPrograms returns the team tools frozen with a prompt version, by name.
+func (s *Store) VersionPrograms(ctx context.Context, promptID int64) ([]Program, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT program_id, name, description, blockly, tree, problems, '' FROM prompt_programs WHERE prompt_id = ? ORDER BY name, program_id`, promptID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Program{}
+	for rows.Next() {
+		p, err := scanProgram(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
 	return out, rows.Err()
+}
+
+// RestoreVersion replaces the team tools of the pair with those of a
+// version, ids included (also tools deleted since). Nothing is deleted from
+// the history. It returns the version with its prompt text.
+func (s *Store) RestoreVersion(ctx context.Context, tt TeamTask, version int) (Prompt, error) {
+	p, err := s.GetPrompt(ctx, tt, version)
+	if err != nil {
+		return p, err
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return p, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM programs WHERE team_id = ? AND task_id = ?`, tt.Team, tt.Task); err != nil {
+		return p, err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO programs (id, team_id, task_id, name, description, blockly, tree, problems, updated_at)
+		SELECT program_id, ?, ?, name, description, blockly, tree, problems, ? FROM prompt_programs WHERE prompt_id = ?`, tt.Team, tt.Task, now(), p.ID); err != nil {
+		return p, err
+	}
+	return p, tx.Commit()
 }
 
 // GetPrompt returns one version; version 0 means the latest.
