@@ -11,8 +11,9 @@ server:
 
 llm:
   # "test" is a scripted model: it explores with the real tools and needs no
-  # API key. Set default to mistral (and MISTRAL_API_KEY) or claude (and
-  # ANTHROPIC_API_KEY) to use a real model.
+  # API key. Put API keys into server/.env.local (git-ignored, loaded by Nx);
+  # the control room then offers those providers to teams. Set default to
+  # mistral or claude to run every team on a real model.
   default: test
   providers:
     test:
@@ -25,6 +26,7 @@ llm:
       price_out: 0.3
     claude:
       kind: anthropic
+      base_url: https://api.anthropic.com   # explicit: the SDK would otherwise follow ANTHROPIC_BASE_URL from the shell
       api_key_env: ANTHROPIC_API_KEY
       model: claude-haiku-5-5   # cheapest; claude-sonnet-5-5 or claude-opus-5-5 for harder tasks
       effort: low

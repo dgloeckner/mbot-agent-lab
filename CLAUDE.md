@@ -74,7 +74,8 @@ the user chose Nx over Make). Run `npm install` once.
 - `npm run dev`: `server:dev` + `web:dev`. Control room http://localhost:5173/admin (password
   `dev`), join http://localhost:5173/join (lab code `DEV1`).
 - `npx nx run server:dev`: server with `deploy/local/lab.yaml` (HTTP 127.0.0.1:8080, MQTT :1883,
-  dev secrets set in `server/project.json`).
+  dev secrets set in `server/project.json`). Real API keys (`ANTHROPIC_API_KEY`, ...) live in
+  git-ignored `server/.env.local`, which Nx loads; never read or print its values.
 - `npx nx run sim:run --robots=2 --world=sim/worlds/labyrinth.json`: simulated robots.
 - `npx nx run sim:e2e`: end-to-end smoke test (`sim/e2e/`): builds and starts `labserver` with the
   scripted model, one seeded sim robot, drives join/assign/prompt/start over HTTP. Runs in CI.
