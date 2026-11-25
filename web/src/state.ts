@@ -4,6 +4,8 @@ import { computed, effect, signal } from '@preact/signals'
 import { api, ApiError, connectEvents, type ConnState } from './api'
 import { LocalStore, browserKV, dropOldKeys, shouldAutoSnapshot, type Prefs, type Snapshot } from './storage'
 import { belongsTo, taskView } from './taskview'
+import { createSaver, freeName, idleRun, reduceRun, type RunView } from './toolrun'
+import type { ProgramDetail, ProgramEvent, ProgramInfo } from './types'
 import type { AgentStatus, LogEntry, Note, PromptChoice, PromptVersion, Robot, Session, TeamTask, Totals } from './types'
 
 const kv = browserKV()
@@ -124,6 +126,10 @@ function applySession(s: Session) {
   log.value = v.log
   conversation.value = v.conversation
   conversationUnread.value = 0
+  teamTools.value = []
+  toolRun.value = idleRun
+  if (s.task) void loadTeamTools()
+  else leftView.value = 'prompt'
 }
 
 let events: { close: () => void; restart: () => void } | null = null
@@ -167,6 +173,8 @@ export async function init() {
   events = connectEvents({
     task: (id) => void onTaskChanged(id),
     tasks: () => void reloadTasks(),
+    programs: (id) => void onProgramsChanged(id),
+    program: (e) => onProgramEvent(e),
     status: (st) => (conn.value = st),
     robots: (r) => (robots.value = r),
     agent: (a) => (agent.value = a),
@@ -235,15 +243,59 @@ export async function deploy(restart: boolean) {
   busy.value = 'deploy'
   const text = draft.value // the user may keep typing while the request runs
   try {
+    await toolSaver.flush() // a version holds the team tools as they are now
     const p = await api.deploy(text, restart)
-    applyDeployed({ ...p, text })
+    applyDeployed({ version: p.version, created_at: p.created_at, chars: p.chars, text })
     if (local) history.value = local.addSnapshot(text, 'deploy', p.version)
-    showToast(`Version ${p.version} deployt`)
+    const withTools = p.tools.filter((t) => t.agent).length
+    const done = `Version ${p.version} deployt${withTools === 1 ? ' mit 1 eigenen Werkzeug' : withTools ? ` mit ${withTools} eigenen Werkzeugen` : ''}`
+    showToast(p.warning ? `${done}. ${p.warning}` : done, p.warning ? 'error' : 'ok')
+    void reloadVersions()
+    void loadTeamTools()
   } catch (err) {
     fail(err)
   } finally {
     busy.value = null
   }
+}
+
+async function reloadVersions() {
+  try {
+    versions.value = await api.versions()
+  } catch {
+    // the next deploy or reload brings it
+  }
+}
+
+/**
+ * "Diese Version wiederherstellen": the working state becomes that version:
+ * the team tools on the server, the prompt text in the draft. The history
+ * keeps everything; the next deploy is a new version.
+ */
+export async function restoreVersion(version: number): Promise<boolean> {
+  try {
+    await toolSaver.flush()
+    toolSaver.cancel()
+    const p = await api.restoreVersion(version)
+    restore(p.text ?? '', `Version ${version}`)
+    await loadTeamTools()
+    if (openTool.peek()) toolBridge.reload?.(openTool.peek()!)
+    return true
+  } catch (err) {
+    fail(err)
+    return false
+  }
+}
+
+/** What restoring a version would overwrite: the changed prompt draft and team tools changed or new since the last deploy. */
+export function unsavedWork(): string[] {
+  const out: string[] = []
+  if (dirty.value) out.push('die Änderungen am Prompt seit dem letzten Deploy')
+  for (const t of teamTools.value) {
+    if (t.deploy === 'changed') out.push(`die Änderungen an „${t.name}“`)
+    if (t.deploy === 'new') out.push(`das neue Werkzeug „${t.name}“`)
+  }
+  return out
 }
 
 function applyDeployed(p: PromptVersion) {
@@ -451,3 +503,95 @@ export async function copyTeamLink() {
     showToast(`Team-Link: ${location.origin}${location.pathname}`)
   }
 }
+
+// ---------- team tools ("eigene Werkzeuge") ----------
+
+/** The team tools of the active task. */
+export const teamTools = signal<ProgramInfo[]>([])
+/** The left pane shows the prompt or the tool editor. */
+export const leftView = signal<'prompt' | 'tool'>('prompt')
+/** The team tool open in the editor. */
+export const openTool = signal<string | null>(null)
+/** The team's running (or last) team tool, from SSE "program" events. */
+export const toolRun = signal<RunView>(idleRun)
+/** Set by the editor: reload the open tool when another PC saved it. */
+export const toolBridge: { reload?: (id: string) => void } = {}
+
+export async function loadTeamTools() {
+  try {
+    teamTools.value = await api.programs()
+  } catch {
+    // the next "programs" event or a reload brings it
+  }
+}
+
+async function onProgramsChanged(id: string) {
+  await loadTeamTools()
+  if (openTool.peek() === id) {
+    if (!teamTools.peek().some((t) => t.id === id)) openTool.value = null
+    else toolBridge.reload?.(id)
+  }
+}
+
+function onProgramEvent(e: ProgramEvent) {
+  toolRun.value = reduceRun(toolRun.peek(), e)
+}
+
+/** Opens the tool editor on a team tool. */
+export function editTool(id: string) {
+  openTool.value = id
+  leftView.value = 'tool'
+}
+
+/** "Neues Werkzeug": an empty tool with only its start block, opened in the editor. */
+export async function newTool(): Promise<ProgramDetail | null> {
+  const name = freeName(teamTools.peek().map((t) => t.name))
+  const blockly = { blocks: { languageVersion: 0, blocks: [{ type: 'program_start', id: 'start', x: 30, y: 30 }] } }
+  try {
+    const p = await api.createProgram(name, '', blockly)
+    await loadTeamTools()
+    editTool(p.id)
+    return p
+  } catch (err) {
+    fail(err)
+    return null
+  }
+}
+
+export async function deleteTool(id: string) {
+  if (await attempt(api.deleteProgram(id), 'Werkzeug gelöscht')) {
+    if (openTool.peek() === id) openTool.value = null
+    await loadTeamTools()
+  }
+}
+
+/** Runs a team tool on a robot ("Ausführen", or "Einzelschritt" with step). */
+export async function runTeamTool(id: string, step: boolean, robot?: string): Promise<boolean> {
+  try {
+    await api.runProgram(id, robot, step)
+    return true
+  } catch (err) {
+    fail(err)
+    return false
+  }
+}
+
+/** "Weiter": the single-step run takes its next call. */
+export const continueTeamTool = () => {
+  const run = toolRun.peek().run
+  return run ? attempt(api.continueProgram(run)) : Promise.resolve(false)
+}
+
+/** Saves the open tool a moment after the last change (last write wins). */
+export const toolSaver = createSaver<{ id: string; name: string; description: string; blockly: unknown; done?: (p: ProgramDetail) => void }>(
+  async (v) => {
+    try {
+      const p = await api.saveProgram(v.id, v.name, v.description, v.blockly)
+      teamTools.value = teamTools.peek().map((t) => (t.id === p.id ? { ...p, blockly: undefined } as ProgramInfo : t))
+      v.done?.(p)
+    } catch (err) {
+      fail(err)
+    }
+  },
+  1500,
+)

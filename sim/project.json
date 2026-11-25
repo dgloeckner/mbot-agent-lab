@@ -32,6 +32,7 @@
       ],
       "inputs": [
         "default",
+        "{workspaceRoot}/docs/examples/programs/**/*",
         "{workspaceRoot}/robot/src/**/*",
         "{workspaceRoot}/robot/tools/**/*",
         "{workspaceRoot}/deploy/local/lab.yaml",

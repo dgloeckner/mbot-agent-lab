@@ -74,6 +74,9 @@ type tool struct {
 	// ends are the stop reasons that count as a normal end. A result without
 	// a reason ends normally when it is ok.
 	ends []string
+	// quiet: a display or sound tool. In a team tool it does not replace the
+	// last result, so a light between a drive and its "wenn" changes nothing.
+	quiet bool
 }
 
 // call carries one invocation.
@@ -170,6 +173,55 @@ func (r *Registry) ManualNames() []string {
 		}
 	}
 	return out
+}
+
+// Quiet reports whether a tool only shows or plays something: in a team tool
+// it does not replace the last result.
+func (r *Registry) Quiet(name string) bool {
+	t, ok := r.tools[name]
+	return ok && t.quiet
+}
+
+// Known reports whether the registry or the catalog (planned tools) has a
+// tool of this name. Team tools cannot take such a name.
+func (r *Registry) Known(name string) bool {
+	if _, ok := r.tools[name]; ok {
+		return true
+	}
+	for _, info := range Catalog {
+		if info.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// CheckArgs checks the fixed arguments of a block against the tool's schema:
+// required arguments, type, enum, range and length. The robot is not part of
+// a block; it is chosen when the team tool runs. Messages are German.
+func (r *Registry) CheckArgs(name string, args map[string]any) error {
+	t, ok := r.tools[name]
+	if !ok {
+		return fmt.Errorf("Das Werkzeug %q gibt es nicht.", name)
+	}
+	if _, ok := args["robot"]; ok {
+		return errors.New("Den Roboter wählt ihr beim Ausführen, nicht im Block.")
+	}
+	for _, req := range t.required {
+		if _, ok := args[req]; !ok {
+			return fmt.Errorf("Es fehlt das Argument %q.", req)
+		}
+	}
+	if t.props == nil {
+		return nil
+	}
+	props := t.props(&Env{})
+	for key := range args {
+		if _, ok := props[key]; !ok {
+			return fmt.Errorf("Das Argument %q kennt %s nicht.", key, name)
+		}
+	}
+	return checkArgs(props, args, true)
 }
 
 // Ends returns the stop reasons that count as a normal end of a tool.
@@ -686,7 +738,7 @@ func builtins() []*tool {
 		},
 		{
 			name:   "set_leds",
-			manual: true, ends: []string{"done"},
+			manual: true, ends: []string{"done"}, quiet: true,
 			desc:     "Schaltet die Lichter des Roboters in einer Farbe.",
 			props:    static(map[string]any{"color": map[string]any{"type": "string", "enum": ledColors}}),
 			required: []string{"color"}, robot: robotOne,
@@ -696,7 +748,7 @@ func builtins() []*tool {
 		},
 		{
 			name:   "show_text",
-			manual: true, ends: []string{"done"},
+			manual: true, ends: []string{"done"}, quiet: true,
 			desc:     "Zeigt einen kurzen Text (höchstens 60 Zeichen) auf dem Display des Roboters.",
 			props:    static(map[string]any{"text": map[string]any{"type": "string", "maxLength": 60}}),
 			required: []string{"text"}, robot: robotOne,
@@ -706,7 +758,7 @@ func builtins() []*tool {
 		},
 		{
 			name:   "play_sound",
-			manual: true, ends: []string{"done"},
+			manual: true, ends: []string{"done"}, quiet: true,
 			desc:     "Spielt einen kurzen Ton.",
 			props:    static(map[string]any{"name": map[string]any{"type": "string", "enum": []string{"hello", "yeah", "wow", "laugh", "sad", "surprised", "beeps"}}}),
 			required: []string{"name"}, robot: robotOne,
@@ -716,7 +768,7 @@ func builtins() []*tool {
 		},
 		{
 			name: "identify", desc: "Lässt den Roboter einige Sekunden blinken und piepen, damit Menschen ihn finden.",
-			manual: true, ends: []string{"done"},
+			manual: true, ends: []string{"done"}, quiet: true,
 			robot: robotOne,
 			run: func(ctx context.Context, c *call) any {
 				return c.command(ctx, c.robots[0], "identify", nil, 3*time.Second)

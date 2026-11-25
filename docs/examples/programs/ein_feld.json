@@ -1,0 +1,58 @@
+{
+  "blockly": {
+    "blocks": {
+      "languageVersion": 0,
+      "blocks": [
+        {
+          "type": "program_start",
+          "id": "f_start",
+          "x": 20,
+          "y": 20,
+          "next": {
+            "block": {
+              "type": "tool_drive_until",
+              "id": "f_drive",
+              "fields": {
+                "max_cm": 50,
+                "stop_below_cm": 15,
+                "stop_on_color": "blue"
+              },
+              "next": {
+                "block": {
+                  "type": "return_field",
+                  "id": "f_return",
+                  "fields": {
+                    "FIELD": "color"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "program": {
+    "name": "ein_feld",
+    "description": "Fährt ein Feld (50 cm) geradeaus, hält vorher an einer Wand oder auf Blau. Meldet die Bodenfarbe am Ende.",
+    "body": [
+      {
+        "id": "f_drive",
+        "type": "call",
+        "tool": "drive_until",
+        "args": {
+          "max_cm": 50,
+          "stop_below_cm": 15,
+          "stop_on_color": "blue"
+        }
+      },
+      {
+        "id": "f_return",
+        "type": "return",
+        "return": {
+          "field": "color"
+        }
+      }
+    ]
+  }
+}

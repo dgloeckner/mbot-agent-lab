@@ -25,6 +25,10 @@ const (
 	EventRobotEvent     = "robot.event"
 	EventNoteAdded      = "note.added"
 	EventNoteDeleted    = "note.deleted"
+	// EventRunConfirmed: the lab lead confirms or rejects a run's success.
+	EventRunConfirmed = "run.confirmed"
+	// EventRunIntervention: the lab lead records an intervention in a run.
+	EventRunIntervention = "run.intervention"
 )
 
 // Event actors: who caused an event.

@@ -21,6 +21,10 @@ type Fake struct {
 
 const fakeMaxMoves = 8
 
+// teamToolMark is the start of the sentence the server appends to the
+// description of every team tool (agent.TeamToolNote).
+const teamToolMark = "Dies ist ein Werkzeug, das das Team selbst gebaut hat."
+
 func (f Fake) Chat(ctx context.Context, req Request) (Response, error) {
 	d := f.Delay
 	if d == 0 {
@@ -33,16 +37,29 @@ func (f Fake) Chat(ctx context.Context, req Request) (Response, error) {
 	}
 
 	has := map[string]Tool{}
+	var teamTools []string // tools the team built itself, in definition order
 	for _, t := range req.Tools {
 		has[t.Name] = t
+		if strings.Contains(t.Description, teamToolMark) {
+			teamTools = append(teamTools, t.Name)
+		}
+	}
+	isTeamTool := func(name string) bool {
+		for _, n := range teamTools {
+			if n == name {
+				return true
+			}
+		}
+		return false
 	}
 	moves, lastTool, lastResult := 0, "", ""
-	assistantSeen := false
+	assistantSeen, teamToolUsed := false, false
 	for _, m := range req.Messages {
 		switch m.Role {
 		case RoleAssistant:
 			assistantSeen = true
 			for _, tc := range m.ToolCalls {
+				teamToolUsed = teamToolUsed || isTeamTool(tc.Function.Name)
 				if tc.Function.Name == "drive_until" || tc.Function.Name == "turn" || tc.Function.Name == "turn_until_clear" {
 					moves++
 				}
@@ -53,10 +70,12 @@ func (f Fake) Chat(ctx context.Context, req Request) (Response, error) {
 	}
 	last := req.Messages[len(req.Messages)-1]
 
+	// force calls a tool even when it is not offered, as models sometimes do.
+	force := false
 	reply := func(text, tool string, args map[string]any) (Response, error) {
 		msg := Message{Role: RoleAssistant, Content: text}
 		if tool != "" {
-			if _, ok := has[tool]; !ok {
+			if _, ok := has[tool]; !ok && !force {
 				msg.Content = text + " (Das Werkzeug " + tool + " fehlt mir gerade.)"
 			} else {
 				// With several robots, every robot does the same in one
@@ -95,7 +114,63 @@ func (f Fake) Chat(ctx context.Context, req Request) (Response, error) {
 		if moves >= fakeMaxMoves {
 			return reply("Ich habe meine Testrunde schon beendet und warte.", "", nil)
 		}
+		if isTeamTool("ein_feld") && isTeamTool("rechts") && isTeamTool("links") && !teamToolUsed {
+			return reply("Ich folge der rechten Wand, Feld für Feld.", "rechts", map[string]any{})
+		}
+		// Only the team's tools (tool set team_tools): it tries a built-in motion
+		// tool once anyway and learns from the answer that it does not exist.
+		if _, ok := has["drive_until"]; len(teamTools) > 0 && !ok && moves == 0 && !teamToolUsed {
+			force = true
+			return reply("Ich fahre erst einmal bis zur Wand.", "drive_until", map[string]any{"max_cm": 120})
+		}
+		// A tool the team built comes first: that is what the team deployed it for.
+		if len(teamTools) > 0 && !teamToolUsed {
+			return reply("Ich nutze euer Werkzeug "+teamTools[0]+".", teamTools[0], map[string]any{})
+		}
 		return reply("Ich bin das Testmodell. Ich schaue mich zuerst um.", "read_sensors", map[string]any{})
+	}
+	// The small cut: with team tools for one cell and for turning, the model
+	// follows the right-hand wall cell by cell, reading the sensors before
+	// every move, until a cell ends on blue.
+	if isTeamTool("ein_feld") && isTeamTool("rechts") && isTeamTool("links") {
+		switch lastTool {
+		case "", "ein_feld":
+			if strings.Contains(lastResult, `"value":"blue"`) {
+				return reply("Ich stehe auf Blau.", "finish", map[string]any{"report": "Ich bin Feld für Feld an der rechten Wand entlang bis zum blauen Feld gefahren."})
+			}
+			return reply("Ich schaue nach rechts.", "rechts", map[string]any{})
+		case "rechts", "links":
+			return reply("Ist hier frei?", "read_sensors", map[string]any{})
+		case "read_sensors":
+			var st struct {
+				Distance float64 `json:"distance_cm"`
+			}
+			_ = json.Unmarshal([]byte(lastResult), &st)
+			if st.Distance > 40 {
+				return reply("Frei, ein Feld weiter.", "ein_feld", map[string]any{})
+			}
+			return reply("Wand, ich drehe nach links.", "links", map[string]any{})
+		}
+	}
+	if _, offered := has[lastTool]; lastTool != "" && !offered && len(teamTools) > 0 && !teamToolUsed {
+		return reply("Das Werkzeug gibt es hier nicht. Dann nehme ich euer Werkzeug "+teamTools[0]+".", teamTools[0], map[string]any{})
+	}
+	if isTeamTool(lastTool) {
+		var tr struct {
+			End   string `json:"end"`
+			Steps int    `json:"steps"`
+			Value any    `json:"value"`
+			At    string `json:"at"`
+		}
+		_ = json.Unmarshal([]byte(lastResult), &tr)
+		report := fmt.Sprintf("Ich habe euer Werkzeug %s benutzt: Ende %s nach %d Schritten", lastTool, tr.End, tr.Steps)
+		if tr.Value != nil {
+			report += fmt.Sprintf(", es meldet %v", tr.Value)
+		}
+		if tr.End != "done" && tr.At != "" {
+			report += ", Halt bei " + tr.At
+		}
+		return reply("Euer Werkzeug ist fertig.", "finish", map[string]any{"report": report + "."})
 	}
 
 	if moves >= fakeMaxMoves {

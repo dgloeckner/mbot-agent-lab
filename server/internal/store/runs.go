@@ -227,6 +227,14 @@ func (s *Store) AddToolCall(ctx context.Context, run int64, seq int, name string
 	return err
 }
 
+// AddProgramToolCall logs one step of a team tool run by hand: a tool call
+// under the manual row that names the team tool.
+func (s *Store) AddProgramToolCall(ctx context.Context, run int64, seq int, program, name string, args, result json.RawMessage, d time.Duration, robot RobotRef) error {
+	_, err := s.DB.ExecContext(ctx, `INSERT INTO tool_calls (run_id, seq, name, args, result, duration_ms, robot_id, robot_alias, at, program) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		run, seq, name, string(args), nullJSON(result), d.Milliseconds(), nullString(robot.ID), nullString(robot.Alias), now(), program)
+	return err
+}
+
 // AddLLMCall logs one model call and adds its usage to the run.
 func (s *Store) AddLLMCall(ctx context.Context, run int64, provider, model string, in, out int, d time.Duration, costMicroEUR int64) error {
 	tx, err := s.DB.BeginTx(ctx, nil)

@@ -1,8 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
 import { useSignal } from '@preact/signals'
-import { clock, describe, describeTool, logGroup, relativeTime } from '../format'
+import { clock, describe, describeTool, logGroup, programEnd, relativeTime } from '../format'
 import {
   addNote,
+  editTool,
+  newTool,
+  runTeamTool,
+  teamTools,
+  toolRun,
   agent,
   conversation,
   conversationUnread,
@@ -22,7 +27,7 @@ import {
 } from '../state'
 import { lazyComponent } from '../lazy'
 import type { SideTab } from '../storage'
-import type { LogEntry, Note } from '../types'
+import type { LogEntry, Note, ProgramInfo } from '../types'
 import { SendIcon } from './icons'
 
 type Filter = 'all' | 'robot' | 'team' | 'agent' | 'system'
@@ -204,6 +209,9 @@ function TaskPanel() {
     <div class="task-panel scroll">
       <h2 class="task-panel-title">{t.title}</h2>
       <p class="panel-intro">Euer Agent sieht diesen Text nicht. Schreibt in euren Prompt, was er wissen muss.</p>
+      {t.agent_tools === 'team_tools' && (
+        <p class="task-tool-rule">In dieser Aufgabe darf euer Agent nur eure eigenen Werkzeuge nutzen, dazu read_sensors, say, tell_team, remember, forget und finish.</p>
+      )}
       <TaskText task={t} />
     </div>
   )
@@ -331,6 +339,69 @@ function NotesPanel() {
 
 const ToolConsole = lazyComponent(() => import('./ToolConsole'))
 
+/** Whether the agent has a team tool: deployed, changed since the last deploy, or left out. */
+function agentState(t: ProgramInfo): { kind: string; label: string; title: string } {
+  if (t.deploy === 'new') return { kind: 'new', label: 'noch nicht deployt', title: 'Euer Agent bekommt es mit dem nächsten Deploy.' }
+  const base = t.agent ? 'beim Agenten' : `nicht beim Agenten: ${t.why ?? ''}`
+  if (t.deploy === 'changed') return { kind: 'changed', label: `${base}, geändert`, title: 'Seit dem letzten Deploy geändert: der Agent hat noch die deployte Fassung.' }
+  return { kind: t.agent ? 'agent' : 'left', label: base, title: t.agent ? 'Euer Agent kann es benutzen.' : 'Nur gültige Werkzeuge mit Beschreibung bekommt der Agent.' }
+}
+
+const runningText = (n: number) => `Läuft … ${n === 1 ? '1 Schritt' : `${n} Schritte`}`
+
+/** "Eigene Werkzeuge": the team's tools above the built-in ones. */
+function OwnTools({ blocked, robot }: { blocked: string | null; robot?: string }) {
+  const list = teamTools.value
+  const run = toolRun.value
+  return (
+    <section class="own-tools">
+      <div class="own-tools-head">
+        <h3>Eigene Werkzeuge</h3>
+        {!readOnly.value && (
+          <button class="btn btn-small" onClick={() => void newTool()}>
+            Neues Werkzeug
+          </button>
+        )}
+      </div>
+      {list.length === 0 ? (
+        <p class="panel-intro">Noch keine. Baut aus Blöcken ein eigenes Werkzeug, zum Beispiel „fahre ein Quadrat“.</p>
+      ) : (
+        <ul class="tools">
+          {list.map((t) => (
+            <li key={t.id} class="own-tool">
+              <div class="own-tool-row">
+                <code>{t.name}</code>
+                <span class={`tool-tag ${t.valid ? 'tag-ok' : 'tag-bad'}`}>{t.valid ? 'bereit' : 'hat Fehler'}</span>
+                <span class={`tool-tag tag-agent`} data-state={agentState(t).kind} title={agentState(t).title}>
+                  {agentState(t).label}
+                </span>
+                <span class="spacer" />
+                <button class="btn-link" onClick={() => editTool(t.id)}>
+                  Bearbeiten
+                </button>
+                <button
+                  class="btn btn-small btn-accent"
+                  disabled={!t.valid || blocked !== null || run.running}
+                  title={blocked ?? (t.valid ? undefined : 'Erst die Fehler beheben.')}
+                  onClick={() => void runTeamTool(t.id, false, robot)}
+                >
+                  Ausführen
+                </button>
+              </div>
+              {t.description && <span class="tool-summary">{t.description}</span>}
+              {run.program === t.id && (run.running || run.result) && (
+                <p class="own-tool-run" data-ok={run.result ? run.result.end === 'done' : undefined}>
+                  {run.running ? runningText(run.lines.filter((l) => l.kind === 'step').length) : programEnd(t.name, run.result!)}
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
 /** Why the console is off right now, or null. */
 function consoleBlocked(): string | null {
   if (readOnly.value) return 'Die Aufgabe ist geschlossen.'
@@ -339,8 +410,16 @@ function consoleBlocked(): string | null {
   return null
 }
 
+/** In a task with the tool set team_tools: the built-in tools the agent does not have. */
+function missingInTask(): Set<string> | null {
+  if (task.value?.agent_tools !== 'team_tools') return null
+  const kept = new Set(session.value!.team_only_tools ?? [])
+  return new Set(session.value!.tools.filter((t) => !kept.has(t.name)).map((t) => t.name))
+}
+
 function ToolsPanel() {
   const tools = session.value!.tools
+  const missing = missingInTask()
   const groups = [...new Set(tools.map((t) => t.group))]
   const open = useSignal<string | null>(null)
   const picked = useSignal<string>('')
@@ -376,6 +455,13 @@ function ToolsPanel() {
           Erst anhalten: Solange euer Agent läuft, könnt ihr nichts selbst ausführen.
         </p>
       )}
+      {missing && (
+        <p class="console-hint task-tool-rule" role="note">
+          In dieser Aufgabe hat euer Agent nur eure eigenen Werkzeuge und {(session.value!.team_only_tools ?? []).join(', ')}. Die anderen
+          eingebauten fehlen ihm, ihr dürft sie aber selbst ausführen.
+        </p>
+      )}
+      <OwnTools blocked={blocked} robot={robot} />
       {groups.map((g) => (
         <section key={g}>
           <h3>{g}</h3>
@@ -390,7 +476,10 @@ function ToolsPanel() {
                     {byHand ? (
                       <button class="tool" aria-expanded={isOpen} onClick={() => (open.value = isOpen ? null : t.name)}>
                         <code>{t.name}</code>
-                        <span class="tool-params">{t.params}</span>
+                        <span class="tool-params">
+                          {t.params}
+                          {missing?.has(t.name) && <span class="tool-tag tag-missing">nicht beim Agenten</span>}
+                        </span>
                         <svg class="tool-chevron" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24">
                           <path d={isOpen ? 'M5 9l7 7 7-7' : 'M9 5l7 7-7 7'} />
                         </svg>
@@ -400,7 +489,9 @@ function ToolsPanel() {
                       <button class="tool" data-ready={t.ready} onClick={() => editorBridge.insert?.('`' + t.name + '`')} title="In den Prompt einfügen">
                         <code>{t.name}</code>
                         <span class="tool-params">{t.params}</span>
-                        <span class="tool-tag">{t.ready ? 'nur Agent' : 'kommt bald'}</span>
+                        <span class={`tool-tag${t.ready && missing?.has(t.name) ? ' tag-missing' : ''}`}>
+                          {!t.ready ? 'kommt bald' : missing?.has(t.name) ? 'nicht beim Agenten' : 'nur Agent'}
+                        </span>
                         <span class="tool-summary">
                           {t.summary}
                           {!t.ready && ' Euer Agent hat es noch nicht.'}

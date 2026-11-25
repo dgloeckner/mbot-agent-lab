@@ -16,6 +16,7 @@ import (
 
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/agent"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/live"
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/programs"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/protocol"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/store"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/tools"
@@ -123,6 +124,8 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request, team store.Team
 		"versions":        versions,
 		"notes":           notes,
 		"tools":           s.Agents.Tools.CatalogFor(&tools.Env{TeamID: team.ID}),
+		// In a task with the tool set team_tools the agent keeps only these built-in tools.
+		"team_only_tools": agent.TeamOnlyToolNames(),
 		"limits": map[string]int{
 			"prompt_chars": MaxPromptChars, "message_chars": MaxMessageChars, "note_chars": MaxNoteChars,
 		},
@@ -189,16 +192,48 @@ func (s *Server) deployPrompt(w http.ResponseWriter, r *http.Request, team store
 		s.serverError(w, err)
 		return
 	}
+	versionTools, err := s.Lab.VersionTools(r.Context(), p.ID)
+	if err != nil {
+		s.serverError(w, err)
+		return
+	}
+	toolNames := []string{}
+	for _, t := range versionTools {
+		toolNames = append(toolNames, t.Name)
+	}
+	warning := s.Lab.DeployWarning(team.ID, req.Text, versionTools)
 	s.Lab.Record(r.Context(), store.Event{Kind: store.EventPromptDeployed, Actor: store.ActorTeam, Team: tt.Team, Task: tt.Task, Prompt: p.ID,
-		Data: map[string]any{"version": p.Version, "chars": p.Chars, "restart": req.Restart}})
-	data, _ := json.Marshal(map[string]any{"version": p.Version, "restart": req.Restart, "chars": p.Chars})
+		Data: map[string]any{"version": p.Version, "chars": p.Chars, "restart": req.Restart, "tools": toolNames}})
+	data, _ := json.Marshal(map[string]any{"version": p.Version, "restart": req.Restart, "chars": p.Chars, "tools": toolNames})
 	s.Hub.Publish(team.ID, live.LogEntry{Source: live.SourceTeam, Kind: "deploy", Data: data})
 	if req.Restart || s.Agents.Status(team.ID).Running {
 		if err := s.Agents.Deployed(r.Context(), team.ID, p.Version, req.Restart); err != nil {
 			s.agentNotice(team.ID, err)
 		}
 	}
-	writeJSON(w, http.StatusCreated, p)
+	s.Hub.SignalRef(team.ID, live.SignalPrograms, "") // the deploy states of the team tools changed
+	writeJSON(w, http.StatusCreated, map[string]any{"version": p.Version, "text": p.Text, "created_at": p.CreatedAt, "chars": p.Chars,
+		"tools": versionTools, "warning": warning})
+}
+
+// restoreVersion replaces the working state with a version: the team tools
+// here, the prompt text for the page's draft. 409 in a closed task.
+func (s *Server) restoreVersion(w http.ResponseWriter, r *http.Request, team store.Team) {
+	v, err := strconv.Atoi(r.PathValue("version"))
+	if err != nil || v < 1 {
+		writeError(w, http.StatusBadRequest, "Unbekannte Version.")
+		return
+	}
+	p, err := s.Lab.RestoreVersion(r.Context(), team.ID, v)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("Version %d gibt es nicht.", v))
+		return
+	}
+	if err != nil {
+		s.labError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, p)
 }
 
 func (s *Server) message(w http.ResponseWriter, r *http.Request, team store.Team) {
@@ -298,6 +333,12 @@ func (s *Server) runTool(w http.ResponseWriter, r *http.Request, team store.Team
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, _ = w.Write(result)
+}
+
+// blocks answers the Blockly block definitions and the toolbox of the tool
+// editor, built from the tool registry. No block has a robot field.
+func (s *Server) blocks(w http.ResponseWriter, _ *http.Request, _ store.Team) {
+	writeJSON(w, http.StatusOK, programs.Blocks(s.Agents.Tools))
 }
 
 // agentNotice tells the team why its agent could not (re)start.
@@ -528,7 +569,14 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, team store.Team)
 			if e.Signal == live.SignalTask {
 				task = e.Task
 			}
-			b, _ := json.Marshal(map[string]string{"task_id": e.Task})
+			data := map[string]string{"task_id": e.Task}
+			if e.Ref != "" {
+				data["id"] = e.Ref
+			}
+			b, _ := json.Marshal(data)
+			if e.Payload != nil {
+				b = e.Payload
+			}
 			_, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", e.Signal, b)
 			return err
 		}

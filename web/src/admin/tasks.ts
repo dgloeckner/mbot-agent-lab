@@ -16,6 +16,8 @@ export interface AdminTask {
 export interface TaskDetail extends AdminTask {
   body: string
   starter: string
+  /** all: every tool; team_tools: only the team's own deployed tools (and a few that move no robot). */
+  agent_tools: 'all' | 'team_tools'
 }
 
 export interface AdminTeamTask {

@@ -250,7 +250,10 @@ func (a *actor) converse(parent context.Context, msgs []Message) {
 			a.talkInfo("Euer Agent hat für diese Antwort zu viele Schritte gebraucht und hört hier auf. Fragt einfach noch einmal.")
 			return
 		}
-		defs := a.m.Tools.Definitions(env)
+		defs := allowedDefs(a.m.Tools.Definitions(env), a.m.toolSet(ctx, c.task.Task))
+		if teamTools, err := a.m.versionTools(ctx, c.task); err == nil {
+			defs = append(defs, a.m.teamToolDefs(a.team, teamTools)...) // as text; only conversationTools can be called
+		}
 		messages, err := a.conversationContext(ctx, c, team.Name, defs)
 		if err != nil {
 			if !errors.Is(err, context.Canceled) {

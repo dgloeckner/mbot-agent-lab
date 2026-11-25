@@ -70,7 +70,14 @@ def test_config(http_port, mqtt_port, db_path):
     return text
 
 
-class SmokeTest(unittest.TestCase):
+class LabCase(unittest.TestCase):
+    """A lab: labserver, simulated robots in WORLD and HTTP helpers. No tests."""
+
+    WORLD = WORLD
+    ROBOTS = 2
+    DELAY_MS = 0  # network delay of the simulated robots (sim/run.py --delay-ms)
+    CONFIG = ()   # extra (pattern, replacement) edits of the lab configuration
+
     def setUp(self):
         if not BINARY.exists():
             self.fail("%s missing: run `npx nx run server:build` (or set LABSERVER)" % BINARY)
@@ -84,6 +91,10 @@ class SmokeTest(unittest.TestCase):
         self.base = "http://127.0.0.1:%d" % http_port
         cfg = self.tmp / "lab.yaml"
         cfg_text = test_config(http_port, mqtt_port, self.tmp / "lab.db")
+        for pattern, repl in self.CONFIG:
+            cfg_text, n = re.subn(pattern, repl, cfg_text, count=1)
+            if n != 1:
+                raise AssertionError("lab.yaml: no match for %r" % pattern)
         cfg.write_text(cfg_text, encoding="utf-8")
 
         # Dev secrets, as in the server:dev target. Never in the YAML.
@@ -102,9 +113,9 @@ class SmokeTest(unittest.TestCase):
         self.sim_log = self.tmp / "sim.log"
         self.spawn([str(BINARY), "-config", str(cfg), "-debug"], env, self.server_log)
         self.wait_for(self.healthy, "server /healthz")
-        self.spawn([sys.executable, str(ROOT / "sim" / "run.py"), "--robots", "2",
-                    "--port", str(mqtt_port), "--world", str(WORLD),
-                    "--trace", "0.2", "--seed", str(SEED)], env, self.sim_log)
+        self.spawn([sys.executable, str(ROOT / "sim" / "run.py"), "--robots", str(self.ROBOTS),
+                    "--port", str(mqtt_port), "--world", str(self.WORLD),
+                    "--trace", "0.2", "--seed", str(SEED), "--delay-ms", str(self.DELAY_MS)], env, self.sim_log)
 
         self.admin = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(CookieJar()))
         self.events = []
@@ -252,6 +263,22 @@ class SmokeTest(unittest.TestCase):
             return None
         return self.wait_for(probe, "heartbeat of %s in the registry" % robot)
 
+    def run_team_tool(self, team, example, name):
+        """Saves an example team tool, runs it and waits for its end in the log."""
+        ex = json.loads((ROOT / "docs" / "examples" / "programs" / (example + ".json")).read_text(encoding="utf-8"))
+        saved = self.team_request(team, "POST", "/programs", {"name": name, "description": ex["program"]["description"],
+                                                               "blockly": ex["blockly"]}, expect=(201,))
+        self.assertTrue(saved["valid"], saved)
+        run = self.team_request(team, "POST", "/programs/%s/run" % saved["id"], {}, expect=(202,))["run"]
+        end = self.wait_for(lambda: self.log_entries(lambda e: e.get("kind") == "program_end" and (e.get("data") or {}).get("run") == run),
+                            "the end of team tool %s" % name)[0]
+        for line in self.server_log.read_text(encoding="utf-8").splitlines():
+            if "team tool" in line:
+                print("e2e: server: " + line, file=sys.stderr)
+        return end["data"]["result"]
+
+
+class SmokeTest(LabCase):
     def test_team_agent_drives_simulated_robot(self):
         self.request("POST", "/admin/api/login", {"password": self.admin_password}, expect=(204,))
         rb = self.robot_online(ROBOT)
@@ -353,6 +380,90 @@ class SmokeTest(unittest.TestCase):
         for line in self.server_log.read_text(encoding="utf-8").splitlines():
             if "tool by hand" in line:
                 print("e2e: server: " + line, file=sys.stderr)
+
+    def test_save_team_tool(self):
+        """A team saves the quadrat example over the API and reads it back as valid."""
+        self.request("POST", "/admin/api/login", {"password": self.admin_password}, expect=(204,))
+        team = self.request("POST", "/api/join", {"code": self.lab_code, "name": "Baumeister"},
+                            opener=urllib.request.build_opener(), expect=(201,))
+        self.give_task(team, "Eigene Werkzeuge")
+        example = json.loads((ROOT / "docs" / "examples" / "programs" / "quadrat.json").read_text(encoding="utf-8"))
+        saved = self.team_request(team, "POST", "/programs", {"name": "quadrat", "description": "Fährt ein Quadrat.",
+                                                               "blockly": example["blockly"]}, expect=(201,))
+        self.assertTrue(saved["valid"], saved)
+        back = self.team_request(team, "GET", "/programs/%s" % saved["id"])
+        self.assertEqual(back["blockly"], example["blockly"])
+        listed = self.team_request(team, "GET", "/programs")
+        self.assertEqual([(p["name"], p["valid"]) for p in listed], [("quadrat", True)])
+        for line in self.server_log.read_text(encoding="utf-8").splitlines():
+            if "team tool saved" in line:
+                print("e2e: server: " + line, file=sys.stderr)
+
+    def test_quadrat_brings_the_robot_back(self):
+        """Stage 2: a loop. The quadrat tool drives a square and ends near its start."""
+        self.request("POST", "/admin/api/login", {"password": self.admin_password}, expect=(204,))
+        self.robot_online(ROBOT)
+        team = self.request("POST", "/api/join", {"code": self.lab_code, "name": "Quadrat"},
+                            opener=urllib.request.build_opener(), expect=(201,))
+        self.give_task(team, "Wiederholen")
+        self.request("POST", "/admin/api/assign", {"robot": ROBOT, "team": team["id"]}, expect=(204,))
+        self.follow_team_log(team["token"])
+        self.wait_for(lambda: any(r["online"] for r in self.team_request(team, "GET", "/api/session")["robots"]), "robot assigned")
+        time.sleep(1.5)  # the robot learns its owner from the next heartbeat
+        start = self.poses()[-1]
+        result = self.run_team_tool(team, "quadrat", "quadrat")
+        self.assertEqual(result["end"], "done", result)
+        self.assertEqual(result["steps"], 8, result)
+        end = self.poses()[-1]
+        off = ((end[0] - start[0]) ** 2 + (end[1] - start[1]) ** 2) ** 0.5
+        print("e2e: quadrat %s -> %s, %.1f cm off" % (start, end, off), file=sys.stderr)
+        self.assertLess(off, 10, (start, end))
+
+    def test_team_tools_only_task(self):
+        """Challenge rule: the agent has only the team's own tools. Its call of
+        a built-in motion tool comes back as unknown; its team tool runs."""
+        self.request("POST", "/admin/api/login", {"password": self.admin_password}, expect=(204,))
+        self.robot_online(ROBOT)
+        team = self.request("POST", "/api/join", {"code": self.lab_code, "name": "Nur Eigene"},
+                            opener=urllib.request.build_opener(), expect=(201,))
+        task = self.request("POST", "/admin/api/tasks", {"title": "Challenge", "body": "Nur eigene Werkzeuge.", "agent_tools": "team_tools"}, expect=(201,))
+        self.request("POST", "/admin/api/tasks/%s/publish" % task["id"])
+        self.request("POST", "/admin/api/tasks/%s/assign" % task["id"], {"teams": [team["id"]]})
+        self.team_request(team, "POST", "/tasks/%s/accept" % task["id"], {"prompt": "empty"})
+        self.request("POST", "/admin/api/assign", {"robot": ROBOT, "team": team["id"]}, expect=(204,))
+        self.follow_team_log(team["token"])
+        self.wait_for(lambda: any(r["online"] for r in self.team_request(team, "GET", "/api/session")["robots"]), "robot assigned")
+        time.sleep(1.5)
+        ex = json.loads((ROOT / "docs" / "examples" / "programs" / "quadrat.json").read_text(encoding="utf-8"))
+        self.team_request(team, "POST", "/programs", {"name": "quadrat", "description": "Fährt ein Quadrat.", "blockly": ex["blockly"]}, expect=(201,))
+        self.team_request(team, "POST", "/prompt", {"text": "Fahre mit `quadrat` ein Quadrat."}, expect=(201,))
+        self.team_request(team, "POST", "/start", expect=(202,))
+        self.wait_for(lambda: self.log_entries(lambda e: e.get("kind") == "run_end"), "the end of the run")
+        calls = {(e.get("data") or {}).get("name"): (e.get("data") or {}).get("result") for e in
+                 self.log_entries(lambda e: e.get("kind") == "tool" and e.get("source") == "agent" and not (e.get("data") or {}).get("program"))}
+        print("e2e: restricted task: drive_until -> %s; quadrat -> %s" % (calls.get("drive_until"), calls.get("quadrat")), file=sys.stderr)
+        self.assertIn("gibt es nicht", calls["drive_until"]["error"])
+        self.assertEqual(calls["quadrat"]["end"], "done")
+
+        # The control room scores the finished run: the lab lead confirms it
+        # and notes a hand on the robot; the run shows the four measures.
+        scored = self.request("GET", "/admin/api/tasks/%s/runs" % task["id"])["teams"]
+        self.assertEqual([t["name"] for t in scored], ["Nur Eigene"], scored)
+        run = scored[0]["runs"][0]
+        self.assertIsNone(run["success"], run)
+        self.request("POST", "/admin/api/runs/%d/confirm" % run["run"], {"success": True}, expect=(204,))
+        self.request("POST", "/admin/api/runs/%d/intervention" % run["run"], {"kind": "moved"}, expect=(204,))
+        scored = self.request("GET", "/admin/api/tasks/%s/runs" % task["id"])["teams"]
+        run = scored[0]["runs"][0]
+        print("e2e: scored run: success=%s to_goal_s=%s calls=%s interventions=%s team_tools=%s end=%s" % (
+            run["success"], run.get("to_goal_s"), run["calls"], run["interventions"], run["team_tools"], run.get("end_reason")), file=sys.stderr)
+        self.assertTrue(run["success"], run)
+        self.assertGreater(run["calls"], 0, run)
+        self.assertEqual(run["interventions"]["moved"], 1, run)
+        self.assertEqual(run["team_tools"], ["quadrat"], run)
+        if run.get("end_reason") == "finish":
+            self.assertIn("to_goal_s", run)
+        self.assertEqual((scored[0]["successes"], scored[0]["rank"]), (1, 1), scored)
 
     def test_two_tasks_and_a_switch(self):
         """A team works in two tasks and switches between them: prompt, notes

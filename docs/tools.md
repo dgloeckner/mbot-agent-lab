@@ -102,6 +102,69 @@ takes a color only, no pattern.
 - **Deliberately no tool for:** Wi-Fi, vendor cloud services, reboot, setting the name, raw motor
   power.
 
+## Team tools as agent tools
+
+A deploy freezes the prompt and every team tool of the (team, task) as one version
+(`programs.md`, "Versions"). The agent gets each team tool of the newest version that is valid
+and has a description as a tool of its own:
+
+- **Name and description** are the team's. The server appends one fixed sentence: "Dies ist ein
+  Werkzeug, das das Team selbst gebaut hat. Es läuft ohne Rückfragen durch und meldet am Ende,
+  ob es fertig wurde oder wo es abbrach." No parameters, except `robot` (required enum) when the
+  team has several robots.
+- **Call:** the team tool runs inside the agent's tool call; the agent waits, messages collect in
+  its inbox meanwhile. Its steps count against the run's time limit, not as model steps or model
+  calls. A tool changed after the deploy applies from the next deploy.
+- **Result for the agent:** `{ok, end, steps, runtime_s, at, last, robot}`, plus `value` from
+  `gib zurück` and `error` (a German sentence) when it did not end `done`. `last` is the last
+  built-in tool's result only; earlier steps, and their floor traces, stay out of the agent's
+  context.
+- **Protocol:** the team sees every step in the log (source agent, `data.program`); the steps are
+  stored as tool calls of the run that name the team tool (`tool_calls.program`), before the
+  call's own row.
+- **Conversation mode** lists the team tools as text, like the other tools.
+- **Deploy warning:** if the prompt names something in code style (`` `name` ``) that is neither a
+  team tool of the version, nor a built-in tool, nor one of the team's robots, the deploy answers
+  a warning and still deploys.
+
+## Tool set of a task
+
+A task says which tools the agent gets (`agent_tools`, set on the draft, fixed when published):
+
+- `all` (default): every built-in tool and the team tools of the deployed version.
+- `team_tools`: the team's deployed own tools plus `read_sensors`, `say`, `finish`, `tell_team`,
+  `remember` and `forget`. These six move no robot, so the comparison of how teams cut their tools
+  (stage 5) still measures the team tools: everything that moves a robot is the team's.
+
+A call of a tool that is not on the list answers like any unknown tool ("Das Werkzeug … gibt es
+nicht. Verfügbar: …"), so the agent can correct itself; the server logs `tool not offered`.
+Conversation mode lists the same tools. The console and "Ausführen" stay available outside runs;
+in the challenge the lab lead counts them as interventions.
+
+## Block texts
+
+Every by-hand tool has one line in `server/internal/tools/blocks.go`: the German sentence of its
+block in the team tool editor, with its fields in order, their defaults and units. Ranges and
+options come from the tool's schema. A new by-hand tool needs one line there and then appears in
+the editor (`docs/programs.md`, "Blocks"); a test fails for a by-hand tool without one.
+
+| Tool | Group | Block text | Fields (default) |
+| --- | --- | --- | --- |
+| `drive` | Fahren | fahre %1 cm | `cm` (20) |
+| `turn` | Fahren | drehe %1 Grad nach %2 | `degrees` (90), rechts/links sets the sign |
+| `drive_arc` | Fahren | fahre eine Kurve nach %1 mit Radius %2 cm, %3 Grad weit | rechts/links, `radius_cm` (30), `degrees` (90) |
+| `drive_until` | Fahren | fahre geradeaus, höchstens %1 cm, bis eine Wand näher als %2 cm ist oder der Boden %3 ist | `max_cm` (100), `stop_below_cm` (15), `stop_on_color` (egal) |
+| `turn_until_clear` | Fahren | drehe nach %1, bis vorne %2 cm frei sind | `direction` (rechts), `min_cm` (40) |
+| `follow_line_until` | Fahren | folge der Linie bis %1, höchstens %2 cm | `stop_on_color` (zur Kreuzung), `max_cm` (100) |
+| `retrace_path` | Fahren | fahre den Weg zurück zum Anfang | — |
+| `scan` | Sensoren | schau dich um von %1 bis %2 Grad und schau dann %3 | `from_deg` (-90), `to_deg` (90), `face` (in die freieste Richtung) |
+| `read_sensors` | Sensoren | lies die Sensoren | — |
+| `wait_for` | Sensoren | warte auf %1, höchstens %2 Sekunden | `event` (Knopf A), `timeout_s` (10) |
+| `set_leds` | Licht und Anzeige | Licht %1 | `color` (grün) |
+| `show_text` | Licht und Anzeige | zeige %1 | `text` (Hallo) |
+| `play_sound` | Licht und Anzeige | spiele den Ton %1 | `name` (hello) |
+| `identify` | Licht und Anzeige | blinke und piepe | — |
+
 ## Mapping to the protocol
 
 Motion and expression tools become a `cmd` with the same name (exceptions: `turn` and `drive_arc`
