@@ -40,7 +40,8 @@ test('the band keeps its height through a run and a conversation, and fits three
   expect(await left(page, '.robot')).toBe(before.card)
   expect(await left(page, '.band-actions .btn-on-band')).toBe(before.start)
 
-  await expect(page.locator('.agent-label')).toHaveText('Kein Lauf', { timeout: 40_000 })
+  await lab.teamCall(team, 'POST', '/stop') // the scripted model may explore for a while
+  await expect(page.locator('.agent-label')).toHaveText('Kein Lauf', { timeout: 20_000 })
   await lab.teamCall(team, 'POST', '/message', { text: 'Was kannst du?' })
   await expect(page.locator('.run-usage')).toContainText('gesamt', { timeout: 20_000 })
   await expect(page.locator('.run-usage')).toHaveAttribute('title', /davon Gespräche/, { timeout: 20_000 })
