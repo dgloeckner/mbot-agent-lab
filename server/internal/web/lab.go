@@ -66,7 +66,39 @@ func (s *Server) join(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]string{"id": t.ID, "name": t.Name, "color": t.Color, "token": t.Token})
 }
 
+// joinTeam: another PC of a team comes in with a join code and gets the team link.
+func (s *Server) joinTeam(w http.ResponseWriter, r *http.Request) {
+	securityHeaders(w)
+	if !sameOrigin(r) {
+		writeError(w, http.StatusForbidden, "Diese Anfrage kam nicht von der Lab-Seite.")
+		return
+	}
+	if !s.limiter.allow("jointeam:"+clientIP(r), 10, time.Minute) {
+		writeError(w, http.StatusTooManyRequests, "Zu viele Versuche. Wartet eine Minute und probiert es dann noch einmal.")
+		return
+	}
+	var req struct {
+		Code string `json:"code"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	t, err := s.Lab.TeamByJoinCode(r.Context(), req.Code)
+	if err != nil {
+		s.labError(w, err)
+		return
+	}
+	s.Log.Info("team joined by code", "team", t.ID)
+	writeJSON(w, http.StatusOK, map[string]string{"id": t.ID, "name": t.Name, "color": t.Color, "token": t.Token})
+}
+
 // --- team actions ------------------------------------------------------------
+
+// joinCode shows a short-lived join code for another PC of the team.
+func (s *Server) joinCode(w http.ResponseWriter, r *http.Request, team store.Team) {
+	code, until := s.Lab.JoinCode(team.ID)
+	writeJSON(w, http.StatusOK, map[string]any{"code": code, "expires_at": until})
+}
 
 func (s *Server) renameTeam(w http.ResponseWriter, r *http.Request, team store.Team) {
 	var req struct {

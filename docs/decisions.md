@@ -60,7 +60,7 @@ and goes here, not into `CLAUDE.md`. How the system works today: `architecture.m
 
 | Topic | Decision | Why |
 | --- | --- | --- |
-| Teams | join on `/join` with a lab code and get a secret link; not configured in YAML | approved deviation: teams form on the lab day |
+| Teams | join on `/join` with a lab code and get a secret link; not configured in YAML; another PC of the team joins with the link or with a join code (six characters, ten minutes, kept in memory) that only a PC with the link can show | approved deviation: teams form on the lab day; lab PCs share no clipboard, and a short-lived code does not give the link away for good |
 | Secrets | never in YAML or the repo; config names environment variables (`*_env`); `robot/config.py` is git-ignored | no leaked keys |
 
 ## Data

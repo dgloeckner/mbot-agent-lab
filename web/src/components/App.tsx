@@ -2,8 +2,8 @@ import { useEffect, useRef } from 'preact/hooks'
 import { COLOR_HEX, onColor } from '../format'
 import { lazyComponent } from '../lazy'
 import { pickerLists } from '../taskview'
-import { accepting, deployWarning, leftView, loadError, prefs, readOnly, session, task, tasks, toast, updatePrefs, wideTool } from '../state'
-import { defaultPrefs } from '../storage'
+import { accepting, deployWarning, leftView, loadError, unknownTeam, prefs, readOnly, session, task, tasks, toast, updatePrefs, wideTool } from '../state'
+import { browserKV, defaultPrefs, loadJoined } from '../storage'
 import { PromptPane } from './PromptPane'
 import { SidePane } from './SidePane'
 import { TeamBand } from './TeamBand'
@@ -99,6 +99,33 @@ export function App() {
     if (s) document.title = `${s.team.name}: mBot2 Agent Lab`
   }, [accent, s?.team.name])
 
+  if (unknownTeam.value) {
+    const earlier = loadJoined(browserKV()).filter((j) => !location.pathname.endsWith(j.token))
+    return (
+      <main class="fullpage-message unknown-team">
+        <h1>Diesen Team-Link gibt es nicht (mehr)</h1>
+        <p>Vielleicht ist er vertippt, oder die Lab-Leitung hat das Team gelöscht.</p>
+        <p>
+          <a class="btn btn-accent" href="/join">
+            Zur Anmeldung
+          </a>{' '}
+          Dort gründet ihr ein Team oder kommt mit dem Code eines Team-Rechners dazu.
+        </p>
+        {earlier.length > 0 && (
+          <>
+            <h2>Auf diesem Rechner schon dabei</h2>
+            <ul>
+              {earlier.map((j) => (
+                <li key={j.token}>
+                  <a href={`/t/${j.token}`}>{j.name}</a>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </main>
+    )
+  }
   if (loadError.value) {
     return (
       <main class="fullpage-message">

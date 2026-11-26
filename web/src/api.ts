@@ -6,7 +6,14 @@ import type { AgentStatus, LogEntry, Note, PromptChoice, PromptVersion, Robot, S
 export const token = decodeURIComponent(location.pathname.split('/')[2] ?? '')
 const base = `/t/${encodeURIComponent(token)}`
 
-export class ApiError extends Error {}
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status = 0,
+  ) {
+    super(message)
+  }
+}
 
 /** Thrown when the server could not be reached (network down, no answer in time). */
 export class NoConnection extends ApiError {}
@@ -30,7 +37,7 @@ async function req<T>(method: string, path: string, body?: unknown, timeoutMs?: 
   if (resp.status === 204) return undefined as T
   const data = await resp.json().catch(() => null)
   if (!resp.ok) {
-    throw new ApiError(data?.error ?? `Der Server hat mit Fehler ${resp.status} geantwortet.`)
+    throw new ApiError(data?.error ?? `Der Server hat mit Fehler ${resp.status} geantwortet.`, resp.status)
   }
   return data as T
 }
@@ -56,6 +63,8 @@ export const api = {
   updateNote: (id: number, text: string) => req<void>('PUT', `/notes/${id}`, { text }),
   deleteNote: (id: number) => req<void>('DELETE', `/notes/${id}`),
   renameTeam: (name: string) => req<void>('PUT', '/name', { name }),
+  /** A short-lived code another PC of the team enters on /join. */
+  joinCode: () => req<{ code: string; expires_at: string }>('POST', '/join-code'),
   setModel: (provider: string) => req<void>('PUT', '/model', { provider }),
   renameRobot: (robot: string, alias: string) => req<void>('PUT', `/robots/${encodeURIComponent(robot)}/alias`, { alias }),
   identify: (robot: string) => req<void>('POST', `/robots/${encodeURIComponent(robot)}/identify`),
