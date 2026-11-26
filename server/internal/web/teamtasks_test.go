@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -201,5 +202,40 @@ func TestSwitchSignalsAndScopesTheLog(t *testing.T) {
 		if e := <-fresh; strings.HasPrefix(e, "log ") && !strings.Contains(e, `"task_id":"`+b+`"`) {
 			t.Errorf("backlog after the switch holds %s", e)
 		}
+	}
+}
+
+// The page tells a dead connection from silence by the named keep-alive;
+// a stream it opens itself catches up with ?after= like with Last-Event-ID.
+func TestEventsKeepAliveAndAfter(t *testing.T) {
+	srv := newTestServer(t)
+	do(t, srv, "POST", "/t/tok-rot/prompt", `{"text":"Version eins"}`)
+	do(t, srv, "POST", "/t/tok-rot/prompt", `{"text":"Version zwei"}`)
+	events := sse(t, srv, "tok-rot", "")
+	if got := waitEvent(t, events, func(e string) bool { return strings.HasPrefix(e, "ping ") }); got != `ping {"every_s":10}` {
+		t.Errorf("keep-alive = %q", got)
+	}
+	first := waitEvent(t, events, func(e string) bool { return strings.HasPrefix(e, "log ") && strings.Contains(e, `"kind":"deploy"`) })
+	var entry struct {
+		ID int64 `json:"id"`
+	}
+	_ = json.Unmarshal([]byte(strings.TrimPrefix(first, "log ")), &entry)
+
+	req, _ := http.NewRequest("GET", srv.URL+"/t/tok-rot/events?after="+strconv.FormatInt(entry.ID, 10), nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	sc := bufio.NewScanner(resp.Body)
+	var deploys []string
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && len(deploys) < 1 && sc.Scan() {
+		if line := sc.Text(); strings.HasPrefix(line, "data: ") && strings.Contains(line, `"kind":"deploy"`) {
+			deploys = append(deploys, line)
+		}
+	}
+	if len(deploys) != 1 || !strings.Contains(deploys[0], `"version":2`) {
+		t.Errorf("after %d: %v", entry.ID, deploys)
 	}
 }

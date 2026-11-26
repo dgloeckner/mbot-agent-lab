@@ -502,12 +502,15 @@ func (s *Server) serverError(w http.ResponseWriter, err error) {
 // SSE timing.
 const (
 	robotPollInterval = 250 * time.Millisecond
-	ssePingInterval   = 15 * time.Second
+	ssePingInterval   = 10 * time.Second
 )
 
 // events streams robot snapshots ("robots"), the agent status ("agent") with
 // the team's totals over all runs ("totals"), the model choice ("models") and
-// log entries ("log") to the team page. Last-Event-ID lets a reconnecting browser catch up on the log.
+// log entries ("log") to the team page. Last-Event-ID (or ?after=, for a
+// page that opens a new stream itself) lets a reconnecting browser catch up
+// on the log. A named keep-alive ("ping", with its interval) lets the page
+// tell silence from a dead connection; a comment would not reach it.
 func (s *Server) events(w http.ResponseWriter, r *http.Request, team store.Team) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -520,6 +523,9 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, team store.Team)
 	h.Set("X-Accel-Buffering", "no") // proxies must not buffer the stream
 
 	after, _ := strconv.ParseInt(r.Header.Get("Last-Event-ID"), 10, 64)
+	if after == 0 {
+		after, _ = strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
+	}
 	backlog, ch, cancel := s.Hub.Subscribe(team.ID, after)
 	defer cancel()
 	// The page shows one task: log entries of another task never reach it.
@@ -596,7 +602,8 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, team store.Team)
 		return err
 	}
 
-	_, _ = fmt.Fprint(w, "retry: 2000\n\n")
+	pingEvent := fmt.Sprintf("event: ping\ndata: {\"every_s\":%d}\n\n", int(ssePingInterval.Seconds()))
+	_, _ = fmt.Fprint(w, "retry: 2000\n\n"+pingEvent)
 	if sendRobots() != nil || sendAgent() != nil || sendModels() != nil {
 		return
 	}
@@ -626,7 +633,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, team store.Team)
 				}
 			}
 		case <-ping.C:
-			_, err = fmt.Fprint(w, ": ping\n\n")
+			_, err = fmt.Fprint(w, pingEvent)
 		}
 		if err != nil {
 			return

@@ -1,7 +1,7 @@
 // Application state (Preact signals) and the actions that change it.
 
 import { computed, effect, signal } from '@preact/signals'
-import { api, ApiError, connectEvents, type ConnState } from './api'
+import { api, ApiError, connectEvents, NoConnection, type ConnState } from './api'
 import { LocalStore, browserKV, dropOldKeys, shouldAutoSnapshot, type Prefs, type Snapshot } from './storage'
 import { belongsTo, taskView } from './taskview'
 import { createSaver, freeName, idleRun, reduceRun, type RunView } from './toolrun'
@@ -28,6 +28,8 @@ export const conversation = signal<LogEntry[]>([])
 /** Agent answers in the conversation the team has not seen yet. */
 export const conversationUnread = signal(0)
 export const conn = signal<ConnState>('connecting')
+/** When the last live event arrived: robot values are as old as this while the connection is lost. */
+export const lastLive = signal(Date.now())
 export const notes = signal<Note[]>([])
 
 /** The active task (with its text) and every task assigned to the team. */
@@ -69,10 +71,10 @@ export const dirty = computed(() => draft.value !== (deployed.value?.text ?? '')
 const MAX_LOG = 500
 let toastTimer: number | undefined
 
-export function showToast(text: string, kind: 'ok' | 'error' = 'ok') {
+export function showToast(text: string, kind: 'ok' | 'error' = 'ok', ms = kind === 'error' ? 6000 : 2800) {
   toast.value = { text, kind }
   window.clearTimeout(toastTimer)
-  toastTimer = window.setTimeout(() => (toast.value = null), kind === 'error' ? 6000 : 2800)
+  toastTimer = window.setTimeout(() => (toast.value = null), ms)
 }
 
 function fail(err: unknown) {
@@ -177,7 +179,10 @@ export async function init() {
     tasks: () => void reloadTasks(),
     programs: (id) => void onProgramsChanged(id),
     program: (e) => onProgramEvent(e),
-    status: (st) => (conn.value = st),
+    status: (st, at) => {
+      conn.value = st
+      lastLive.value = at
+    },
     robots: (r) => (robots.value = r),
     agent: (a) => (agent.value = a),
     totals: (t) => (totals.value = t),
@@ -376,12 +381,19 @@ export async function sendMessage(text: string): Promise<boolean> {
 /** Ends the conversation; the agent then only knows its notes and the last run. */
 export const newConversation = () => attempt(api.newConversation())
 
+/** Said when a stop cannot reach the server: nobody may believe the robots stopped. */
+export const NOT_STOPPED =
+  'Keine Verbindung zum Server: Eure Roboter wurden NICHT angehalten. Hebt den Roboter hoch und sagt der Lab-Leitung Bescheid.'
+
 export async function stopAll() {
   busy.value = 'stop'
+  // Without a live connection, say it at once; the request may hang until its timeout.
+  if (conn.peek() !== 'live') showToast(NOT_STOPPED, 'error', 12_000)
   try {
     await api.stop()
   } catch (err) {
-    fail(err)
+    if (err instanceof NoConnection) showToast(NOT_STOPPED, 'error', 12_000)
+    else fail(err)
   } finally {
     busy.value = null
   }

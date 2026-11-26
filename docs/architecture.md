@@ -272,7 +272,7 @@ a closed task writes answer 409 and reads work. Stop always works.
 | `POST programs/{id}/run`, `POST program-runs/{id}/continue` | run a team tool on a robot `{robot?, step?}`; let a single-step run take its next call (`programs.md`, "Running a team tool") |
 | `GET blocks` | Blockly block definitions and toolbox of the tool editor, built from the registry (`programs.md`, "Blocks") |
 | `POST message`, `POST conversation/new` | message to the own agent; start a new conversation |
-| `GET events` | SSE: `log`, `robots`, `agent`, `totals`, `models`, `task` (active task changed), `tasks` (assigned, withdrawn, accepted or closed), `programs` (a team tool was saved or deleted; `id`), `program` (a step of a running team tool); `Last-Event-ID` catches up |
+| `GET events` | SSE: `ping` (keep-alive with its interval), `log`, `robots`, `agent`, `totals`, `models`, `task` (active task changed), `tasks` (assigned, withdrawn, accepted or closed), `programs` (a team tool was saved or deleted; `id`), `program` (a step of a running team tool); `Last-Event-ID` or `?after=` catches up |
 | `GET/POST notes`, `PUT/DELETE notes/{id}` | notes |
 | `PUT name`, `PUT model` | rename the team, choose the model |
 | `PUT robots/{robot}/alias`, `POST robots/{robot}/identify` | rename a robot, make it blink and beep |
@@ -429,6 +429,15 @@ accept or switch) and stamps it on every entry (`task_id`). A reconnecting page 
 backlog of the active task, and a stream never forwards entries of another task. When the active
 task changes, every page of the team gets the SSE event `task` and reloads prompt, notes, log and
 conversation; `tasks` tells it to reload the task list.
+
+A dead connection often gives the browser no error (a Wi-Fi that drops packets, a frozen server):
+the stream stays open and nothing arrives. The team stream therefore sends a named keep-alive
+`ping` (`{"every_s":10}`) at the start and every 10 s; an SSE comment would not reach the page.
+The page notes the time of every event. After three intervals of silence, or when the browser
+reports `offline`, the band shows "Verbindung unterbrochen", robot cards show "Stand vor N s"
+with greyed values instead of "online", and the page opens a new stream with `?after=` the last
+log entry (the same as `Last-Event-ID`). "Stopp" without a connection, or one that gets no answer
+within 5 s, says that the robots were **not** stopped and what to do.
 
 ## Web UI
 

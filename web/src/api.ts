@@ -8,16 +8,24 @@ const base = `/t/${encodeURIComponent(token)}`
 
 export class ApiError extends Error {}
 
-async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+/** Thrown when the server could not be reached (network down, no answer in time). */
+export class NoConnection extends ApiError {}
+
+async function req<T>(method: string, path: string, body?: unknown, timeoutMs?: number): Promise<T> {
   let resp: Response
+  const ctl = timeoutMs ? new AbortController() : undefined
+  const timer = ctl ? window.setTimeout(() => ctl.abort(), timeoutMs) : undefined
   try {
     resp = await fetch(base + path, {
       method,
       headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal: ctl?.signal,
     })
   } catch {
-    throw new ApiError('Keine Verbindung zum Server. Prüft das Netzwerk und versucht es noch einmal.')
+    throw new NoConnection('Keine Verbindung zum Server. Prüft das Netzwerk und versucht es noch einmal.')
+  } finally {
+    window.clearTimeout(timer)
   }
   if (resp.status === 204) return undefined as T
   const data = await resp.json().catch(() => null)
@@ -41,7 +49,8 @@ export const api = {
   message: (text: string) => req<LogEntry>('POST', '/message', { text }),
   newConversation: () => req<void>('POST', '/conversation/new'),
   start: () => req<AgentStatus>('POST', '/start'),
-  stop: () => req<unknown>('POST', '/stop'),
+  /** Short timeout: a stop that hangs must not look like a stop that worked. */
+  stop: () => req<unknown>('POST', '/stop', undefined, 5000),
   notes: () => req<Note[]>('GET', '/notes'),
   addNote: (text: string) => req<Note>('POST', '/notes', { text }),
   updateNote: (id: number, text: string) => req<void>('PUT', `/notes/${id}`, { text }),
@@ -71,14 +80,21 @@ export const api = {
 
 export type ConnState = 'connecting' | 'live' | 'reconnecting'
 
-/** Opens the live stream. EventSource reconnects by itself and resumes the log via Last-Event-ID. */
+/**
+ * Opens the live stream. EventSource reconnects by itself after an error and
+ * resumes the log via Last-Event-ID. A connection that stays open but carries
+ * nothing (a dead Wi-Fi, a frozen server) gives no error: the server sends a
+ * named keep-alive ("ping"), and after three intervals without any event the
+ * page reports the connection as lost and opens a new stream (?after= the last
+ * log entry). `status` gets the time of the last event with it.
+ */
 export function connectEvents(on: {
   robots: (r: Robot[]) => void
   agent: (a: AgentStatus) => void
   models: (m: TeamModels) => void
   totals: (t: Totals) => void
   log: (e: LogEntry) => void
-  status: (s: ConnState) => void
+  status: (s: ConnState, lastEvent: number) => void
   /** The active task changed (on any PC of the team): reload everything. */
   task: (id: string) => void
   /** A task was assigned, withdrawn, accepted or closed: reload the task list. */
@@ -90,31 +106,76 @@ export function connectEvents(on: {
 }): { close: () => void; restart: () => void } {
   let es: EventSource | null = null
   let retry: number | undefined
-  const open = () => {
-    es = new EventSource(`${base}/events`)
-    es.addEventListener('open', () => on.status('live'))
+  let lastEvent = Date.now()
+  let lastId = ''
+  let everyMs = 10_000
+  let state: ConnState = 'connecting'
+  let silentSince = Date.now() // last event, or last attempt to reconnect
+  const set = (st: ConnState) => {
+    if (st !== state) on.status((state = st), lastEvent)
+  }
+  const seen = () => {
+    lastEvent = silentSince = Date.now()
+    set('live')
+  }
+  const open = (after = '') => {
+    es = new EventSource(`${base}/events${after ? `?after=${encodeURIComponent(after)}` : ''}`)
+    es.addEventListener('open', seen)
     es.addEventListener('error', () => {
-      on.status('reconnecting')
+      set('reconnecting')
       if (es?.readyState === EventSource.CLOSED) {
         es.close()
-        retry = window.setTimeout(open, 3000)
+        retry = window.setTimeout(() => open(lastId), 3000)
       }
     })
-    es.addEventListener('robots', (ev) => on.robots(JSON.parse((ev as MessageEvent).data)))
-    es.addEventListener('agent', (ev) => on.agent(JSON.parse((ev as MessageEvent).data)))
-    es.addEventListener('totals', (ev) => on.totals(JSON.parse((ev as MessageEvent).data)))
-    es.addEventListener('models', (ev) => on.models(JSON.parse((ev as MessageEvent).data)))
-    es.addEventListener('log', (ev) => on.log(JSON.parse((ev as MessageEvent).data)))
-    es.addEventListener('task', (ev) => on.task(JSON.parse((ev as MessageEvent).data).task_id ?? ''))
-    es.addEventListener('tasks', () => on.tasks())
-    es.addEventListener('programs', (ev) => on.programs(JSON.parse((ev as MessageEvent).data).id ?? ''))
-    es.addEventListener('program', (ev) => on.program(JSON.parse((ev as MessageEvent).data)))
+    const listen = (name: string, f: (data: any, ev: MessageEvent) => void) =>
+      es!.addEventListener(name, (ev) => {
+        seen()
+        f(JSON.parse((ev as MessageEvent).data), ev as MessageEvent)
+      })
+    listen('ping', (d) => (everyMs = Math.max(1000, (Number(d.every_s) || 10) * 1000)))
+    listen('robots', (d) => on.robots(d))
+    listen('agent', (d) => on.agent(d))
+    listen('totals', (d) => on.totals(d))
+    listen('models', (d) => on.models(d))
+    listen('log', (d, ev) => {
+      if (ev.lastEventId) lastId = ev.lastEventId
+      on.log(d)
+    })
+    listen('task', (d) => on.task(d.task_id ?? ''))
+    listen('tasks', () => on.tasks())
+    listen('programs', (d) => on.programs(d.id ?? ''))
+    listen('program', (d) => on.program(d))
   }
+  // Silence for three keep-alive intervals: the connection is dead even if the browser does not know.
+  const watchdog = window.setInterval(() => {
+    if (Date.now() - silentSince < 3 * everyMs) return
+    set('reconnecting')
+    reconnect() // the next attempt after another three intervals
+  }, 1000)
+  // The browser knows it is offline: say so at once and reconnect when it is back.
+  const reconnect = () => {
+    silentSince = Date.now()
+    window.clearTimeout(retry)
+    es?.close()
+    open(lastId)
+  }
+  const offline = () => set('reconnecting')
+  window.addEventListener('offline', offline)
+  window.addEventListener('online', reconnect)
   open()
   const close = () => {
     window.clearTimeout(retry)
     es?.close()
   }
   // A fresh connection (no Last-Event-ID) replays the whole backlog of the active task.
-  return { close, restart: () => (close(), open()) }
+  return {
+    close: () => {
+      window.clearInterval(watchdog)
+      window.removeEventListener('offline', offline)
+      window.removeEventListener('online', reconnect)
+      close()
+    },
+    restart: () => (close(), (lastId = ''), open()),
+  }
 }
