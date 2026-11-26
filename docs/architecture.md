@@ -467,7 +467,10 @@ embed compiling without a build. No CDN assets. Rarely used views are lazy-loade
     960 px up (`web/e2e/layout.spec.ts`).
   - **Console** (tab "Werkzeuge"): every tool of the catalog; a click on a by-hand tool opens it
     in place (lazy-loaded `ToolConsole`): a form built from the tool's JSON schema in the session
-    (`web/src/console.ts`), "Ausführen" (`POST tools/{name}`) and the result below: one sentence
+    (`web/src/console.ts`; fields in the order of the signature shown in the row, optional ones
+    marked "optional"; a missing required value is caught in the browser with the server's
+    sentence and not sent), "Ausführen" (`POST tools/{name}`) and the result below, scrolled into
+    view when it arrives (the previous one dims while a call runs): one sentence
     in the protocol's words, the key fields, the floor trace as a band (four rows, one per probe)
     and the JSON on demand. "In den Prompt einfügen" stays as a second action. Agent-only tools
     carry "nur Agent" and open the same way, with only "In den Prompt einfügen" inside. The

@@ -19,8 +19,12 @@ export interface Field {
   hint?: string
 }
 
-/** The form of a tool: one field per argument, required ones first. The robot comes from the picker. */
-export function fieldsOf(schema: JSONSchema | undefined): Field[] {
+/**
+ * The form of a tool: one field per argument, in the order of the signature
+ * shown in the row (params, e.g. "from_deg?, to_deg?, step_deg?, face?");
+ * arguments the signature lacks come last. The robot comes from the picker.
+ */
+export function fieldsOf(schema: JSONSchema | undefined, params = ''): Field[] {
   const props = schema?.properties ?? {}
   const required = new Set(schema?.required ?? [])
   const fields: Field[] = []
@@ -42,7 +46,21 @@ export function fieldsOf(schema: JSONSchema | undefined): Field[] {
     if (p.description) f.hint = p.description
     fields.push(f)
   }
-  return fields.sort((a, b) => Number(b.required) - Number(a.required))
+  const order = params
+    .split(',')
+    .map((p) => p.trim().replace(/\?$/, ''))
+    .filter(Boolean)
+  const rank = (f: Field) => {
+    const i = order.indexOf(f.name)
+    return i < 0 ? order.length + (f.required ? 0 : 1) : i
+  }
+  return fields.map((f, i) => [f, i] as const).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([f]) => f)
+}
+
+/** The first required field without a value, in the server's words, or null. */
+export function missingRequired(fields: Field[], values: Record<string, string>): string | null {
+  const f = fields.find((x) => x.required && (values[x.name] ?? '').trim() === '')
+  return f ? `Es fehlt das Argument "${f.name}".` : null
 }
 
 /** Form values (strings, as inputs hold them) to the arguments of a call. Empty optional fields are left out. */

@@ -26,6 +26,8 @@ func TestTaskRunsCountInterventions(t *testing.T) {
 	for i := 1; i <= 2; i++ {
 		_ = st.AddToolCall(ctx, m, i, "drive", json.RawMessage(`{}`), json.RawMessage(`{}`), time.Millisecond, RobotRef{})
 	}
+	// A refused call (missing argument) moved nothing: no intervention.
+	_ = st.AddToolCall(ctx, m, 3, "drive", json.RawMessage(`{}`), json.RawMessage(`{"ok":false,"error":"Es fehlt das Argument \"cm\"."}`), time.Millisecond, RobotRef{})
 	_ = st.EndManualRuns(ctx, "rot", "run_start")
 	time.Sleep(5 * time.Millisecond)
 	r1, _ := st.CreateRun(ctx, tt, p.ID, "m")
