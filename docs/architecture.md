@@ -464,6 +464,12 @@ embed compiling without a build. No CDN assets. Rarely used views are lazy-loade
 - **Team page** (`/t/{token}`): prompt editor (CodeMirror, Markdown, tool name completion),
   preview, history with diffs against deployed versions and local snapshots, live log over SSE,
   conversation tab, notes, tools and console, robots with rename and "Finden", usage, model choice.
+  - **Protokoll:** steps of a team tool carry their robot (`data.robot`); with several robots
+    the line names it (`drive(robot: blau, cm: 20)`). Lab events (task assigned, withdrawn or
+    closed, robot given or taken) also show as a toast on every tab. Scrolled up, the log keeps
+    its place and offers "Neue Einträge ↓". "Stopp" always answers with a toast. Which
+    conversation answers were seen is kept per task in the UI preferences, so a reload does not
+    mark them new again.
   - **Layout:** prompt and side pane side by side with a splitter (a share of the width, 58 %
     by default, held between 420 px and 400 px minimums; a double click or Home resets it); the
     side pane's tabs get closer when it is narrow (container query) and scroll inside their row

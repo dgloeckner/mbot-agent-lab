@@ -245,6 +245,7 @@ func (c *programCaller) Call(ctx context.Context, tool string, args map[string]a
 	}
 	c.m.Hub.Publish(c.team, live.LogEntry{Source: source, Kind: "tool", Data: mustJSON(map[string]any{
 		"name": tool, "args": json.RawMessage(stored), "result": result, "ms": d.Milliseconds(), "program": c.name,
+		"robot": c.robot.Alias, // with several robots the page names it on every step
 	})})
 	if c.onStep != nil {
 		c.onStep(tool, stored, result, d)

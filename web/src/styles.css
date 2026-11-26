@@ -1094,12 +1094,36 @@ kbd {
   color: var(--bg);
 }
 
+.log-wrap {
+  position: relative;
+  min-height: 0;
+}
+
 .log {
+  height: 100%;
   list-style: none;
   margin: 0;
   padding: 4px 0 12px;
   overflow: auto;
   border-top: 1px solid var(--line);
+}
+
+/* Scrolled up while new lines arrive: a way back down. */
+.new-below {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--bg);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 650;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.2);
+  cursor: pointer;
 }
 
 .log-line {
