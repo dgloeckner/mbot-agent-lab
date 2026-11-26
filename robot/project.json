@@ -11,6 +11,26 @@
       "options": {
         "command": "python3 robot/tools/bundle.py"
       }
+    },
+    "upload": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "inputs": [
+        "{projectRoot}/src/**/*",
+        "{projectRoot}/tools/bundle.py",
+        "{workspaceRoot}/server/cmd/robotupload/**/*",
+        "{workspaceRoot}/server/internal/cyberpi/**/*",
+        "{workspaceRoot}/server/go.mod",
+        "{workspaceRoot}/server/go.sum"
+      ],
+      "options": {
+        "commands": [
+          "test -n \"{args.config}\" || (echo 'usage: npx nx run robot:upload --config=robot/config.py [--port=/dev/cu.usbserial-XXXX]' >&2 && exit 1)",
+          "python3 robot/tools/bundle.py --config \"{args.config}\"",
+          "cd server && go run ./cmd/robotupload --port=\"{args.port}\" ../robot/dist/main.py"
+        ],
+        "parallel": false
+      }
     }
   }
 }
