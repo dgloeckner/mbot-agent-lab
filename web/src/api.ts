@@ -40,7 +40,7 @@ export const api = {
   versions: () => req<PromptVersion[]>('GET', '/prompts'),
   prompt: (version: number) => req<PromptVersion>('GET', `/prompts/${version}`),
   deploy: (text: string, restart: boolean) =>
-    req<Omit<PromptVersion, 'tools'> & { tools: VersionTool[]; warning?: string }>('POST', '/prompt', { text, restart }),
+    req<Omit<PromptVersion, 'tools'> & { tools: VersionTool[]; warning?: string; unchanged?: boolean }>('POST', '/prompt', { text, restart }),
   restoreVersion: (version: number) => req<PromptVersion>('POST', `/prompts/${version}/restore`),
   /** Team tools that differ between a version and another one (against; 0 is the working state). */
   compareTools: (version: number, against: number) => req<ToolChanges>('GET', `/prompts/${version}/tools?against=${against || 'now'}`),

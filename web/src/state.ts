@@ -83,6 +83,10 @@ export function insertIntoPrompt(name: string) {
 }
 
 export const dirty = computed(() => draft.value !== (deployed.value?.text ?? ''))
+/** A team tool differs from the newest version (changed, new or deleted since). */
+export const toolsDirty = signal(false)
+/** Something to deploy: "Deployen" is the primary button only then. */
+export const needsDeploy = computed(() => !deployed.value || dirty.value || toolsDirty.value)
 
 const MAX_LOG = 500
 let toastTimer: number | undefined
@@ -269,6 +273,11 @@ export async function deploy(restart: boolean) {
   try {
     await toolSaver.flush() // a version holds the team tools as they are now
     const p = await api.deploy(text, restart)
+    if (p.unchanged) {
+      // Same text and team tools as the newest version: the server created nothing.
+      showToast(`Nichts geändert seit Version ${p.version}${restart ? '. Ein neuer Lauf mit dieser Version beginnt.' : '.'}`)
+      return
+    }
     applyDeployed({ version: p.version, created_at: p.created_at, chars: p.chars, text })
     if (local) history.value = local.addSnapshot(text, 'deploy', p.version)
     const withTools = p.tools.filter((t) => t.agent).length
@@ -557,6 +566,9 @@ export const toolBridge: { reload?: (id: string) => void } = {}
 export async function loadTeamTools() {
   try {
     teamTools.value = await api.programs()
+    const v = deployed.peek()?.version
+    // Also counts tools deleted since the newest version, which the list cannot show.
+    toolsDirty.value = v ? (await api.compareTools(v, 0)).tools.length > 0 : teamTools.peek().length > 0
   } catch {
     // the next "programs" event or a reload brings it
   }

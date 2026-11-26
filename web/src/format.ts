@@ -204,3 +204,30 @@ export function onColor(hex: string): string {
   const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
   return lum > 0.4 ? '#1B2230' : '#FFFFFF'
 }
+
+const RUN_END_SHORT: Record<string, string> = {
+  '': 'läuft',
+  finish: 'fertig',
+  stop: 'gestoppt',
+  restart: 'neu gestartet',
+  time_limit: 'Zeitlimit',
+  token_limit: 'Token-Limit',
+  task_closed: 'Aufgabe geschlossen',
+  team_deleted: 'Team gelöscht',
+  server_stop: 'Server angehalten',
+  server_restart: 'Server neu gestartet',
+}
+
+/** One line for a version in the history: "12 Zeichen geändert · 2 Läufe: 1 × fertig, 1 × gestoppt". */
+export function versionSummary(v: { version: number; delta?: number; runs?: Record<string, number> }): string {
+  const parts: string[] = []
+  if (v.delta !== undefined) parts.push(v.version === 1 ? `${formatNumber(v.delta)} Zeichen` : v.delta === 0 ? 'Prompt gleich' : `${formatNumber(v.delta)} Zeichen geändert`)
+  const runs = Object.entries(v.runs ?? {}).sort((a, b) => b[1] - a[1])
+  const total = runs.reduce((n, [, c]) => n + c, 0)
+  if (total > 0) {
+    parts.push(`${total === 1 ? '1 Lauf' : `${total} Läufe`}: ${runs.map(([r, c]) => `${c} × ${RUN_END_SHORT[r] ?? r}`).join(', ')}`)
+  } else {
+    parts.push('kein Lauf')
+  }
+  return parts.join(' · ')
+}

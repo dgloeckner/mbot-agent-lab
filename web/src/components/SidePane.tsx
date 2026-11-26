@@ -24,6 +24,7 @@ import {
   task,
   updatePrefs,
   insertIntoPrompt,
+  deployed,
 } from '../state'
 import { lazyComponent } from '../lazy'
 import type { SideTab } from '../storage'
@@ -102,7 +103,9 @@ function LogPanel() {
         {entries.length === 0 ? (
           <li class="empty-state">
             {filter.value === 'all'
-              ? 'Noch ist nichts passiert. Deployt euren Prompt oder schreibt eurem Agenten eine Nachricht.'
+              ? deployed.value
+                ? `Noch ist nichts passiert. Version ${deployed.value.version} ist deployt: startet einen Lauf oder schreibt eurem Agenten eine Nachricht.`
+                : 'Noch ist nichts passiert. Deployt euren Prompt oder schreibt eurem Agenten eine Nachricht.'
               : 'Dazu gibt es noch keine Einträge.'}
           </li>
         ) : (

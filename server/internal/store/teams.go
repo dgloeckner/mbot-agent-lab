@@ -22,6 +22,15 @@ type Prompt struct {
 	// Tools are the team tools that changed against the version before
 	// (ListPrompts only).
 	Tools []ToolChange `json:"tools,omitempty"`
+	// Delta is how many characters of the prompt changed against the
+	// version before (ListPrompts only; the first version: all of them).
+	Delta int `json:"delta"`
+	// Runs counts the runs of this version by how they ended ("" while one
+	// runs; ListPrompts only).
+	Runs map[string]int `json:"runs,omitempty"`
+	// Unchanged: SavePrompt found the same text and team tools in the newest
+	// version and created nothing; this is that version.
+	Unchanged bool `json:"unchanged,omitempty"`
 }
 
 // Changes of a team tool between two versions.
@@ -55,7 +64,26 @@ func parseTime(s string) time.Time {
 
 // SavePrompt stores text as the next version of the pair and returns it.
 // Versions count per (team, task), from 1.
+//
+// A deploy with the same text and the same team tools as the newest version
+// creates nothing: it answers that version with Unchanged set.
 func (s *Store) SavePrompt(ctx context.Context, tt TeamTask, text string) (Prompt, error) {
+	if newest, err := s.GetPrompt(ctx, tt, 0); err == nil && newest.Text == text {
+		frozen, err := s.VersionPrograms(ctx, newest.ID)
+		if err != nil {
+			return Prompt{}, err
+		}
+		cur, err := s.Programs(ctx, tt)
+		if err != nil {
+			return Prompt{}, err
+		}
+		if len(DiffTools(frozen, cur)) == 0 {
+			newest.Unchanged = true
+			return newest, nil
+		}
+	} else if err != nil && !errors.Is(err, ErrNotFound) {
+		return Prompt{}, err
+	}
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return Prompt{}, err
@@ -85,28 +113,59 @@ func (s *Store) SavePrompt(ctx context.Context, tt TeamTask, text string) (Promp
 // ListPrompts returns all versions of the pair, newest first, without text,
 // each with the team tools that changed against the version before.
 func (s *Store) ListPrompts(ctx context.Context, tt TeamTask) ([]Prompt, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT id, version, created_at, length(text) FROM prompts WHERE team_id = ? AND task_id = ? ORDER BY version DESC`, tt.Team, tt.Task)
+	rows, err := s.DB.QueryContext(ctx, `SELECT id, version, created_at, text FROM prompts WHERE team_id = ? AND task_id = ? ORDER BY version DESC`, tt.Team, tt.Task)
 	if err != nil {
 		return nil, err
 	}
 	out := []Prompt{}
+	var texts []string
 	for rows.Next() {
 		var p Prompt
-		var at string
-		if err := rows.Scan(&p.ID, &p.Version, &at, &p.Chars); err != nil {
+		var at, text string
+		if err := rows.Scan(&p.ID, &p.Version, &at, &text); err != nil {
 			rows.Close()
 			return nil, err
 		}
 		p.CreatedAt = parseTime(at)
+		p.Chars = len([]rune(text))
 		out = append(out, p)
+		texts = append(texts, text)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	// Tool changes: each version against the one before (oldest first).
+	// Runs of each version by their end.
+	runs, err := s.DB.QueryContext(ctx, `SELECT prompt_id, COALESCE(end_reason, ''), COUNT(*) FROM runs
+		WHERE team_id = ? AND task_id = ? AND kind = 'run' AND prompt_id IS NOT NULL GROUP BY prompt_id, end_reason`, tt.Team, tt.Task)
+	if err != nil {
+		return nil, err
+	}
+	byPrompt := map[int64]map[string]int{}
+	for runs.Next() {
+		var id int64
+		var reason string
+		var n int
+		if err := runs.Scan(&id, &reason, &n); err != nil {
+			runs.Close()
+			return nil, err
+		}
+		if byPrompt[id] == nil {
+			byPrompt[id] = map[string]int{}
+		}
+		byPrompt[id][reason] += n
+	}
+	runs.Close()
+	if err := runs.Err(); err != nil {
+		return nil, err
+	}
+	// Tool changes and prompt delta: each version against the one before (oldest first).
 	var prev []Program
+	prevText := ""
 	for i := len(out) - 1; i >= 0; i-- {
+		out[i].Runs = byPrompt[out[i].ID]
+		out[i].Delta = ChangeSize(prevText, texts[i])
+		prevText = texts[i]
 		cur, err := s.VersionPrograms(ctx, out[i].ID)
 		if err != nil {
 			return nil, err
@@ -141,6 +200,21 @@ func DiffTools(old, cur []Program) []ToolChange {
 		}
 	}
 	return out
+}
+
+// ChangeSize is how many characters differ between a and b, counted between
+// their common start and end (the page's snapshots count the same way).
+func ChangeSize(a, b string) int {
+	x, y := []rune(a), []rune(b)
+	start := 0
+	for start < len(x) && start < len(y) && x[start] == y[start] {
+		start++
+	}
+	end := 0
+	for end < len(x)-start && end < len(y)-start && x[len(x)-1-end] == y[len(y)-1-end] {
+		end++
+	}
+	return max(len(x), len(y)) - start - end
 }
 
 func sameJSON(a, b []byte) bool {

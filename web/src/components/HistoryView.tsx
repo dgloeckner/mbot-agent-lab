@@ -8,7 +8,7 @@ import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { markdownSupport } from '../editor'
 import { changeSize, type Snapshot } from '../storage'
-import { formatNumber, relativeTime } from '../format'
+import { formatNumber, relativeTime, versionSummary } from '../format'
 import { deployed, draft, history, restore, restoreVersion, unsavedWork, versions, versionText } from '../state'
 
 const ToolDiffView = lazyComponent(() => import('./ToolDiffView'))
@@ -153,6 +153,7 @@ export default function HistoryView({ onRestored }: { onRestored: () => void }) 
                   {relativeTime(v.created_at)}
                   {deployed.value?.version === v.version ? ', aktuell' : ''}
                 </span>
+                <span class="version-summary">{versionSummary(v)}</span>
                 {v.tools && v.tools.length > 0 && (
                   <span class="tool-changes">
                     {v.tools.map((c) => (

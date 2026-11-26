@@ -97,3 +97,43 @@ func TestTaskToolSetRoutes(t *testing.T) {
 		t.Errorf("session task = %v", sess["task"])
 	}
 }
+
+// A deploy without a change creates no version; a changed tool does. The
+// version list says how much of the prompt changed; a restore is logged.
+func TestDeployWithoutChange(t *testing.T) {
+	srv := newTestServer(t)
+	events := sse(t, srv, "tok-rot", "")
+	_, quadrat := do(t, srv, "POST", "/t/tok-rot/programs", saveBody("quadrat", "Fährt ein Quadrat.", exampleBlockly(t, "quadrat")))
+	if code, dep := do(t, srv, "POST", "/t/tok-rot/prompt", `{"text":"Fahre ein Quadrat."}`); code != http.StatusCreated || dep["version"] != 1.0 {
+		t.Fatalf("first deploy: %d %v", code, dep)
+	}
+	code, dep := do(t, srv, "POST", "/t/tok-rot/prompt", `{"text":"Fahre ein Quadrat."}`)
+	if code != http.StatusOK || dep["unchanged"] != true || dep["version"] != 1.0 {
+		t.Fatalf("same deploy: %d %v", code, dep)
+	}
+	id := quadrat["id"].(string)
+	do(t, srv, "PUT", "/t/tok-rot/programs/"+id, saveBody("quadrat", "Fährt ein großes Quadrat.", exampleBlockly(t, "quadrat")))
+	if code, dep := do(t, srv, "POST", "/t/tok-rot/prompt", `{"text":"Fahre ein Quadrat."}`); code != http.StatusCreated || dep["version"] != 2.0 {
+		t.Fatalf("deploy with a changed tool: %d %v", code, dep)
+	}
+	do(t, srv, "POST", "/t/tok-rot/prompt", `{"text":"Fahre zwei Quadrate."}`)
+
+	resp, _ := http.Get(srv.URL + "/t/tok-rot/prompts")
+	var versions []map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&versions)
+	resp.Body.Close()
+	if len(versions) != 3 {
+		t.Fatalf("versions = %v", versions)
+	}
+	// Newest first, counted between the common start and end ("Fahre " and ".").
+	if versions[0]["delta"] != 13.0 || versions[1]["delta"] != 0.0 || versions[2]["delta"] != 18.0 {
+		t.Errorf("deltas = %v, %v, %v", versions[0]["delta"], versions[1]["delta"], versions[2]["delta"])
+	}
+
+	do(t, srv, "DELETE", "/t/tok-rot/programs/"+id, "")
+	do(t, srv, "POST", "/t/tok-rot/prompts/1/restore", "")
+	got := waitEvent(t, events, func(e string) bool { return strings.Contains(e, `"kind":"restore"`) })
+	if !strings.Contains(got, "Version 1 wiederhergestellt, Werkzeug quadrat zurückgeholt.") {
+		t.Errorf("restore log = %s", got)
+	}
+}
