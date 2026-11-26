@@ -59,7 +59,10 @@ control loop, and even then only after the shield protocol is reverse-engineered
 From `docs/measurements.md`: an 80 KB `main.py` starts, a 120 KB one makes the CyberPi hang at
 start without output, after which mBlock can no longer upload until recovery. RAM is not the
 cause: 80 KB of source still leave about 1.17 MB of heap. Whether the hang comes from compiling
-one large module or from how the firmware handles a large `main.py` is unknown.
+one large module or from how the firmware handles a large `main.py` is unknown. A third candidate
+is the entry: the 120 KB script looped forever at its top level, and the script now starts through
+the firmware's start event instead; "Start: entry or size?" in `docs/measurements.md` tells them
+apart.
 
 The bundle is 43 KB today (`robot/tools/bundle.py`, comments stripped), and
 `test_bundle_size_budget` caps it at 60 KB. A motion skill takes 1.3 to 1.9 KB of the bundle
