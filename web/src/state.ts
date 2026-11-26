@@ -62,9 +62,25 @@ export const deployWarning = signal<string | null>(null)
 /** Set by the editor so other parts of the page can replace its content or insert text. */
 export const editorBridge: {
   replace?: (text: string) => void
-  insert?: (text: string) => void
+  insert?: (text: string) => 'cursor' | 'end'
   focus?: () => void
+  /** Shows the editor: the prompt view, tab "Schreiben". */
+  show?: () => void
 } = {}
+
+/** "In den Prompt einfügen": the prompt comes into view, the name is inserted and flashes, a toast says where. */
+export function insertIntoPrompt(name: string) {
+  if (!editorBridge.insert) return
+  const fromTool = leftView.peek() === 'tool'
+  leftView.value = 'prompt'
+  editorBridge.show?.()
+  // After the prompt is visible, so the editor can scroll to the name.
+  requestAnimationFrame(() => {
+    const where = editorBridge.insert?.('`' + name + '`')
+    const at = where === 'end' ? ' am Ende' : ''
+    showToast(`\`${name}\` in den Prompt eingefügt${at}${fromTool ? '. Der Werkzeug-Editor ist weiter unter „Werkzeug bauen“.' : ''}`)
+  })
+}
 
 export const dirty = computed(() => draft.value !== (deployed.value?.text ?? ''))
 
@@ -249,13 +265,17 @@ export async function deploy(restart: boolean) {
   if (busy.value) return
   busy.value = 'deploy'
   const text = draft.value // the user may keep typing while the request runs
+  const promptChanged = deployed.peek() !== null && text !== deployed.peek()!.text
   try {
     await toolSaver.flush() // a version holds the team tools as they are now
     const p = await api.deploy(text, restart)
     applyDeployed({ version: p.version, created_at: p.created_at, chars: p.chars, text })
     if (local) history.value = local.addSnapshot(text, 'deploy', p.version)
     const withTools = p.tools.filter((t) => t.agent).length
-    const done = `Version ${p.version} deployt${withTools === 1 ? ' mit 1 eigenen Werkzeug' : withTools ? ` mit ${withTools} eigenen Werkzeugen` : ''}`
+    // Say what it shipped: a deploy from the tool editor also ships the prompt draft, unseen.
+    const parts = [promptChanged && 'geändertem Prompt', withTools === 1 ? '1 eigenen Werkzeug' : withTools ? `${withTools} eigenen Werkzeugen` : '']
+    const what = parts.filter(Boolean).join(' und ')
+    const done = `Version ${p.version} deployt${what ? ` mit ${what}` : ''}`
     deployWarning.value = p.warning || null
     showToast(done)
     void reloadVersions()

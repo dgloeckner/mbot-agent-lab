@@ -14,6 +14,8 @@ import {
   busy,
   continueTeamTool,
   deploy,
+  deployed,
+  dirty,
   draft,
   deleteTool,
   editTool,
@@ -336,8 +338,18 @@ export default function ToolEditor() {
           </button>
         )}
         {!readOnly.value && (
-          <button class="btn btn-quiet" disabled={busy.value !== null || !draft.value.trim()} onClick={() => void deploy(false)} title="Speichert Prompt und alle eigenen Werkzeuge als neue Version.">
+          <button
+            class="btn btn-quiet"
+            disabled={busy.value !== null || !draft.value.trim()}
+            onClick={() => void deploy(false)}
+            title={
+              dirty.value
+                ? 'Speichert alle eigenen Werkzeuge und den geänderten Prompt als neue Version. Schaut euch den Prompt vorher an.'
+                : 'Speichert Prompt und alle eigenen Werkzeuge als neue Version.'
+            }
+          >
             {busy.value === 'deploy' ? 'Deploye …' : 'Deployen'}
+            {dirty.value && deployed.value && <span class="deploy-with-prompt"> + Prompt</span>}
           </button>
         )}
       </div>

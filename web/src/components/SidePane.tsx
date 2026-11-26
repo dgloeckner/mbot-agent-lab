@@ -12,7 +12,6 @@ import {
   conversation,
   conversationUnread,
   deleteNote,
-  editorBridge,
   log,
   newConversation,
   notes,
@@ -24,6 +23,7 @@ import {
   session,
   task,
   updatePrefs,
+  insertIntoPrompt,
 } from '../state'
 import { lazyComponent } from '../lazy'
 import type { SideTab } from '../storage'
@@ -470,35 +470,42 @@ function ToolsPanel() {
               .filter((t) => t.group === g)
               .map((t) => {
                 const byHand = t.ready && t.manual
-                const isOpen = byHand && open.value === t.name
+                const isOpen = open.value === t.name
                 return (
                   <li key={t.name} class={isOpen ? 'tool-open' : undefined}>
-                    {byHand ? (
-                      <button class="tool" aria-expanded={isOpen} onClick={() => (open.value = isOpen ? null : t.name)}>
-                        <code>{t.name}</code>
-                        <span class="tool-params">
-                          {t.params}
-                          {missing?.has(t.name) && <span class="tool-tag tag-missing">nicht beim Agenten</span>}
-                        </span>
-                        <svg class="tool-chevron" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24">
-                          <path d={isOpen ? 'M5 9l7 7 7-7' : 'M9 5l7 7-7 7'} />
-                        </svg>
-                        <span class="tool-summary">{t.summary}</span>
-                      </button>
-                    ) : (
-                      <button class="tool" data-ready={t.ready} onClick={() => editorBridge.insert?.('`' + t.name + '`')} title="In den Prompt einfügen">
-                        <code>{t.name}</code>
-                        <span class="tool-params">{t.params}</span>
-                        <span class={`tool-tag${t.ready && missing?.has(t.name) ? ' tag-missing' : ''}`}>
-                          {!t.ready ? 'kommt bald' : missing?.has(t.name) ? 'nicht beim Agenten' : 'nur Agent'}
-                        </span>
-                        <span class="tool-summary">
-                          {t.summary}
-                          {!t.ready && ' Euer Agent hat es noch nicht.'}
-                        </span>
-                      </button>
+                    <button class="tool" data-ready={t.ready} aria-expanded={isOpen} onClick={() => (open.value = isOpen ? null : t.name)}>
+                      <code>{t.name}</code>
+                      <span class="tool-params">
+                        {t.params}
+                        {byHand ? (
+                          missing?.has(t.name) && <span class="tool-tag tag-missing">nicht beim Agenten</span>
+                        ) : (
+                          <span class={`tool-tag${t.ready && missing?.has(t.name) ? ' tag-missing' : ''}`}>
+                            {!t.ready ? 'kommt bald' : missing?.has(t.name) ? 'nicht beim Agenten' : 'nur Agent'}
+                          </span>
+                        )}
+                      </span>
+                      <svg class="tool-chevron" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24">
+                        <path d={isOpen ? 'M5 9l7 7 7-7' : 'M9 5l7 7-7 7'} />
+                      </svg>
+                      <span class="tool-summary">
+                        {t.summary}
+                        {!t.ready && ' Euer Agent hat es noch nicht.'}
+                      </span>
+                    </button>
+                    {isOpen && !byHand && (
+                      <div class="console">
+                        <p class="console-hint">
+                          {t.ready ? 'Dieses Werkzeug benutzt nur euer Agent; selbst ausführen könnt ihr es nicht.' : 'Dieses Werkzeug kommt bald.'}
+                        </p>
+                        <div class="console-actions">
+                          <button class="btn-link" type="button" onClick={() => insertIntoPrompt(t.name)}>
+                            In den Prompt einfügen
+                          </button>
+                        </div>
+                      </div>
                     )}
-                    {isOpen && <ToolConsole tool={t} robot={robot} blocked={blocked} />}
+                    {isOpen && byHand && <ToolConsole tool={t} robot={robot} blocked={blocked} />}
                   </li>
                 )
               })}

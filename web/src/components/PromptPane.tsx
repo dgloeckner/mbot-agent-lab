@@ -109,6 +109,10 @@ function StatusLine() {
 
 export function PromptPane() {
   const tab = useSignal<Tab>('write')
+  useEffect(() => {
+    editorBridge.show = () => (tab.value = 'write')
+    return () => (editorBridge.show = undefined)
+  }, [])
   const remote = remoteVersion.value
   const tooLong = draft.value.length > session.value!.limits.prompt_chars
   const canDeploy = !busy.value && !readOnly.value && draft.value.trim() !== '' && !tooLong

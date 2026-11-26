@@ -453,14 +453,19 @@ embed compiling without a build. No CDN assets. Rarely used views are lazy-loade
     (`web/src/console.ts`), "Ausführen" (`POST tools/{name}`) and the result below: one sentence
     in the protocol's words, the key fields, the floor trace as a band (four rows, one per probe)
     and the JSON on demand. "In den Prompt einfügen" stays as a second action. Agent-only tools
-    carry "nur Agent" and do not open. With several robots a robot picker sits above the list.
+    carry "nur Agent" and open the same way, with only "In den Prompt einfügen" inside. The
+    insert goes to the cursor only if the team placed it in this page view, otherwise on a new
+    line at the end, with the missing spaces (`web/src/promptinsert.ts`); the prompt comes into
+    view, the name flashes and a toast says where it went. With several robots a robot picker sits
+    above the list.
     While a run is active the forms are disabled ("Erst anhalten"); a closed task is read-only.
     By-hand calls appear in the protocol as "Ihr"; without a run the protocol offers "Selbst
     steuern", which opens the tab.
   - **Versions:** "Eigene Werkzeuge" shows per tool whether the agent has it ("beim Agenten",
     "geändert" since the last deploy, "noch nicht deployt", or "nicht beim Agenten" with the
     reason). The prompt editor completes the names of team tools. "Deployen" also sits in the
-    tool editor. The history shows per version the team tools that are new, changed or removed;
+    tool editor; when the prompt draft differs from the deployed version its button reads
+    "Deployen + Prompt" and the answer says "mit geändertem Prompt". The history shows per version the team tools that are new, changed or removed;
     "Diese Version wiederherstellen" restores prompt and team tools and first asks, naming what
     is not deployed yet and would be lost.
   - **Tool comparison** (history, `web/src/components/ToolDiffView.tsx`, lazy-loaded with
