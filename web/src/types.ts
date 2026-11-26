@@ -217,6 +217,8 @@ export interface ProgramProblem {
   /** The input the problem is about, when it is not a block. */
   field?: 'name' | 'description'
   text: string
+  /** 'empty': the tool has no blocks yet; shown as "leer", not as an error. */
+  code?: 'empty'
 }
 
 /** A team tool ("eigenes Werkzeug") in the list. */

@@ -7,8 +7,8 @@ import type { ComponentChildren } from 'preact'
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
 import * as Blockly from 'blockly/core'
 import { api } from '../api'
-import { defineBlocks, MEDIA } from '../blocklySetup'
-import { problemsByBlock, toolName } from '../toolrun'
+import { darkTheme, defineBlocks, lightTheme, MEDIA, pageIsDark } from '../blocklySetup'
+import { isEmptyTool, problemsByBlock, toolName } from '../toolrun'
 import {
   agent,
   busy,
@@ -90,13 +90,24 @@ function Workspace({
       const w = Blockly.inject(host.current, {
         toolbox, media: MEDIA, sounds: false, readOnly: readOnly.peek(), trashcan: true,
         zoom: { controls: true, wheel: true, startScale: 0.9 }, move: { scrollbars: true, drag: true, wheel: true },
-        grid: { spacing: 24, length: 2, colour: '#dfe3e9', snap: true },
+        grid: { spacing: 24, length: 2, colour: '#dfe3e9', snap: true }, // the dots take the page color in styles.css
+        theme: pageIsDark() ? darkTheme : lightTheme,
       })
+      // The canvas follows the page theme (the band's switch or the system's).
+      const media = window.matchMedia('(prefers-color-scheme: dark)')
+      const retheme = () => w.setTheme(pageIsDark() ? darkTheme : lightTheme)
+      media.addEventListener('change', retheme)
+      const themeObserver = new MutationObserver(retheme)
+      themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
       ws.current = w
       // Splitter, window and "Groß" change the host's size; Blockly does not notice by itself.
       const resize = new ResizeObserver(() => Blockly.svgResize(w))
       resize.observe(host.current)
-      stopResize = () => resize.disconnect()
+      stopResize = () => {
+        resize.disconnect()
+        media.removeEventListener('change', retheme)
+        themeObserver.disconnect()
+      }
       const load = (state: unknown) => {
         loading.current = true
         Blockly.Events.disable()
@@ -226,11 +237,12 @@ function MetaFields(props: {
       </label>
       <label class="tool-meta-desc">
         <span>Beschreibung für den Agenten</span>
-        <input
+        <textarea
           value={description}
           disabled={ro}
           maxLength={200}
-          placeholder="Was das Werkzeug tut und wann es fertig ist."
+          rows={2}
+          placeholder="Was das Werkzeug tut und wann es fertig ist. Danach entscheidet euer Agent."
           aria-invalid={problems.description ? true : undefined}
           aria-describedby={problems.description ? 'tool-desc-problem' : undefined}
           onInput={(ev) => {
@@ -274,6 +286,8 @@ export default function ToolEditor() {
   const team = robots.value
   const target = team.length > 1 ? robot || team[0].alias : undefined
   const general = problemsByBlock(problems).general
+  // An empty tool is not broken, only not built yet.
+  const empty = isEmptyTool(problems)
   const start = async (step: boolean) => {
     await toolSaver.flush()
     if (id) await runTeamTool(id, step, target)
@@ -282,14 +296,14 @@ export default function ToolEditor() {
   return (
     <div class="tool-editor">
       <div class="tool-head">
-        <label class="tool-picker">
+        <label class="tool-picker tool-picker-main">
           <span class="sr-only">Werkzeug</span>
           <select value={id ?? ''} onChange={(ev) => ev.currentTarget.value && editTool(ev.currentTarget.value)}>
             {!id && <option value="">Werkzeug wählen …</option>}
             {teamTools.value.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
-                {t.valid ? '' : ' (Fehler)'}
+                {isEmptyTool(t.problems) ? ' (leer)' : t.valid ? '' : ' (Fehler)'}
               </option>
             ))}
           </select>
@@ -307,12 +321,19 @@ export default function ToolEditor() {
           </label>
         )}
         <button
-          class="btn btn-quiet"
+          class="btn btn-quiet icon-only"
           aria-pressed={wideTool.value}
+          aria-label={wideTool.value ? 'Normal' : 'Groß'}
           onClick={() => (wideTool.value = !wideTool.value)}
-          title={wideTool.value ? 'Die rechte Seite wieder zeigen' : 'Der Editor bekommt die ganze Breite, die rechte Seite ist so lange ausgeblendet.'}
+          title={
+            wideTool.value
+              ? 'Normal: die rechte Seite wieder zeigen'
+              : 'Groß: Der Editor bekommt die ganze Breite, die rechte Seite ist so lange ausgeblendet.'
+          }
         >
-          {wideTool.value ? 'Normal' : 'Groß'}
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            {wideTool.value ? <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /> : <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />}
+          </svg>
         </button>
         <span class="spacer" />
         {thisRuns && run.waiting ? (
@@ -333,8 +354,8 @@ export default function ToolEditor() {
           Stopp
         </button>
         {!readOnly.value && (
-          <button class="btn-link" onClick={() => void newTool()}>
-            Neues Werkzeug
+          <button class="btn-link" onClick={() => void newTool()} aria-label="Neues Werkzeug" title="Neues Werkzeug">
+            + Neu
           </button>
         )}
         {!readOnly.value && (
@@ -389,12 +410,18 @@ export default function ToolEditor() {
                 </button>
               )}
             </Workspace>
-            {general.length > 0 && (
-              <ul class="tool-problems" role="status">
-                {general.map((t) => (
-                  <li key={t}>{t}</li>
-                ))}
-              </ul>
+            {empty ? (
+              <p class="tool-hint" role="status">
+                Noch leer: Zieht Blöcke aus den Kategorien links unter „Wenn das Werkzeug startet“.
+              </p>
+            ) : (
+              general.length > 0 && (
+                <ul class="tool-problems" role="status">
+                  {general.map((t) => (
+                    <li key={t}>{t}</li>
+                  ))}
+                </ul>
+              )
             )}
           </div>
           {ablaufOpen && (

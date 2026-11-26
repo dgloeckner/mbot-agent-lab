@@ -2375,7 +2375,8 @@ kbd {
   white-space: nowrap;
 }
 
-.tool-meta input {
+.tool-meta input,
+.tool-meta textarea {
   min-height: 34px;
   padding: 4px 8px;
   border: 1px solid var(--line);
@@ -2390,7 +2391,8 @@ kbd {
   font-family: var(--font-mono);
 }
 
-.tool-meta input[aria-invalid] {
+.tool-meta input[aria-invalid],
+.tool-meta textarea[aria-invalid] {
   border-color: var(--stop);
   box-shadow: 0 0 0 1px var(--stop);
 }
@@ -2905,4 +2907,51 @@ kbd {
 .unknown-team h2 {
   margin-top: 12px;
   font-size: 16px;
+}
+
+/* The description decides whether the agent picks the tool: two rows that grow. */
+.tool-meta textarea {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  field-sizing: content;
+  min-height: 2lh;
+  max-height: 5lh;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.tool-meta {
+  align-items: start;
+}
+
+.tool-meta label {
+  align-items: flex-start;
+}
+
+.tool-meta label > span {
+  padding-top: 8px;
+}
+
+.tool-meta-extra {
+  padding-top: 7px;
+}
+
+/* An empty tool: a neutral hint, not an error. */
+.tool-hint {
+  margin: 0;
+  padding: 6px 12px 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Blockly paints its grid dots with a fixed color: take the page's. */
+.blockly-host pattern line {
+  stroke: var(--line);
+}
+
+.tool-picker-main select {
+  max-width: 220px;
+  text-overflow: ellipsis;
 }

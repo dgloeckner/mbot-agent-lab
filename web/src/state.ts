@@ -4,7 +4,7 @@ import { computed, effect, signal } from '@preact/signals'
 import { api, ApiError, connectEvents, NoConnection, type ConnState } from './api'
 import { LocalStore, browserKV, dropOldKeys, shouldAutoSnapshot, type Prefs, type Snapshot } from './storage'
 import { belongsTo, taskView } from './taskview'
-import { createSaver, freeName, idleRun, reduceRun, type RunView } from './toolrun'
+import { createSaver, freeName, idleRun, isEmptyTool, reduceRun, type RunView } from './toolrun'
 import type { ProgramDetail, ProgramEvent, ProgramInfo } from './types'
 import type { AgentStatus, LogEntry, Note, PromptChoice, PromptVersion, Robot, Session, TeamTask, Totals } from './types'
 
@@ -587,6 +587,9 @@ export const toolBridge: { reload?: (id: string) => void } = {}
 export async function loadTeamTools() {
   try {
     teamTools.value = await api.programs()
+    // After a reload the editor opens the tool the team had open in this task.
+    const remembered = prefs.peek().openTools[task.peek()?.id ?? '']
+    if (!openTool.peek() && remembered && teamTools.peek().some((t) => t.id === remembered)) openTool.value = remembered
     const v = deployed.peek()?.version
     // Also counts tools deleted since the newest version, which the list cannot show.
     toolsDirty.value = v ? (await api.compareTools(v, 0)).tools.length > 0 : teamTools.peek().length > 0
@@ -607,14 +610,27 @@ function onProgramEvent(e: ProgramEvent) {
   toolRun.value = reduceRun(toolRun.peek(), e)
 }
 
-/** Opens the tool editor on a team tool. */
+/** Opens the tool editor on a team tool; the page remembers it per task for the next load. */
 export function editTool(id: string) {
   openTool.value = id
   leftView.value = 'tool'
+  const t = task.peek()?.id
+  if (t && prefs.peek().openTools[t] !== id) {
+    updatePrefs({ openTools: Object.fromEntries(Object.entries({ ...prefs.peek().openTools, [t]: id }).slice(-10)) })
+  }
 }
 
-/** "Neues Werkzeug": an empty tool with only its start block, opened in the editor. */
+/**
+ * "Neues Werkzeug": an empty tool with only its start block, opened in the
+ * editor. An untouched new tool (default name, no description, no blocks)
+ * is opened again instead of making another one.
+ */
 export async function newTool(): Promise<ProgramDetail | null> {
+  const untouched = teamTools.peek().find((t) => /^werkzeug_\d+$/.test(t.name) && !t.description && isEmptyTool(t.problems))
+  if (untouched) {
+    editTool(untouched.id)
+    return null
+  }
   const name = freeName(teamTools.peek().map((t) => t.name))
   const blockly = { blocks: { languageVersion: 0, blocks: [{ type: 'program_start', id: 'start', x: 30, y: 30 }] } }
   try {

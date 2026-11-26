@@ -67,7 +67,7 @@ class LabyrinthTest(LabCase):
             if "team tool" in line or "run started" in line or "run ended" in line:
                 print("e2e: server: " + line, file=sys.stderr)
         self.assertEqual(data["reason"], "finish", data)
-        self.assertIn("done", data.get("report", ""))
+        self.assertIn("fertig", data.get("report", ""))  # the scripted model reports the end in German
         self.assertTrue(150 <= x <= 200 and 0 <= y <= 50, (x, y))
         steps = self.log_entries(lambda e: e.get("kind") == "tool" and (e.get("data") or {}).get("program") == "labyrinth")
         self.assertGreaterEqual(len(steps), 3, steps)

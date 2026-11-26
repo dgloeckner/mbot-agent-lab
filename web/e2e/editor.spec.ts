@@ -170,3 +170,43 @@ test('on a laptop screen the canvas has room and follows the splitter', async ({
   await page.locator('.tool-head').getByRole('button', { name: 'Normal' }).click()
   await expect(page.locator('.side-pane')).toBeVisible()
 })
+
+test('a new tool is "leer", not an error; a second click reuses it; a reload keeps the open tool', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await page.goto(lab.page(team))
+  await page.getByRole('tab', { name: 'Werkzeuge' }).click()
+  const count = async () => (await lab.teamCall(team, 'GET', '/programs')).length
+  const before = await count()
+  const newBtn = page.locator('.own-tools').getByRole('button', { name: 'Neues Werkzeug' })
+  await newBtn.click()
+  await expect(page.locator('.blockly-host .blocklyMainBackground').first()).toBeVisible()
+  const picker = page.locator('.tool-picker select').first()
+  await expect(picker.locator('option:checked')).toHaveText(/\(leer\)$/)
+  await expect(page.locator('.tool-hint')).toContainText('Noch leer')
+  await expect(page.locator('.tool-problems')).toHaveCount(0)
+  await expect(page.locator('.own-tool').filter({ hasText: /werkzeug_\d/ }).locator('.tool-tag').first()).toHaveText('leer')
+
+  // A second click opens the untouched one again.
+  await newBtn.click()
+  await expect.poll(count).toBe(before + 1)
+
+  // The description is a text area with room for two lines.
+  const desc = page.getByLabel('Beschreibung für den Agenten')
+  expect(await desc.evaluate((el) => el.tagName)).toBe('TEXTAREA')
+
+  // After a reload the editor shows the same tool.
+  const open = await picker.inputValue()
+  await page.reload()
+  await page.getByRole('tab', { name: 'Werkzeug bauen' }).click()
+  await expect(page.locator('.tool-picker select').first()).toHaveValue(open)
+  await expect(page.locator('.blockly-host .blocklyMainBackground').first()).toBeVisible()
+
+  // The dark theme reaches the canvas.
+  await page.locator('.band').getByRole('button', { name: /Darstellung/ }).click() // hell
+  await page.locator('.band').getByRole('button', { name: /Darstellung/ }).click() // dunkel
+  await expect
+    .poll(() => page.locator('.blockly-host svg.blocklySvg').first().evaluate((el) => getComputedStyle(el).backgroundColor))
+    .toBe('rgb(24, 32, 48)')
+  await page.screenshot({ path: join(SHOTS, 'editor-dark.png') })
+  await page.locator('.band').getByRole('button', { name: /Darstellung/ }).click() // wie System
+})

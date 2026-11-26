@@ -69,9 +69,11 @@ export interface Prefs {
   sideTab: SideTab
   /** Per task: when the newest conversation answer this browser has shown was written. */
   talkSeen: Record<string, string>
+  /** Per task: the team tool open in the editor, opened again after a reload. */
+  openTools: Record<string, string>
 }
 
-export const defaultPrefs: Prefs = { theme: 'system', split: 0.58, fontSize: 15, sideTab: 'log', talkSeen: {} }
+export const defaultPrefs: Prefs = { theme: 'system', split: 0.58, fontSize: 15, sideTab: 'log', talkSeen: {}, openTools: {} }
 
 export const MAX_SNAPSHOTS = 80
 const AUTO_MIN_GAP_MS = 30_000
@@ -183,6 +185,7 @@ export class LocalStore {
     merged.split = Math.min(0.8, Math.max(0.3, Number(merged.split) || defaultPrefs.split))
     merged.fontSize = Math.min(22, Math.max(12, Number(merged.fontSize) || defaultPrefs.fontSize))
     if (!merged.talkSeen || typeof merged.talkSeen !== 'object') merged.talkSeen = {}
+    if (!merged.openTools || typeof merged.openTools !== 'object') merged.openTools = {}
     return merged
   }
 
