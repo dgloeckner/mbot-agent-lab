@@ -39,7 +39,7 @@ robots, from its team and from other agents.
 
 | Path | Content |
 | --- | --- |
-| `server/` | Go module, one binary `labserver`: broker, robot registry, agents, model access, store, web |
+| `server/` | Go module, one binary `labserver`: broker, robot registry, agents, model access, store, web; the USB uploader `robotupload` |
 | `web/` | team page and control room (Preact + signals, CodeMirror 6, Vite), embedded into the binary |
 | `robot/` | MicroPython sources (`robot/src`), bundler, config example |
 | `sim/` | simulator: fakes for the vendor modules, 2D world, worlds, tests, end-to-end test |
@@ -51,13 +51,23 @@ network. Local development runs everything on one machine with simulated robots.
 
 ## Robot script
 
-One MicroPython script per robot in upload mode (`robot/dist/main.py`, uploaded with mBlock). It
-starts after power-on, connects to the broker and never blocks.
+One MicroPython script per robot in upload mode (`robot/dist/main.py`). It starts after power-on,
+connects to the broker and never blocks.
 
 - **Bundle:** `robot/tools/bundle.py` joins the modules of `robot/src` in dependency order
   (`MODULES`) into one `main.py`, strips comments and docstrings and inlines `config.py`. All
   modules share one namespace after bundling. Only `hw.py` touches vendor modules (`cyberpi`,
   `mbot2`, `mbuild`); the MQTT client is bundled (`mqtt.py`) because the firmware has no `umqtt`.
+- **Upload:** `npx nx run robot:upload --config=…` bundles and runs `server/cmd/robotupload`
+  (macOS, USB serial 115200 8N1; mBlock still works). The protocol lives in
+  `server/internal/cyberpi`, ported from MIT-licensed community tools that reverse-engineered
+  mBlock: F3/F4 frames (`F3, (F3+len_lo+len_hi)&FF, len_lo, len_hi, body, sum(body)&FF, F4`);
+  ping and two scripts (import `config`, turn the REPL off) twice before the file and once after;
+  a file header (size, XOR-of-words checksum, path `/flash/_xx_main.py`) and 80-byte blocks after
+  padding the file with newlines to `len % 80 == 4`, the last 4 bytes in a block of their own.
+  Every frame waits for its ack (3 s, 3 attempts); bytes outside frames are program output.
+  Closing and reopening the port toggles DTR and restarts the CyberPi, whose firmware then moves
+  the staged file to `main.py`.
 - **Main loop** (about 40 Hz): fetch commands without blocking, advance the active skill one step
   (every skill is a state machine), check reflexes, send events on state changes, send the state
   on change and otherwise two to five times per second, watch the server heartbeat.
