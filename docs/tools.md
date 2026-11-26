@@ -145,19 +145,20 @@ in the challenge the lab lead counts them as interventions.
 
 Every by-hand tool has one line in `server/internal/tools/blocks.go`: the German sentence of its
 block in the team tool editor, with its fields in order, their defaults and units. Ranges and
-options come from the tool's schema. A new by-hand tool needs one line there and then appears in
+options come from the tool's schema. A line break (`\n`, shown as ↵ below) starts a new row in
+the block, so long blocks fit a laptop-sized canvas; step descriptions join the rows with a space. A new by-hand tool needs one line there and then appears in
 the editor (`docs/programs.md`, "Blocks"); a test fails for a by-hand tool without one.
 
 | Tool | Group | Block text | Fields (default) |
 | --- | --- | --- | --- |
 | `drive` | Fahren | fahre %1 cm | `cm` (20) |
 | `turn` | Fahren | drehe %1 Grad nach %2 | `degrees` (90), rechts/links sets the sign |
-| `drive_arc` | Fahren | fahre eine Kurve nach %1 mit Radius %2 cm, %3 Grad weit | rechts/links, `radius_cm` (30), `degrees` (90) |
-| `drive_until` | Fahren | fahre geradeaus, höchstens %1 cm, bis eine Wand näher als %2 cm ist oder der Boden %3 ist | `max_cm` (100), `stop_below_cm` (15), `stop_on_color` (egal) |
+| `drive_arc` | Fahren | fahre eine Kurve nach %1 ↵ mit Radius %2 cm, %3 Grad weit | rechts/links, `radius_cm` (30), `degrees` (90) |
+| `drive_until` | Fahren | fahre geradeaus, höchstens %1 cm, ↵ bis eine Wand näher als %2 cm ist ↵ oder der Boden %3 ist | `max_cm` (100), `stop_below_cm` (15), `stop_on_color` (egal) |
 | `turn_until_clear` | Fahren | drehe nach %1, bis vorne %2 cm frei sind | `direction` (rechts), `min_cm` (40) |
-| `follow_line_until` | Fahren | folge der Linie bis %1, höchstens %2 cm | `stop_on_color` (zur Kreuzung), `max_cm` (100) |
+| `follow_line_until` | Fahren | folge der Linie bis %1, ↵ höchstens %2 cm | `stop_on_color` (zur Kreuzung), `max_cm` (100) |
 | `retrace_path` | Fahren | fahre den Weg zurück zum Anfang | — |
-| `scan` | Sensoren | schau dich um von %1 bis %2 Grad und schau dann %3 | `from_deg` (-90), `to_deg` (90), `face` (in die freieste Richtung) |
+| `scan` | Sensoren | schau dich um von %1 bis %2 Grad ↵ und schau dann %3 | `from_deg` (-90), `to_deg` (90), `face` (in die freieste Richtung) |
 | `read_sensors` | Sensoren | lies die Sensoren | — |
 | `wait_for` | Sensoren | warte auf %1, höchstens %2 Sekunden | `event` (Knopf A), `timeout_s` (10) |
 | `set_leds` | Licht und Anzeige | Licht %1 | `color` (grün) |

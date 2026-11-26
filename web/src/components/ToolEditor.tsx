@@ -3,6 +3,7 @@
 // list and runs nothing: it shows the blocks, saves their state and marks the
 // block the server is running.
 
+import type { ComponentChildren } from 'preact'
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
 import * as Blockly from 'blockly/core'
 import { api } from '../api'
@@ -26,6 +27,7 @@ import {
   toolBridge,
   toolRun,
   toolSaver,
+  wideTool,
 } from '../state'
 import type { ProgramDetail, ProgramProblem } from '../types'
 
@@ -63,10 +65,12 @@ function Workspace({
   detail,
   problems,
   onProblems,
+  children,
 }: {
   detail: ProgramDetail
   problems: ProgramProblem[]
   onProblems: (p: ProgramProblem[]) => void
+  children?: ComponentChildren
 }) {
   const host = useRef<HTMLDivElement>(null)
   const ws = useRef<Blockly.WorkspaceSvg | null>(null)
@@ -78,6 +82,7 @@ function Workspace({
 
   useEffect(() => {
     let disposed = false
+    let stopResize = () => {}
     void defineBlocks().then(({ toolbox }) => {
       if (disposed || !host.current) return
       const w = Blockly.inject(host.current, {
@@ -86,6 +91,10 @@ function Workspace({
         grid: { spacing: 24, length: 2, colour: '#dfe3e9', snap: true },
       })
       ws.current = w
+      // Splitter, window and "Groß" change the host's size; Blockly does not notice by itself.
+      const resize = new ResizeObserver(() => Blockly.svgResize(w))
+      resize.observe(host.current)
+      stopResize = () => resize.disconnect()
       const load = (state: unknown) => {
         loading.current = true
         Blockly.Events.disable()
@@ -118,6 +127,7 @@ function Workspace({
     })
     return () => {
       disposed = true
+      stopResize()
       void toolSaver.flush()
       toolBridge.reload = undefined
       ws.current?.dispose()
@@ -156,7 +166,9 @@ function Workspace({
           meta.current = m
           save()
         }}
-      />
+      >
+        {children}
+      </MetaFields>
       <div class="blockly-host" ref={host} />
     </>
   )
@@ -176,6 +188,7 @@ function MetaFields(props: {
   description: string
   problems: Record<string, string[]>
   onChange: (m: { name: string; description: string }) => void
+  children?: ComponentChildren
 }) {
   const { onChange, problems } = props
   const [name, setName] = useState(props.name)
@@ -224,6 +237,7 @@ function MetaFields(props: {
           }}
         />
       </label>
+      <div class="tool-meta-extra">{props.children}</div>
       <FieldProblems id="tool-name-problem" texts={problems.name} />
       <FieldProblems id="tool-desc-problem" texts={problems.description} />
     </div>
@@ -249,6 +263,11 @@ export default function ToolEditor() {
 
   const run = toolRun.value
   const thisRuns = run.running && run.program === id
+  // "Ablauf" takes room from the canvas: shown while this tool runs or ran, or when the team opens it.
+  const [ablaufOpen, setAblaufOpen] = useState(false)
+  useEffect(() => {
+    if (run.run && run.program === id) setAblaufOpen(true)
+  }, [run.run, id])
   const blocked = readOnly.value ? 'Die Aufgabe ist geschlossen.' : agent.value.running ? 'Erst anhalten: Euer Agent fährt gerade.' : null
   const team = robots.value
   const target = team.length > 1 ? robot || team[0].alias : undefined
@@ -285,6 +304,14 @@ export default function ToolEditor() {
             </select>
           </label>
         )}
+        <button
+          class="btn btn-quiet"
+          aria-pressed={wideTool.value}
+          onClick={() => (wideTool.value = !wideTool.value)}
+          title={wideTool.value ? 'Die rechte Seite wieder zeigen' : 'Der Editor bekommt die ganze Breite, die rechte Seite ist so lange ausgeblendet.'}
+        >
+          {wideTool.value ? 'Normal' : 'Groß'}
+        </button>
         <span class="spacer" />
         {thisRuns && run.waiting ? (
           <button class="btn btn-accent" onClick={() => void continueTeamTool()}>
@@ -327,9 +354,29 @@ export default function ToolEditor() {
       ) : !detail ? (
         <div class="loading" aria-busy="true" />
       ) : (
-        <div class="tool-body">
+        <div class="tool-body" data-ablauf={ablaufOpen || undefined}>
           <div class="tool-canvas">
-            <Workspace key={detail.id} detail={detail} problems={problems} onProblems={setProblems} />
+            <Workspace key={detail.id} detail={detail} problems={problems} onProblems={setProblems}>
+              <button
+                class="btn-link"
+                aria-expanded={ablaufOpen}
+                aria-controls="tool-ablauf"
+                onClick={() => setAblaufOpen(!ablaufOpen)}
+                title="Jeder Schritt des letzten Ausführens mit seinem Ergebnis"
+              >
+                {ablaufOpen ? 'Ablauf ausblenden' : 'Ablauf zeigen'}
+              </button>
+              {!readOnly.value && (
+                <button
+                  class="btn-link danger"
+                  onClick={() => {
+                    if (confirm(`Werkzeug „${detail.name}“ löschen?`)) void deleteTool(detail.id)
+                  }}
+                >
+                  Löschen
+                </button>
+              )}
+            </Workspace>
             {general.length > 0 && (
               <ul class="tool-problems" role="status">
                 {general.map((t) => (
@@ -338,20 +385,12 @@ export default function ToolEditor() {
               </ul>
             )}
           </div>
-          <section class="tool-ablauf" aria-label="Ablauf">
-            <h3>Ablauf</h3>
-            <Ablauf />
-            {!readOnly.value && (
-              <button
-                class="btn-link danger"
-                onClick={() => {
-                  if (confirm(`Werkzeug „${detail.name}“ löschen?`)) void deleteTool(detail.id)
-                }}
-              >
-                Werkzeug löschen
-              </button>
-            )}
-          </section>
+          {ablaufOpen && (
+            <section class="tool-ablauf" id="tool-ablauf" aria-label="Ablauf">
+              <h3>Ablauf</h3>
+              <Ablauf />
+            </section>
+          )}
         </div>
       )}
     </div>

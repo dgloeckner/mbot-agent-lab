@@ -512,7 +512,7 @@ func Describer(bc BlockCatalog) func(*Node) string {
 			}
 			s = strings.Replace(s, fmt.Sprintf("%%%d", i+1), word, 1)
 		}
-		return s
+		return strings.ReplaceAll(s, "\n", " ")
 	}
 }
 

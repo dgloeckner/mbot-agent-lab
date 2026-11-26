@@ -465,9 +465,10 @@ embed compiling without a build. No CDN assets. Rarely used views are lazy-loade
     "Ausführen" with the end of the last run below. "Bearbeiten" opens the tool editor in the left
     pane: its head switches between "Prompt" and "Werkzeug bauen", the side pane stays. The editor
     (`web/src/components/ToolEditor.tsx`, Blockly, lazy-loaded) has a picker of the team's tools,
-    "Ausführen", "Einzelschritt" ("Weiter") and "Stopp" in its head, name and description, the
-    block categories and the workspace, and the "Ablauf" beside it. Details: `programs.md`,
-    "Editor".
+    "Ausführen", "Einzelschritt" ("Weiter"), "Stopp" and "Groß" (hides the side pane for a while)
+    in its head, name and description in one row with "Ablauf zeigen" and "Löschen", the block
+    categories and the workspace, and the "Ablauf" beside it while the tool runs or ran or the
+    team opens it. Details: `programs.md`, "Editor".
   Browser storage (`web/src/storage.ts`) holds only the draft, draft snapshots and UI preferences.
   - **Tasks:** the team band shows the active task with a picker: accepted tasks to switch to
     (disabled during a run, "Erst anhalten") and new tasks with a badge. Without an active task
