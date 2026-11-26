@@ -135,7 +135,10 @@ assignments are not in the configuration; they live in the database.
 - Reassigning is one step: stop, clear trip log and state, change owner, show the new owner. A
   running command ends with `reassigned`.
 - A newly assigned robot is named after its sticker color (`rot`, `blau`, …). Teams rename their
-  robots; `all` and `alle` are reserved. A team cannot give two robots the same name.
+  robots; `all` and `alle` are reserved. A team cannot give two robots the same name. A robot
+  the lab lead takes away and later gives back to the same team gets the name that team gave it
+  (the alias of its last `robot.released` event for that team, if still free); another team
+  starts from the sticker color.
 
 ### Model access
 
@@ -464,6 +467,9 @@ embed compiling without a build. No CDN assets. Rarely used views are lazy-loade
 - **Team page** (`/t/{token}`): prompt editor (CodeMirror, Markdown, tool name completion),
   preview, history with diffs against deployed versions and local snapshots, live log over SSE,
   conversation tab, notes, tools and console, robots with rename and "Finden", usage, model choice.
+  - **Prompt editor and keys:** the editor does not take the focus on load; Tab indents, Escape
+    and then Tab leaves it (said to screen readers via `aria-description`). Toasts sit above the
+    editor's status line.
   - **Protokoll:** steps of a team tool carry their robot (`data.robot`); with several robots
     the line names it (`drive(robot: blau, cm: 20)`). Lab events (task assigned, withdrawn or
     closed, robot given or taken) also show as a toast on every tab. Scrolled up, the log keeps

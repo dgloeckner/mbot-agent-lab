@@ -32,7 +32,7 @@ and goes here, not into `CLAUDE.md`. How the system works today: `architecture.m
 | Filtered sensors | every decision uses the filtered snapshot from `sense.py`, never a single raw reading | sensors flicker |
 | Ownership | a robot always belongs to exactly one owner, stored per robot | no locking logic needed |
 | Robots per team | the control room assigns 1..N robots per team; no profiles | approved deviation: flexible lab setups without YAML |
-| Robot names | teams name their robots (default: German sticker color); `all`/`alle` reserved | approved deviation: agents use names, devices can be swapped |
+| Robot names | teams name their robots (default: German sticker color); `all`/`alle` reserved; a robot given back to a team gets the name that team gave it | approved deviation: agents use names, devices can be swapped; a team's prompt and notes keep working when its robot comes back |
 | Heartbeat | carries `team`, `owner`, `name`, `color`, `agent` | approved deviation: owner changes reach the robot even when single QoS 0 messages get lost |
 | `turn` sign | positive is right | matches compass headings (north 0, east 90) |
 | Turn measurement | all turns via wheel encoders; gyro only for tilt | approved field deviation (`field.md`) |

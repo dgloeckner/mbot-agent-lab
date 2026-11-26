@@ -163,6 +163,22 @@ func TestTeamRenamesRobotsAndItself(t *testing.T) {
 			t.Errorf("registry not updated: %+v", rb)
 		}
 	}
+
+	// Taken away and given back: the robot keeps the name the team gave it.
+	adminDo(t, c, srv, "POST", "/admin/api/assign", `{"robot":"mbot-1","team":""}`)
+	adminDo(t, c, srv, "POST", "/admin/api/assign", `{"robot":"mbot-1","team":"rot"}`)
+	for _, rb := range srv.reg.Snapshot() {
+		if rb.ID == "mbot-1" && rb.Alias != "Scout" {
+			t.Errorf("given back as %q, want Scout", rb.Alias)
+		}
+	}
+	// Another team gets the default name, not the name of the first team.
+	adminDo(t, c, srv, "POST", "/admin/api/assign", `{"robot":"mbot-1","team":"blau"}`)
+	for _, rb := range srv.reg.Snapshot() {
+		if rb.ID == "mbot-1" && rb.Alias == "Scout" {
+			t.Errorf("team blau got the name of team rot")
+		}
+	}
 }
 
 func TestAdminChangesTeamColor(t *testing.T) {

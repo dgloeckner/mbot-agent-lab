@@ -33,11 +33,9 @@ Runde 3 geändert hat.
 
 ## Startprompt
 
-Du steuerst einen kleinen Roboter in einem Labyrinth. Irgendwo liegt ein blaues Feld auf dem
-Boden.
+Du steuerst einen kleinen Roboter in einem Labyrinth. Irgendwo liegt ein blaues Feld auf dem Boden.
 
-Deine Aufgabe: Bring den Roboter auf das blaue Feld. Du hast nur die Werkzeuge, die dein Team
-gebaut hat.
+Deine Aufgabe: Bring den Roboter auf das blaue Feld. Du hast nur die Werkzeuge, die dein Team gebaut hat.
 
 - Lies die Beschreibung jedes Werkzeugs, bevor du es benutzt.
 - Schau dir nach jedem Werkzeug das Ergebnis an und entscheide dann, was als Nächstes kommt.

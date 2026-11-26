@@ -2,7 +2,9 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"time"
 )
 
@@ -96,4 +98,16 @@ func (s *Store) Events(ctx context.Context, kind string) ([]Event, error) {
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+// LastReleasedAlias returns the name a team gave a robot when the robot was
+// last taken from it, or "" if the team never had it.
+func (s *Store) LastReleasedAlias(ctx context.Context, team, robot string) (string, error) {
+	var alias sql.NullString
+	err := s.DB.QueryRowContext(ctx, `SELECT json_extract(data, '$.alias') FROM events
+		WHERE kind = ? AND team_id = ? AND robot_id = ? ORDER BY id DESC LIMIT 1`, EventRobotReleased, team, robot).Scan(&alias)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return alias.String, err
 }
