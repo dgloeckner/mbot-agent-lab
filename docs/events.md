@@ -56,7 +56,8 @@ the agent) with the four measures of the control room's "Läufe":
 - **Model calls:** `llm_calls` of the run.
 - **Interventions:** stops by the team (`run.ended` with actor `team`, reason `stop`),
   by-hand calls (tool calls in the team's `manual` row that ended with the next `run_start` of
-  that team: the team drove by hand before this run), and every `run.intervention`.
+  that team: the team drove by hand before this run; a call the server refused with an `error`,
+  such as a missing argument, moved nothing and does not count), and every `run.intervention`.
 
 `lab.Rank` orders teams by their best run: most confirmed successes first, then fewest model
 calls of the best successful run, then the shortest time; equal teams share a rank.

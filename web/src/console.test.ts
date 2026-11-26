@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { argsOf, fieldsOf, floorSegments, keyFields, resultSentence, traceEnd } from './console'
+import { argsOf, fieldsOf, floorSegments, keyFields, missingRequired, resultSentence, traceEnd } from './console'
 import type { JSONSchema } from './types'
 
 const driveUntil: JSONSchema = {
@@ -29,6 +29,21 @@ describe('fieldsOf', () => {
   })
   it('has no fields without a schema', () => {
     expect(fieldsOf(undefined)).toEqual([])
+  })
+  it('follows the order of the signature, not the alphabet of the schema', () => {
+    const scan: JSONSchema = {
+      properties: { face: { type: 'string', enum: ['best', 'start'] }, from_deg: { type: 'number' }, step_deg: { type: 'number' }, to_deg: { type: 'number' } },
+    }
+    expect(fieldsOf(scan, 'from_deg?, to_deg?, step_deg?, face?').map((x) => x.name)).toEqual(['from_deg', 'to_deg', 'step_deg', 'face'])
+    expect(fieldsOf(driveUntil, 'max_cm, stop_below_cm?, stop_on_color?').map((x) => x.name)).toEqual(['max_cm', 'stop_below_cm', 'stop_on_color'])
+  })
+})
+
+describe('missingRequired', () => {
+  it('names the first empty required field like the server', () => {
+    const f = fieldsOf(driveUntil)
+    expect(missingRequired(f, {})).toBe('Es fehlt das Argument "max_cm".')
+    expect(missingRequired(f, { max_cm: ' 50 ' })).toBeNull()
   })
 })
 

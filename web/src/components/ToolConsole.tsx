@@ -1,14 +1,19 @@
-import { useState } from 'preact/hooks'
-import { FLOOR_FILL, argsOf, fieldsOf, floorSegments, keyFields, resultSentence, traceEnd, type Field } from '../console'
+import { useEffect, useRef, useState } from 'preact/hooks'
+import { FLOOR_FILL, argsOf, fieldsOf, floorSegments, keyFields, missingRequired, resultSentence, traceEnd, type Field } from '../console'
 import { clock } from '../format'
 import { insertIntoPrompt, runTool, type ToolRun } from '../state'
 import type { ToolInfo } from '../types'
 
 const BOOL_LABEL: Record<string, string> = { '': 'Standard', true: 'ja', false: 'nein' }
 
-function FieldInput({ f, value, set, disabled }: { f: Field; value: string; set: (v: string) => void; disabled: boolean }) {
-  const label = f.required ? f.name : `${f.name}?`
-  const common = { value, disabled, onInput: (ev: Event) => set((ev.currentTarget as HTMLInputElement).value) }
+function FieldInput({ f, value, set, disabled, invalid }: { f: Field; value: string; set: (v: string) => void; disabled: boolean; invalid: boolean }) {
+  const common = {
+    value,
+    disabled,
+    name: f.name,
+    'aria-invalid': invalid || undefined,
+    onInput: (ev: Event) => set((ev.currentTarget as HTMLInputElement).value),
+  }
   let input
   if (f.kind === 'enum' || f.kind === 'boolean') {
     const options = f.kind === 'enum' ? f.options! : ['true', 'false']
@@ -29,8 +34,11 @@ function FieldInput({ f, value, set, disabled }: { f: Field; value: string; set:
     input = <input {...common} type="text" maxLength={f.maxLength} />
   }
   return (
-    <label class="console-field" title={f.hint}>
-      <span>{label}</span>
+    <label class="console-field" title={f.hint} data-optional={!f.required || undefined}>
+      <span>
+        {f.name}
+        {!f.required && <span class="console-optional"> optional</span>}
+      </span>
       {input}
     </label>
   )
@@ -61,11 +69,11 @@ function FloorBand({ result }: { result: Record<string, any> }) {
   )
 }
 
-function Result({ run }: { run: ToolRun }) {
+function Result({ run, old }: { run: ToolRun; old: boolean }) {
   const r = run.result
   const fields = keyFields(r)
   return (
-    <div class="console-result" data-ok={r.ok !== false}>
+    <div class="console-result" data-ok={r.ok !== false} data-old={old || undefined} aria-busy={old || undefined}>
       <div class="console-result-head">
         <span>Rückgabe</span>
         <span>
@@ -93,29 +101,51 @@ function Result({ run }: { run: ToolRun }) {
 
 /** An opened by-hand tool: its form, "Ausführen" and the last result. */
 export default function ToolConsole({ tool, robot, blocked }: { tool: ToolInfo; robot?: string; blocked: string | null }) {
-  const fields = fieldsOf(tool.schema)
+  const fields = fieldsOf(tool.schema, tool.params)
   const [values, setValues] = useState<Record<string, string>>({})
   const [running, setRunning] = useState(false)
   const [run, setRun] = useState<ToolRun | null>(null)
+  const [missing, setMissing] = useState<string | null>(null)
+  const actions = useRef<HTMLDivElement>(null)
+  const result = useRef<HTMLDivElement>(null)
   const disabled = running || blocked !== null
+  // The answer comes into view when it arrives: on a laptop it would start at the fold.
+  useEffect(() => {
+    if (run) result.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [run])
   const submit = async (ev: Event) => {
     ev.preventDefault()
     if (disabled) return
+    const lack = missingRequired(fields, values)
+    setMissing(lack)
+    if (lack) return // the browser says it; nothing goes to the server
     setRunning(true)
+    actions.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
     const got = await runTool(tool.name, argsOf(fields, values, robot))
     setRunning(false)
     if (got) setRun(got)
   }
+  const lacking = missing ? fields.find((f) => missing.includes(`"${f.name}"`))?.name : undefined
   return (
-    <form class="console" onSubmit={submit} aria-label={`${tool.name} ausführen`}>
+    <form class="console" onSubmit={submit} aria-label={`${tool.name} ausführen`} noValidate>
       {fields.length > 0 && (
         <div class="console-fields">
           {fields.map((f) => (
-            <FieldInput key={f.name} f={f} value={values[f.name] ?? ''} disabled={disabled} set={(v) => setValues({ ...values, [f.name]: v })} />
+            <FieldInput
+              key={f.name}
+              f={f}
+              value={values[f.name] ?? ''}
+              disabled={disabled}
+              invalid={f.name === lacking}
+              set={(v) => {
+                setValues({ ...values, [f.name]: v })
+                if (f.name === lacking) setMissing(null)
+              }}
+            />
           ))}
         </div>
       )}
-      <div class="console-actions">
+      <div class="console-actions" ref={actions}>
         <button class="btn btn-accent" type="submit" disabled={disabled}>
           <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24">
             <path d="M7 4v16l13-8z" fill="currentColor" />
@@ -126,8 +156,17 @@ export default function ToolConsole({ tool, robot, blocked }: { tool: ToolInfo; 
           In den Prompt einfügen
         </button>
         {blocked && <span class="console-blocked">{blocked}</span>}
+        {missing && (
+          <span class="console-missing" role="alert">
+            {missing}
+          </span>
+        )}
       </div>
-      {run && <Result run={run} />}
+      {run && (
+        <div ref={result}>
+          <Result run={run} old={running} />
+        </div>
+      )}
     </form>
   )
 }

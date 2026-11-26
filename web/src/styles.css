@@ -2792,3 +2792,29 @@ kbd {
   font-size: 12px;
   color: var(--muted);
 }
+
+/* Console: optional arguments say so in words; the previous answer dims while a new call runs. */
+.console-optional {
+  font-weight: 500;
+  color: var(--faint);
+}
+
+.console-field[data-optional] > span {
+  color: var(--muted);
+}
+
+.console-field [aria-invalid] {
+  border-color: var(--stop);
+  box-shadow: 0 0 0 1px var(--stop);
+}
+
+.console-missing {
+  color: var(--stop);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.console-result[data-old] {
+  opacity: 0.45;
+  transition: opacity 0.15s;
+}

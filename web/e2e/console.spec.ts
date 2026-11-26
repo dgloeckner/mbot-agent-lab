@@ -115,3 +115,36 @@ test('"In den Prompt einfügen" after a reload keeps the first line and says whe
   await deployBtn.click()
   await expect(page.locator('.toast')).toContainText('mit geändertem Prompt')
 })
+
+test('the console on a laptop: fields in signature order, a missing value caught, the answer in view', async ({ page }) => {
+  await lab.teamCall(team, 'POST', '/stop')
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await page.goto(lab.page(team))
+  await page.getByRole('tab', { name: 'Werkzeuge' }).click()
+  const panel = page.locator('.tools-panel')
+
+  // scan: the fields stand in the order of its signature, optional ones say so.
+  await panel.getByRole('button', { name: /^scan\b/ }).click()
+  const scan = page.getByRole('form', { name: 'scan ausführen' })
+  await expect(scan.locator('.console-field input, .console-field select')).toHaveCount(4)
+  const names = await scan.locator('.console-field input, .console-field select').evaluateAll((els) => els.map((e) => e.getAttribute('name')))
+  expect(names).toEqual(['from_deg', 'to_deg', 'step_deg', 'face'])
+  await expect(scan.locator('.console-optional').first()).toHaveText('optional')
+  await panel.getByRole('button', { name: /^scan\b/ }).click()
+
+  // drive without cm: the page says it, nothing reaches the server or the log.
+  const before = lab.serverLines('tool by hand').length
+  await panel.getByRole('button', { name: /^drive\b/ }).first().click()
+  const form = page.getByRole('form', { name: 'drive ausführen' })
+  await form.getByRole('button', { name: 'Ausführen' }).click()
+  await expect(form.locator('.console-missing')).toHaveText('Es fehlt das Argument "cm".')
+  expect(lab.serverLines('tool by hand').length).toBe(before)
+
+  // With a value it runs; the answer is scrolled into view.
+  await form.getByLabel('cm', { exact: true }).fill('10')
+  await expect(form.locator('.console-missing')).toHaveCount(0)
+  await form.getByRole('button', { name: 'Ausführen' }).click()
+  await expect(form.locator('.console-result p')).toHaveText(/Fertig/, { timeout: 15_000 })
+  await expect(form.locator('.console-result')).toBeInViewport({ ratio: 0.5 })
+  await page.locator('.side-pane').screenshot({ path: join(SHOTS, 'console-laptop.png') })
+})

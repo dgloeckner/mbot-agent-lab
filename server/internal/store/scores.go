@@ -83,8 +83,10 @@ func (s *Store) TaskRuns(ctx context.Context, task string) ([]RunScore, error) {
 		return nil, err
 	}
 	// By-hand calls count for the run that ended their manual row: the team
-	// steered by hand before it started that run.
-	mrows, err := s.DB.QueryContext(ctx, `SELECT m.team_id, m.ended_at, (SELECT count(*) FROM tool_calls t WHERE t.run_id = m.id)
+	// steered by hand before it started that run. A call the server refused
+	// (an error such as a missing argument: no robot did anything) does not count.
+	mrows, err := s.DB.QueryContext(ctx, `SELECT m.team_id, m.ended_at, (SELECT count(*) FROM tool_calls t WHERE t.run_id = m.id
+			AND json_extract(t.result, '$.error') IS NULL)
 		FROM runs m WHERE m.task_id = ? AND m.kind = 'manual' AND m.end_reason = 'run_start'`, task)
 	if err != nil {
 		return nil, err
