@@ -33,45 +33,54 @@ function Dialog({ task }: { task: TeamTask }) {
         <span class="accept-kicker">Neue Aufgabe</span>
         <h2 id="accept-title">{task.title}</h2>
       </header>
-      <div class="accept-body">
-        <TaskText task={task} />
-        <p class="accept-note" role="note">
-          Euer Agent sieht diesen Text nicht. Schreibt in euren Prompt, was er wissen muss.
-        </p>
+      <section class="accept-start" aria-label="Womit beginnt euer Prompt?">
         <fieldset class="accept-choice">
           <legend>Womit beginnt euer Prompt?</legend>
-          {task.starter && (
+          <div class="accept-options">
+            {task.starter && (
+              <label>
+                <input type="radio" name="start" checked={choice === 'starter'} onChange={() => setChoice('starter')} />
+                Startprompt der Aufgabe
+              </label>
+            )}
             <label>
-              <input type="radio" name="start" checked={choice === 'starter'} onChange={() => setChoice('starter')} />
-              <span>
-                <strong>Startprompt der Aufgabe</strong>
-                <pre class="accept-starter">{task.starter}</pre>
-              </span>
+              <input type="radio" name="start" checked={choice === 'empty'} onChange={() => setChoice('empty')} />
+              Leer
             </label>
-          )}
-          <label>
-            <input type="radio" name="start" checked={choice === 'empty'} onChange={() => setChoice('empty')} />
-            <span>
-              <strong>Leer</strong> – ihr schreibt den Prompt selbst.
-            </span>
-          </label>
-          {others.length > 0 && (
-            <label>
-              <input type="radio" name="start" checked={choice === 'copy'} onChange={() => setChoice('copy')} />
-              <span>
-                <strong>Prompt aus Aufgabe</strong>{' '}
-                <select value={from} onChange={(e) => (setFrom(e.currentTarget.value), setChoice('copy'))} aria-label="Aufgabe, aus der der Prompt kommt">
-                  {others.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.title}
-                    </option>
-                  ))}
-                </select>{' '}
-                übernehmen
-              </span>
-            </label>
-          )}
+            {others.length > 0 && (
+              <label>
+                <input type="radio" name="start" checked={choice === 'copy'} onChange={() => setChoice('copy')} />
+                Prompt aus einer anderen Aufgabe
+              </label>
+            )}
+          </div>
         </fieldset>
+        {/* The chosen option, previewed with a fixed height. */}
+        {choice === 'starter' && task.starter && (
+          <pre class="accept-starter" aria-label="Startprompt">
+            {task.starter}
+          </pre>
+        )}
+        {choice === 'empty' && <p class="accept-preview-note">Ihr schreibt den Prompt selbst.</p>}
+        {choice === 'copy' && (
+          <p class="accept-preview-note">
+            Prompt und eigene Werkzeuge aus{' '}
+            <select value={from} onChange={(e) => setFrom(e.currentTarget.value)} aria-label="Aufgabe, aus der der Prompt kommt">
+              {others.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.title}
+                </option>
+              ))}
+            </select>{' '}
+            übernehmen.
+          </p>
+        )}
+      </section>
+      <div class="accept-body">
+        <p class="accept-note" role="note">
+          Die Aufgabe für euch. Euer Agent sieht diesen Text nicht. Schreibt in euren Prompt, was er wissen muss.
+        </p>
+        <TaskText task={task} />
       </div>
       <footer class="accept-foot">
         <button class="btn btn-quiet" onClick={close}>

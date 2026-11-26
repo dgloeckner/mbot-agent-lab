@@ -14,8 +14,6 @@ Findet es mit beiden Robotern gleichzeitig. Ein Roboter auf dem blauen Feld reic
   gleichzeitig. Die Ergebnisse bekommt er aber erst, wenn beide fertig sind. Ein schneller Roboter
   wartet also auf den langsamen.
 
-Euer Agent kennt diesen Text nicht. Was er wissen muss, steht in eurem Prompt.
-
 ## Startprompt
 
 Du steuerst zwei kleine Roboter, „Links“ und „Rechts“. Sie stehen nebeneinander in einem Raum mit

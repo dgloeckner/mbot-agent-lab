@@ -16,7 +16,7 @@ Your robot starts at a junction it does not know. **Get it to junction (2,3).** 
 with `finish`.
 
 No tool tells the agent where it is. It only sees which colors passed under the robot. How it
-works out its position from that has to be in your prompt: your agent does not know this text.
+works out its position from that has to be in your prompt.
 
 ## Starter prompt
 

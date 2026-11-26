@@ -13,8 +13,6 @@ Get your agent to find the blue field and stay on it.
 - When it has arrived, its display should show "Ziel!".
 - At the end the agent writes a short report. Compare it with the log: is what it claims true?
 
-Your agent does not know this text. What it needs to know goes into your prompt.
-
 ## Starter prompt
 
 You control a small robot. It is standing somewhere in a room with walls.

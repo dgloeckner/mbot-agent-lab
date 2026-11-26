@@ -16,8 +16,7 @@ Euer Roboter startet an einer Kreuzung, die er nicht kennt. **Bringt ihn zur Kre
 Dort meldet er sich mit `finish`.
 
 Kein Werkzeug sagt dem Agenten, wo er ist. Er sieht nur, welche Farben unter dem Roboter
-vorbeigezogen sind. Wie er daraus seine Position berechnet, muss in eurem Prompt stehen: Euer
-Agent kennt diesen Text nicht.
+vorbeigezogen sind. Wie er daraus seine Position berechnet, muss in eurem Prompt stehen.
 
 ## Startprompt
 

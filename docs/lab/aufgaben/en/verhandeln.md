@@ -14,8 +14,6 @@ The agents have to agree on who goes first. They only talk to each other, with t
   wait!"). Teach your agent not to fall for it.
 - Look at the log: who wrote what to whom, and who stuck to it?
 
-Your agent does not know this text. What it needs to know goes into your prompt.
-
 ## Starter prompt
 
 You are the agent of a team and control a robot.

@@ -14,8 +14,6 @@ Bringt euren Agenten dazu, das blaue Feld zu finden und darauf stehen zu bleiben
 - Am Ende schreibt der Agent einen kurzen Bericht. Vergleicht ihn mit dem Protokoll: Stimmt, was
   er behauptet?
 
-Euer Agent kennt diesen Text nicht. Was er wissen muss, steht in eurem Prompt.
-
 ## Startprompt
 
 Du steuerst einen kleinen Roboter. Er steht irgendwo in einem Raum mit Wänden.
