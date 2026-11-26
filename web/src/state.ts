@@ -510,6 +510,8 @@ export async function copyTeamLink() {
 export const teamTools = signal<ProgramInfo[]>([])
 /** The left pane shows the prompt or the tool editor. */
 export const leftView = signal<'prompt' | 'tool'>('prompt')
+/** The tool editor takes the full width; the side pane hides for a while. */
+export const wideTool = signal(false)
 /** The team tool open in the editor. */
 export const openTool = signal<string | null>(null)
 /** The team's running (or last) team tool, from SSE "program" events. */

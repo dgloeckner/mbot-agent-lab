@@ -210,7 +210,12 @@ team can try a built-in tool on the right while it builds on the left.
 - **Running:** "Ausführen" and "Einzelschritt" save first and start the run; the `program` events
   mark the running block (`highlightBlock`) and fill the "Ablauf": every step with its result in
   words, the rounds of a loop as separator lines, the end with where and why it stopped. In single
-  step "Weiter" replaces "Ausführen". "Stopp" is the team's stop.
+  step "Weiter" replaces "Ausführen". "Stopp" is the team's stop. The "Ablauf" column opens when
+  the open tool runs and can be hidden; without it the blocks get the full width.
+- **Size:** the workspace follows its host (`ResizeObserver` → `Blockly.svgResize`), so the
+  splitter, the window and "Groß" (the editor takes the full width, the side pane hides) take
+  effect at once. Long blocks break into rows (`\n` in their block text, `docs/tools.md`) so they
+  fit a laptop-sized canvas.
 - While an agent run is active "Ausführen" and "Einzelschritt" are disabled ("Erst anhalten"); a
   closed task is read-only. The browser never runs anything: it shows and sends states.
 - Pure helpers with tests: `web/src/toolrun.ts` (events to "Ablauf", the saver, problems per block).

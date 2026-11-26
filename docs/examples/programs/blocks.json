@@ -84,7 +84,7 @@
         }
       ],
       "colour": "#2b6cee",
-      "message0": "fahre eine Kurve nach %1 mit Radius %2 cm, %3 Grad weit",
+      "message0": "fahre eine Kurve nach %1\nmit Radius %2 cm, %3 Grad weit",
       "nextStatement": null,
       "previousStatement": null,
       "tooltip": "drive_arc: Fährt eine Kurve oder einen Kreis, positiv ist rechts, auf Wunsch bis zu einer Farbe.",
@@ -148,7 +148,7 @@
         }
       ],
       "colour": "#2b6cee",
-      "message0": "fahre geradeaus, höchstens %1 cm, bis eine Wand näher als %2 cm ist oder der Boden %3 ist",
+      "message0": "fahre geradeaus, höchstens %1 cm,\nbis eine Wand näher als %2 cm ist\noder der Boden %3 ist",
       "nextStatement": null,
       "previousStatement": null,
       "tooltip": "drive_until: Fährt, bis eine Wand nah ist, eine Farbe kommt oder die Strecke erreicht ist.",
@@ -236,7 +236,7 @@
         }
       ],
       "colour": "#2b6cee",
-      "message0": "folge der Linie bis %1, höchstens %2 cm",
+      "message0": "folge der Linie bis %1,\nhöchstens %2 cm",
       "nextStatement": null,
       "previousStatement": null,
       "tooltip": "follow_line_until: Folgt einer Linie bis zu einer Farbe, einer Kreuzung oder ihrem Ende.",
@@ -284,7 +284,7 @@
         }
       ],
       "colour": "#1f9d55",
-      "message0": "schau dich um von %1 bis %2 Grad und schau dann %3",
+      "message0": "schau dich um von %1 bis %2 Grad\nund schau dann %3",
       "nextStatement": null,
       "previousStatement": null,
       "tooltip": "scan: Dreht sich und misst rundum, dann schaut er in die freieste Richtung.",

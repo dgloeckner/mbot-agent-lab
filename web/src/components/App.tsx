@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'preact/hooks'
 import { COLOR_HEX, onColor } from '../format'
 import { lazyComponent } from '../lazy'
 import { pickerLists } from '../taskview'
-import { accepting, loadError, prefs, readOnly, session, task, tasks, toast, updatePrefs } from '../state'
+import { accepting, leftView, loadError, prefs, readOnly, session, task, tasks, toast, updatePrefs, wideTool } from '../state'
 import { PromptPane } from './PromptPane'
 import { SidePane } from './SidePane'
 import { TeamBand } from './TeamBand'
@@ -105,7 +105,7 @@ export function App() {
               Die Lab-Leitung hat die Aufgabe „{task.value.title}“ geschlossen. Ihr könnt alles ansehen, aber nichts mehr deployen, starten oder ändern.
             </div>
           )}
-          <main class="main" style={{ '--split': prefs.value.split }}>
+          <main class="main" data-wide={(leftView.value === 'tool' && wideTool.value) || undefined} style={{ '--split': prefs.value.split }}>
             <PromptPane key={task.value.id} />
             <Splitter />
             <SidePane />

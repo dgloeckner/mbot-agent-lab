@@ -29,7 +29,7 @@ type BlockField struct {
 type BlockText struct {
 	Tool   string
 	Group  string // toolbox category
-	Text   string // German, with %1, %2, … for the fields
+	Text   string // German, with %1, %2, … for the fields; "\n" starts a new row in the block
 	Fields []BlockField
 }
 
@@ -49,16 +49,16 @@ var ColorLabels = map[string]string{
 var blockTexts = []BlockText{
 	{Tool: "drive", Group: GroupDrive, Text: "fahre %1 cm", Fields: []BlockField{{Arg: "cm", Default: 20.0}}},
 	{Tool: "turn", Group: GroupDrive, Text: "drehe %1 Grad nach %2", Fields: []BlockField{{Arg: "degrees", Default: 90.0}, {Arg: "degrees", Direction: true}}},
-	{Tool: "drive_arc", Group: GroupDrive, Text: "fahre eine Kurve nach %1 mit Radius %2 cm, %3 Grad weit",
+	{Tool: "drive_arc", Group: GroupDrive, Text: "fahre eine Kurve nach %1\nmit Radius %2 cm, %3 Grad weit",
 		Fields: []BlockField{{Arg: "degrees", Direction: true}, {Arg: "radius_cm", Default: 30.0}, {Arg: "degrees", Default: 90.0}}},
-	{Tool: "drive_until", Group: GroupDrive, Text: "fahre geradeaus, höchstens %1 cm, bis eine Wand näher als %2 cm ist oder der Boden %3 ist",
+	{Tool: "drive_until", Group: GroupDrive, Text: "fahre geradeaus, höchstens %1 cm,\nbis eine Wand näher als %2 cm ist\noder der Boden %3 ist",
 		Fields: []BlockField{{Arg: "max_cm", Default: 100.0}, {Arg: "stop_below_cm", Default: 15.0}, {Arg: "stop_on_color", Default: "", NoneLabel: "egal", Labels: ColorLabels}}},
 	{Tool: "turn_until_clear", Group: GroupDrive, Text: "drehe nach %1, bis vorne %2 cm frei sind",
 		Fields: []BlockField{{Arg: "direction", Default: "right", Labels: map[string]string{"left": "links", "right": "rechts"}}, {Arg: "min_cm", Default: 40.0}}},
-	{Tool: "follow_line_until", Group: GroupDrive, Text: "folge der Linie bis %1, höchstens %2 cm",
+	{Tool: "follow_line_until", Group: GroupDrive, Text: "folge der Linie bis %1,\nhöchstens %2 cm",
 		Fields: []BlockField{{Arg: "stop_on_color", Default: "", NoneLabel: "zur Kreuzung", Labels: ColorLabels}, {Arg: "max_cm", Default: 100.0}}},
 	{Tool: "retrace_path", Group: GroupDrive, Text: "fahre den Weg zurück zum Anfang"},
-	{Tool: "scan", Group: GroupSense, Text: "schau dich um von %1 bis %2 Grad und schau dann %3",
+	{Tool: "scan", Group: GroupSense, Text: "schau dich um von %1 bis %2 Grad\nund schau dann %3",
 		Fields: []BlockField{{Arg: "from_deg", Default: -90.0}, {Arg: "to_deg", Default: 90.0},
 			{Arg: "face", Default: "best", Labels: map[string]string{"best": "in die freieste Richtung", "start": "wieder nach vorn"}}}},
 	{Tool: "read_sensors", Group: GroupSense, Text: "lies die Sensoren"},

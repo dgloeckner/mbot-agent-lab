@@ -113,3 +113,52 @@ test('build a square from blocks, run it and watch it step', async ({ page }) =>
   await page.locator('.side-pane').screenshot({ path: join(SHOTS, 'editor-own-tools.png') })
   expect(foreign).toEqual([])
 })
+
+test('on a laptop screen the canvas has room and follows the splitter', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await page.goto(lab.page(team))
+  await page.getByRole('tab', { name: 'Werkzeug bauen' }).click()
+  await page.locator('.tool-picker select').first().selectOption({ label: 'quadrat' })
+  await expect(page.locator('.blockly-host .blocklyMainBackground').first()).toBeVisible()
+  const host = page.locator('.blockly-host')
+  const svg = page.locator('.blockly-host svg.blocklySvg').first()
+  const width = async (l: Locator) => Math.round((await l.boundingBox())!.width)
+  const right = async (l: Locator) => {
+    const b = (await l.boundingBox())!
+    return b.x + b.width
+  }
+  // Blockly's trash group is larger than the can it draws; its middle must be on the canvas.
+  const trashInside = async () => {
+    const t = (await page.locator('.blocklyTrash').boundingBox())!
+    const h = (await host.boundingBox())!
+    return t.x + t.width / 2 < h.x + h.width && t.y + t.height / 2 < h.y + h.height
+  }
+
+  // Room for blocks: at least 600 px next to the toolbox, trash and the widest flyout block inside.
+  expect((await width(host)) - (await width(page.locator('.blocklyToolbox')))).toBeGreaterThanOrEqual(600)
+  await expect(page.locator('.blocklyTrash')).toBeInViewport()
+  expect(await trashInside()).toBe(true)
+  await page.locator('.blocklyToolboxCategory', { hasText: 'Fahren' }).first().click()
+  const widest = await page.locator('.blocklyFlyout .blocklyDraggable').evaluateAll((els) => Math.max(...els.map((e) => e.getBoundingClientRect().right)))
+  expect(widest).toBeLessThanOrEqual(await right(host))
+  await page.keyboard.press('Escape')
+
+  // Drag the splitter both ways: the canvas follows without a reload.
+  const split = (await page.locator('.splitter').boundingBox())!
+  for (const x of [split.x + 200, split.x - 150]) {
+    await page.mouse.move(split.x + 4, split.y + split.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(x, split.y + split.height / 2, { steps: 6 })
+    await page.mouse.up()
+    await expect.poll(async () => Math.abs((await width(svg)) - (await width(host)))).toBeLessThanOrEqual(1)
+    expect(await trashInside()).toBe(true)
+  }
+
+  // "Groß": the editor takes the full width for a while.
+  await page.locator('.tool-head').getByRole('button', { name: 'Groß' }).click()
+  await expect(page.locator('.side-pane')).toBeHidden()
+  await expect.poll(async () => width(svg)).toBeGreaterThan(1200)
+  await page.screenshot({ path: join(SHOTS, 'editor-wide.png') })
+  await page.locator('.tool-head').getByRole('button', { name: 'Normal' }).click()
+  await expect(page.locator('.side-pane')).toBeVisible()
+})
