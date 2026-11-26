@@ -75,7 +75,17 @@ export class Lab {
     this.procs.push(p)
   }
 
+  /** Freezes (SIGSTOP) or thaws (SIGCONT) the server: to the browser like a dead Wi-Fi. */
+  signalServer(sig: 'SIGSTOP' | 'SIGCONT') {
+    process.kill(this.procs[0].pid!, sig)
+  }
+
   async stop() {
+    try {
+      this.signalServer('SIGCONT') // a frozen server cannot take SIGTERM
+    } catch {
+      /* gone */
+    }
     for (const p of [...this.procs].reverse()) {
       try {
         process.kill(-p.pid!, 'SIGTERM')

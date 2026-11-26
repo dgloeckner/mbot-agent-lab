@@ -434,10 +434,35 @@ kbd {
   gap: 8px;
 }
 
+/* Below the actions, out of the flow: the buttons and robot cards keep their place. */
 .conn {
+  position: absolute;
+  right: 20px;
+  bottom: 10px;
   font-size: 13px;
-  max-width: 200px;
   line-height: 1.25;
+}
+
+.conn[data-lost] {
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--stop);
+  font-weight: 700;
+}
+
+/* No connection: the values are old; the card says how old instead of "online". */
+.robot[data-status='stale'] {
+  background: color-mix(in oklab, var(--on-accent) 6%, transparent);
+}
+
+.robot[data-status='stale'] .robot-facts > div:not(:first-child) {
+  opacity: 0.55;
+}
+
+.robot[data-status='stale'] .dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px currentColor;
 }
 
 /* ---------- inline editing ---------- */
@@ -1696,6 +1721,10 @@ kbd {
 }
 
 @media (max-width: 960px) {
+  .conn {
+    position: static;
+  }
+
   .band,
   .band[data-robots='many'] {
     grid-template-columns: minmax(0, 1fr) auto;

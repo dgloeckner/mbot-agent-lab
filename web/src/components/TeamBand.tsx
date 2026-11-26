@@ -1,9 +1,10 @@
-import { agent, busy, chooseModel, conn, copyTeamLink, deployed, identifyRobot, prefs, readOnly, renameRobot, renameTeam, robots, session, startRun, stopAll, task, totals, updatePrefs } from '../state'
+import { agent, busy, chooseModel, conn, copyTeamLink, lastLive, deployed, identifyRobot, prefs, readOnly, renameRobot, renameTeam, robots, session, startRun, stopAll, task, totals, updatePrefs } from '../state'
 import { TaskPicker } from './TaskPicker'
 import { COLOR_HEX, colorName, formatPrices, formatUsage, skillName } from '../format'
 import type { Robot } from '../types'
 import { AutoIcon, LinkIcon, MoonIcon, PlayIcon, StopIcon, SunIcon } from './icons'
 import { InlineEdit } from './InlineEdit'
+import { useEffect, useState } from 'preact/hooks'
 import type { Theme } from '../storage'
 
 const AGENT_LABEL = { waiting: 'wartet', thinking: 'denkt nach', acting: 'handelt' } as const
@@ -11,13 +12,31 @@ const AGENT_LABEL = { waiting: 'wartet', thinking: 'denkt nach', acting: 'handel
 const NEXT_THEME: Record<Theme, Theme> = { system: 'light', light: 'dark', dark: 'system' }
 const THEME_LABEL: Record<Theme, string> = { system: 'wie System', light: 'hell', dark: 'dunkel' }
 
-function RobotCard({ r }: { r: Robot }) {
+/** Seconds since the last live event, ticking while the connection is lost. */
+function useStaleSeconds(): number | null {
+  const lost = conn.value === 'reconnecting'
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    if (!lost) return
+    setNow(Date.now())
+    const t = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(t)
+  }, [lost])
+  return lost ? Math.max(0, Math.round((now - lastLive.value) / 1000)) : null
+}
+
+function RobotCard({ r, stale }: { r: Robot; stale: number | null }) {
   const s = r.state
-  const status = !r.online ? 'offline' : !r.accepted ? 'falsche Version' : s.tilted ? 'umgekippt' : 'online'
+  const status =
+    stale !== null ? `Stand vor ${stale} s` : !r.online ? 'offline' : !r.accepted ? 'falsche Version' : s.tilted ? 'umgekippt' : 'online'
   const near = r.online && s.distance_cm < 15
   const gauge = Math.max(0, Math.min(1, s.distance_cm / 100))
   return (
-    <div class="robot" data-status={r.online && r.accepted ? (s.tilted ? 'warn' : 'ok') : 'off'}>
+    <div
+      class="robot"
+      data-status={stale !== null ? 'stale' : r.online && r.accepted ? (s.tilted ? 'warn' : 'ok') : 'off'}
+      title={stale !== null ? 'Keine Verbindung zum Server: Diese Werte sind alt.' : undefined}
+    >
       <div class="robot-name">
         <InlineEdit class="robot-alias" value={r.alias} label="Name des Roboters" maxLength={16} onSave={(v) => renameRobot(r.id, v)} />
         <span class="robot-id">
@@ -111,6 +130,7 @@ export function TeamBand() {
   const theme = prefs.value.theme
   const ThemeIcon = theme === 'light' ? SunIcon : theme === 'dark' ? MoonIcon : AutoIcon
   const a = agent.value
+  const stale = useStaleSeconds()
   const startHint = !s.agent_available
     ? 'Es ist kein Sprachmodell eingerichtet.'
     : !task.value
@@ -141,14 +161,14 @@ export function TeamBand() {
         {robots.value.length === 0 ? (
           <p class="robots-empty">Noch kein Roboter. Der Leitstand teilt euch gleich einen oder mehrere zu.</p>
         ) : (
-          robots.value.map((r) => <RobotCard key={r.id} r={r} />)
+          robots.value.map((r) => <RobotCard key={r.id} r={r} stale={stale} />)
         )}
       </div>
 
       <div class="band-actions">
         {conn.value !== 'live' && (
-          <span class="conn" role="status">
-            {conn.value === 'connecting' ? 'Verbinde …' : 'Verbindung unterbrochen, versuche es erneut …'}
+          <span class="conn" role="status" data-lost={conn.value === 'reconnecting' || undefined}>
+            {conn.value === 'connecting' ? 'Verbinde …' : 'Verbindung unterbrochen, verbinde neu …'}
           </span>
         )}
         <button class="btn btn-ghost-on-band icon-only" onClick={copyTeamLink} title="Team-Link kopieren" aria-label="Team-Link kopieren">
