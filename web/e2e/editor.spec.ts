@@ -3,7 +3,8 @@
 
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { join } from 'node:path'
-import { Lab, SHOTS, type Team } from './lab'
+import { readFileSync } from 'node:fs'
+import { Lab, ROOT, SHOTS, type Team } from './lab'
 
 let lab: Lab
 let team: Team
@@ -117,8 +118,12 @@ test('build a square from blocks, run it and watch it step', async ({ page }) =>
 test('on a laptop screen the canvas has room and follows the splitter', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
   await page.goto(lab.page(team))
+  // A tool of its own: this test does not depend on the one before.
+  const ex = JSON.parse(readFileSync(join(ROOT, 'docs', 'examples', 'programs', 'quadrat.json'), 'utf8'))
+  await lab.teamCall(team, 'POST', '/programs', { name: 'laptop', description: 'Fährt ein Quadrat.', blockly: ex.blockly })
+  await page.goto(lab.page(team))
   await page.getByRole('tab', { name: 'Werkzeug bauen' }).click()
-  await page.locator('.tool-picker select').first().selectOption({ label: 'quadrat' })
+  await page.locator('.tool-picker select').first().selectOption({ label: 'laptop' })
   await expect(page.locator('.blockly-host .blocklyMainBackground').first()).toBeVisible()
   const host = page.locator('.blockly-host')
   const svg = page.locator('.blockly-host svg.blocklySvg').first()
@@ -144,12 +149,15 @@ test('on a laptop screen the canvas has room and follows the splitter', async ({
   await page.keyboard.press('Escape')
 
   // Drag the splitter both ways: the canvas follows without a reload.
-  const split = (await page.locator('.splitter').boundingBox())!
-  for (const x of [split.x + 200, split.x - 150]) {
-    await page.mouse.move(split.x + 4, split.y + split.height / 2)
+  const start = (await page.locator('.splitter').boundingBox())!.x
+  for (const x of [start + 200, start - 150]) {
+    const split = (await page.locator('.splitter').boundingBox())!
+    const before = await width(host)
+    await page.mouse.move(split.x + split.width / 2, split.y + split.height / 2)
     await page.mouse.down()
     await page.mouse.move(x, split.y + split.height / 2, { steps: 6 })
     await page.mouse.up()
+    expect(await width(host)).not.toBe(before) // the drag moved the splitter
     await expect.poll(async () => Math.abs((await width(svg)) - (await width(host)))).toBeLessThanOrEqual(1)
     expect(await trashInside()).toBe(true)
   }

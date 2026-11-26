@@ -159,9 +159,11 @@ kbd {
   grid-template-rows: auto auto minmax(0, 1fr);
 }
 
+/* The split is a share, held between minimum widths in px for both panes
+   (keep in step with PANE_MIN in App.tsx). */
 .main {
   display: grid;
-  grid-template-columns: calc(var(--split) * 100% - 4px) 8px minmax(0, 1fr);
+  grid-template-columns: clamp(420px, calc(var(--split) * 100% - 4px), calc(100% - 8px - 400px)) 8px minmax(0, 1fr);
   min-height: 0;
   padding: 16px 16px 16px 20px;
 }
@@ -1023,6 +1025,45 @@ kbd {
   min-height: 0;
 }
 
+/* Five tabs in a narrow pane: they get closer, and scroll inside their row
+   instead of widening the page. */
+.side-pane .pane-head {
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.side-pane .tabs {
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.side-pane .tab {
+  flex: none;
+  white-space: nowrap;
+}
+
+.side-pane {
+  container-type: inline-size;
+}
+
+@container (max-width: 540px) {
+  .side-pane .tabs {
+    gap: 0;
+  }
+
+  .side-pane .tab {
+    padding-left: 6px;
+    padding-right: 6px;
+    font-size: 13.5px;
+  }
+
+  .side-pane .tab[aria-selected='true']::after {
+    left: 6px;
+    right: 6px;
+  }
+}
+
 .log-panel {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
@@ -1183,6 +1224,7 @@ kbd {
 
 .composer-hint {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   margin: 0;
@@ -1195,7 +1237,7 @@ kbd {
 
 .composer-hint p {
   margin: 0;
-  flex: 1;
+  flex: 1 1 220px;
 }
 
 .conversation-head {

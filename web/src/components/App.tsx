@@ -3,16 +3,28 @@ import { COLOR_HEX, onColor } from '../format'
 import { lazyComponent } from '../lazy'
 import { pickerLists } from '../taskview'
 import { accepting, deployWarning, leftView, loadError, prefs, readOnly, session, task, tasks, toast, updatePrefs, wideTool } from '../state'
+import { defaultPrefs } from '../storage'
 import { PromptPane } from './PromptPane'
 import { SidePane } from './SidePane'
 import { TeamBand } from './TeamBand'
 
-/** Draggable divider between the prompt and the side pane. */
+/** Minimum widths in px of the prompt and the side pane (styles.css, .main). */
+const PANE_MIN = { left: 420, right: 400 }
+
+/** The split clamped so both panes keep their minimum width in a main area this wide. */
+function clampSplit(split: number, width: number): number {
+  const lo = Math.max(0.3, PANE_MIN.left / width)
+  const hi = Math.min(0.8, 1 - (PANE_MIN.right + 8) / width)
+  return Math.min(Math.max(split, lo), Math.max(lo, hi))
+}
+
+/** Draggable divider between the prompt and the side pane; a double click resets it. */
 function Splitter() {
   const ref = useRef<HTMLDivElement>(null)
+  const width = () => ref.current!.parentElement!.getBoundingClientRect()
   const move = (clientX: number) => {
-    const main = ref.current!.parentElement!.getBoundingClientRect()
-    updatePrefs({ split: Math.min(0.8, Math.max(0.3, (clientX - main.left) / main.width)) })
+    const main = width()
+    updatePrefs({ split: clampSplit((clientX - main.left) / main.width, main.width) })
   }
   return (
     <div
@@ -34,9 +46,12 @@ function Splitter() {
         ev.currentTarget.releasePointerCapture(ev.pointerId)
         document.body.classList.remove('resizing')
       }}
+      onDblClick={() => updatePrefs({ split: defaultPrefs.split })}
+      title="Ziehen ändert die Breite, Doppelklick stellt sie zurück."
       onKeyDown={(ev) => {
         const step = ev.key === 'ArrowLeft' ? -0.02 : ev.key === 'ArrowRight' ? 0.02 : 0
-        if (step) updatePrefs({ split: Math.min(0.8, Math.max(0.3, prefs.value.split + step)) })
+        if (step) updatePrefs({ split: clampSplit(prefs.value.split + step, width().width) })
+        if (ev.key === 'Home') updatePrefs({ split: defaultPrefs.split })
       }}
     />
   )
