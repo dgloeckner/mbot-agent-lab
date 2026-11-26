@@ -72,6 +72,9 @@ Agent in dieser Aufgabe nur die deployten eigenen Werkzeuge des Teams und `read_
 alle Werkzeuge; ein anderer Wert wird beim Import abgelehnt. Im Leitstand ist das die Checkbox
 „Agent darf nur eigene Werkzeuge des Teams nutzen“; nach dem Veröffentlichen ist sie fest.
 
+Den Hinweis „Euer Agent sieht diesen Text nicht …“ setzt die Teamseite selbst über den
+Aufgabentext (im Annehmen-Dialog und im Reiter „Aufgabe“); in die Datei gehört er nicht.
+
 Auf Englisch heißen die Abschnitte `## Task` und `## Starter prompt`. Jede Datei gibt es in
 `aufgaben/de/` und `aufgaben/en/` mit gleichem Namen; ein Test prüft, dass sich alle importieren
 lassen.

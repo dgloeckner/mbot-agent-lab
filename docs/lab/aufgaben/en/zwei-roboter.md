@@ -13,8 +13,6 @@ Find it with both robots at the same time. One robot on the blue field is enough
 - Good to know: if the agent calls tools for both robots in one answer, they move at the same time.
   It only gets the results when both are done, so a fast robot waits for the slow one.
 
-Your agent does not know this text. What it needs to know goes into your prompt.
-
 ## Starter prompt
 
 You control two small robots, "Links" and "Rechts". They stand next to each other in a room with

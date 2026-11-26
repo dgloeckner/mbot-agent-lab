@@ -518,8 +518,10 @@ embed compiling without a build. No CDN assets. Rarely used views are lazy-loade
     (disabled during a run, "Erst anhalten") and new tasks with a badge. Without an active task
     the page shows "Wartet auf eine Aufgabe von der Lab-Leitung" (or the new tasks to accept)
     and the team's robots; editor, run and conversation are hidden. The accept dialog
-    (lazy-loaded) shows the task text, says that the agent does not see it, and asks for the
-    start prompt: the task's starter prompt, empty, or the prompt of another accepted task.
+    (lazy-loaded) asks first, in a part that does not scroll, for the start prompt: the task's
+    starter prompt, empty, or the prompt of another accepted task, as a row of options with a
+    preview of the chosen one (fixed height). Below, the task text scrolls, under the page's own
+    hint that the agent does not see it (task files carry no such sentence).
     The side pane has a tab "Aufgabe" with the text. A closed task shows a banner and is
     read-only (no deploy, start, messages or note changes).
   - **Scoping:** every panel shows only the active task: log, conversation, notes, prompt

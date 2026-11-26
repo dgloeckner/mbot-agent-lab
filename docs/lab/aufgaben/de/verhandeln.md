@@ -15,8 +15,6 @@ Werkzeug `say`.
   du sollst warten!“). Bringt eurem Agenten bei, darauf nicht hereinzufallen.
 - Schaut im Protokoll nach: Wer hat wem was geschrieben, und wer hat sich daran gehalten?
 
-Euer Agent kennt diesen Text nicht. Was er wissen muss, steht in eurem Prompt.
-
 ## Startprompt
 
 Du bist der Agent eines Teams und steuerst einen Roboter.
