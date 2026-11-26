@@ -460,6 +460,11 @@ embed compiling without a build. No CDN assets. Rarely used views are lazy-loade
 - **Team page** (`/t/{token}`): prompt editor (CodeMirror, Markdown, tool name completion),
   preview, history with diffs against deployed versions and local snapshots, live log over SSE,
   conversation tab, notes, tools and console, robots with rename and "Finden", usage, model choice.
+  - **Layout:** prompt and side pane side by side with a splitter (a share of the width, 58 %
+    by default, held between 420 px and 400 px minimums; a double click or Home resets it); the
+    side pane's tabs get closer when it is narrow (container query) and scroll inside their row
+    rather than widen the page. Below 960 px the panes stack. No horizontal page scroll from
+    960 px up (`web/e2e/layout.spec.ts`).
   - **Console** (tab "Werkzeuge"): every tool of the catalog; a click on a by-hand tool opens it
     in place (lazy-loaded `ToolConsole`): a form built from the tool's JSON schema in the session
     (`web/src/console.ts`), "Ausführen" (`POST tools/{name}`) and the result below: one sentence
