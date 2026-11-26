@@ -77,6 +77,11 @@ export function stepLine(e: ProgramEvent): StepLine {
   return { kind: 'step', block: e.block, text: `${t.call} → ${t.outcome}`, failed: t.failed }
 }
 
+/** A tool whose only problem is that it has no blocks yet: "leer", not "Fehler". */
+export function isEmptyTool(problems: ProgramProblem[]): boolean {
+  return problems.length > 0 && problems.every((p) => p.code === 'empty')
+}
+
 /** Problems per block, per input field (name, description), and the rest about the whole tool. */
 export function problemsByBlock(problems: ProgramProblem[]): {
   byBlock: Record<string, string[]>

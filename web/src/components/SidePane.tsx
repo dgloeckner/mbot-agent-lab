@@ -27,6 +27,7 @@ import {
   deployed,
 } from '../state'
 import { lazyComponent } from '../lazy'
+import { isEmptyTool } from '../toolrun'
 import type { SideTab } from '../storage'
 import type { LogEntry, Note, ProgramInfo } from '../types'
 import { SendIcon } from './icons'
@@ -401,7 +402,11 @@ function OwnTools({ blocked, robot }: { blocked: string | null; robot?: string }
             <li key={t.id} class="own-tool">
               <div class="own-tool-row">
                 <code>{t.name}</code>
-                <span class={`tool-tag ${t.valid ? 'tag-ok' : 'tag-bad'}`}>{t.valid ? 'bereit' : 'hat Fehler'}</span>
+                {isEmptyTool(t.problems) ? (
+                  <span class="tool-tag">leer</span>
+                ) : (
+                  <span class={`tool-tag ${t.valid ? 'tag-ok' : 'tag-bad'}`}>{t.valid ? 'bereit' : 'hat Fehler'}</span>
+                )}
                 <span class={`tool-tag tag-agent`} data-state={agentState(t).kind} title={agentState(t).title}>
                   {agentState(t).label}
                 </span>

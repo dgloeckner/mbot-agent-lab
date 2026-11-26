@@ -196,7 +196,9 @@ The team page builds team tools in the left pane ("Werkzeug bauen"); the side pa
 team can try a built-in tool on the right while it builds on the left.
 
 - **Blockly** is a lazy-loaded part of the build (`web/src/components/ToolEditor.tsx`), German
-  locale, with its cursors and icons served by the server under `/assets/blockly-media/` (a Vite
+  locale (Blockly's German file plus `web/src/blocklyDe.ts` for the screen-reader and keyboard
+  texts it leaves in English), the page font and a light or dark theme that follows the page
+  (`web/src/blocklySetup.ts`), with its cursors and icons served by the server under `/assets/blockly-media/` (a Vite
   plugin copies them from the package): nothing is fetched from another host. The block
   definitions and the toolbox come from `GET blocks`; the browser keeps no tool list.
 - **Saving** is automatic 1.5 s after the last change (blocks, name or description), last write
@@ -204,7 +206,13 @@ team can try a built-in tool on the right while it builds on the left.
   PC is still waiting to be saved.
 - **Problems:** a block the server refuses gets a red outline and a warning icon with the reason;
   a problem of name or description stands under its field, which gets a red frame; problems of
-  the whole tool (empty, too many blocks) stand below the workspace.
+  the whole tool (too many blocks, …) stand below the workspace. A tool without blocks is not
+  broken but not built yet (problem `code: "empty"`): the picker and the list say "leer" and a
+  neutral hint stands below the workspace.
+- **New and open tools:** "Neues Werkzeug" opens an untouched new tool (default name, no
+  description, no blocks) instead of making another one. The open tool is remembered per task
+  in the UI preferences and opened again after a reload. The description is a text area of two
+  rows that grows: the agent decides by it.
 - **Name field:** takes only what the name rule allows. Capitals become small letters, umlauts
   are spelled out (`ü` → `ue`), spaces and dashes become `_`, other characters are dropped.
 - **Running:** "Ausführen" and "Einzelschritt" save first and start the run; the `program` events

@@ -187,7 +187,7 @@ func (r *runner) ctxEnd(n *Node) error {
 func (r *runner) abortPending() error {
 	u := r.pending
 	r.res.Tool, r.res.Reason = u.tool, u.reason
-	return r.end(EndAborted, u.node, fmt.Sprintf("%s endete unerwartet mit %s, und kein „wenn“ danach kümmert sich darum.", u.tool, u.reason))
+	return r.end(EndAborted, u.node, fmt.Sprintf("%s endete unerwartet (%s), und kein „wenn“ danach kümmert sich darum.", u.tool, ReasonLabel(u.reason)))
 }
 
 // handles reports whether an if handles the pending unexpected end: it tests
@@ -442,4 +442,15 @@ func toNumber(v any) (float64, bool) {
 		return f, err == nil
 	}
 	return 0, false
+}
+
+// ReasonLabel is the German word of the block editor for an end reason
+// ("obstacle" → "Hindernis"); an unknown reason stays as it is.
+func ReasonLabel(reason string) string {
+	for _, r := range reasons {
+		if r[1] == reason {
+			return r[0]
+		}
+	}
+	return reason
 }

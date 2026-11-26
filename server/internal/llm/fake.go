@@ -163,7 +163,7 @@ func (f Fake) Chat(ctx context.Context, req Request) (Response, error) {
 			At    string `json:"at"`
 		}
 		_ = json.Unmarshal([]byte(lastResult), &tr)
-		report := fmt.Sprintf("Ich habe euer Werkzeug %s benutzt: Ende %s nach %d Schritten", lastTool, tr.End, tr.Steps)
+		report := fmt.Sprintf("Ich habe euer Werkzeug %s benutzt: %s nach %d Schritten", lastTool, endWord(tr.End), tr.Steps)
 		if tr.Value != nil {
 			report += fmt.Sprintf(", es meldet %v", tr.Value)
 		}
@@ -276,4 +276,19 @@ func teamRobots(t Tool) []string {
 		}
 	}
 	return out
+}
+
+// endWord is the German word for how a team tool ended, as the page says it.
+func endWord(end string) string {
+	switch end {
+	case "done":
+		return "fertig"
+	case "aborted":
+		return "abgebrochen"
+	case "limit":
+		return "Grenze erreicht"
+	case "stopped":
+		return "gestoppt"
+	}
+	return end
 }

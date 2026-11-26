@@ -44,7 +44,13 @@ type Problem struct {
 	Block string `json:"block,omitempty"`
 	Field string `json:"field,omitempty"` // FieldName or FieldDescription: the input the problem is about
 	Text  string `json:"text"`
+	// Code marks a problem the page treats apart: ProblemEmpty is a tool not
+	// built yet, shown as "leer" and not as an error.
+	Code string `json:"code,omitempty"`
 }
+
+// ProblemEmpty: the tool has no blocks under its start block yet.
+const ProblemEmpty = "empty"
 
 // Fields of a team tool besides its blocks that a problem can be about.
 const (
@@ -64,7 +70,7 @@ func Validate(p *Program, cat Catalog) []Problem {
 		out = append(out, Problem{Field: FieldDescription, Text: fmt.Sprintf("Die Beschreibung hat %d Zeichen, erlaubt sind %d.", n, MaxDescription)})
 	}
 	if len(p.Body) == 0 {
-		add("", "Das Werkzeug ist leer. Zieht Blöcke hinein.")
+		out = append(out, Problem{Text: "Das Werkzeug ist leer. Zieht Blöcke hinein.", Code: ProblemEmpty})
 		return out
 	}
 
