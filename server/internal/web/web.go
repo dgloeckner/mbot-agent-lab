@@ -77,6 +77,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /assets/", s.assets)
 	mux.HandleFunc("GET /join", s.page)
 	mux.HandleFunc("POST /api/join", s.join)
+	mux.HandleFunc("POST /api/join-team", s.joinTeam)
 	s.adminRoutes(mux)
 
 	team := func(pattern string, h teamHandler) {
@@ -112,6 +113,7 @@ func (s *Server) Handler() http.Handler {
 	team("GET /t/{token}/tasks/{id}", s.teamTask)
 	team("POST /t/{token}/tasks/{id}/accept", s.acceptTask)
 	team("POST /t/{token}/tasks/{id}/activate", s.activateTask)
+	team("POST /t/{token}/join-code", s.joinCode)
 	team("PUT /t/{token}/name", s.renameTeam)
 	team("PUT /t/{token}/model", s.setModel)
 	team("PUT /t/{token}/robots/{robot}/alias", s.renameRobot)
@@ -213,6 +215,11 @@ func (s *Server) withTeam(h teamHandler) http.Handler {
 		securityHeaders(w)
 		t, err := s.Lab.TeamByToken(r.Context(), r.PathValue("token"))
 		if errors.Is(err, store.ErrNotFound) {
+			// A browser opening a wrong link gets the page, which explains it; API calls get JSON.
+			if r.Method == http.MethodGet && r.URL.Path == "/t/"+r.PathValue("token") && strings.Contains(r.Header.Get("Accept"), "text/html") {
+				s.pageStatus(w, http.StatusNotFound)
+				return
+			}
 			writeError(w, http.StatusNotFound, "Diesen Team-Link gibt es nicht (mehr). Gründet auf /join ein Team oder fragt die Lab-Leitung.")
 			return
 		}
@@ -252,6 +259,23 @@ func (s *Server) page(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.ServeFileFS(w, r, s.app, "index.html")
+}
+
+// unknownTeamPage stands in when the pages are not built.
+const unknownTeamPage = `<!doctype html><html lang="de"><meta charset="utf-8"><title>Team-Link unbekannt</title>
+<p>Diesen Team-Link gibt es nicht (mehr). <a href="/join">Zur Anmeldung</a></p></html>`
+
+// pageStatus serves the page with another status (a wrong team link: 404).
+func (s *Server) pageStatus(w http.ResponseWriter, status int) {
+	b := []byte(unknownTeamPage)
+	if s.app != nil {
+		if page, err := fs.ReadFile(s.app, "index.html"); err == nil {
+			b = page
+		}
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	_, _ = w.Write(b)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

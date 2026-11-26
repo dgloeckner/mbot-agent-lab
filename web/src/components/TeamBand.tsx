@@ -4,7 +4,8 @@ import { COLOR_HEX, colorName, formatPrices, formatUsage, skillName } from '../f
 import type { Robot } from '../types'
 import { AutoIcon, LinkIcon, MoonIcon, PlayIcon, StopIcon, SunIcon } from './icons'
 import { InlineEdit } from './InlineEdit'
-import { useEffect, useState } from 'preact/hooks'
+import { useEffect, useRef, useState } from 'preact/hooks'
+import { api } from '../api'
 import type { Theme } from '../storage'
 
 const AGENT_LABEL = { waiting: 'wartet', thinking: 'denkt nach', acting: 'handelt' } as const
@@ -105,6 +106,61 @@ function ModelPick() {
   )
 }
 
+/** The link button: how another PC of the team joins, with a short code or the link. */
+function TeamLinkMenu() {
+  const [open, setOpen] = useState(false)
+  const [code, setCode] = useState<{ code: string; expires_at: string } | null>(null)
+  const [error, setError] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    setError(false)
+    api.joinCode().then(setCode, () => setError(true))
+    const close = (ev: Event) => {
+      if (ev instanceof KeyboardEvent ? ev.key === 'Escape' : !ref.current?.contains(ev.target as Node)) setOpen(false)
+    }
+    document.addEventListener('pointerdown', close)
+    document.addEventListener('keydown', close)
+    return () => {
+      document.removeEventListener('pointerdown', close)
+      document.removeEventListener('keydown', close)
+    }
+  }, [open])
+  const until = code ? new Date(code.expires_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : ''
+  return (
+    <div class="link-menu" ref={ref}>
+      <button
+        class="btn btn-ghost-on-band icon-only"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        title="Weiteren Rechner dazuholen"
+        aria-label="Weiteren Rechner dazuholen"
+      >
+        <LinkIcon />
+      </button>
+      {open && (
+        <div class="link-popover" role="dialog" aria-label="Weiteren Rechner dazuholen">
+          <p>
+            Auf dem anderen Rechner <strong>{location.host}/join</strong> öffnen und unter „Zu einem Team dazukommen“ diesen Code eingeben:
+          </p>
+          {code ? (
+            <>
+              <code class="link-code">{code.code}</code>
+              <p class="faint">Gilt bis {until} Uhr. Behaltet ihn für euch.</p>
+            </>
+          ) : (
+            <p class="faint">{error ? 'Der Code kam nicht an. Versucht es noch einmal.' : 'Hole den Code …'}</p>
+          )}
+          <button class="btn btn-small btn-quiet" onClick={() => (setOpen(false), void copyTeamLink())}>
+            Oder den Team-Link kopieren
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** One line of token use: the current run while it runs, else the team's total; all numbers in the tooltip. */
 function Usage() {
   const a = agent.value
@@ -171,9 +227,7 @@ export function TeamBand() {
             {conn.value === 'connecting' ? 'Verbinde …' : 'Verbindung unterbrochen, verbinde neu …'}
           </span>
         )}
-        <button class="btn btn-ghost-on-band icon-only" onClick={copyTeamLink} title="Team-Link kopieren" aria-label="Team-Link kopieren">
-          <LinkIcon />
-        </button>
+        <TeamLinkMenu />
         <button
           class="btn btn-ghost-on-band icon-only"
           title={`Darstellung: ${THEME_LABEL[theme]}`}

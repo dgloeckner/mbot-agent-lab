@@ -115,7 +115,7 @@ export function shouldAutoSnapshot(newest: Snapshot | undefined, text: string, n
 export function dropOldKeys(kv: KV): void {
   try {
     for (const k of kv.keys()) {
-      if (k.startsWith(OLD_PREFIX) && k !== PREFS_KEY) kv.removeItem(k)
+      if (k.startsWith(OLD_PREFIX) && k !== PREFS_KEY && k !== JOINED_KEY) kv.removeItem(k)
     }
   } catch {
     // storage unavailable: nothing to drop
@@ -185,5 +185,33 @@ export class LocalStore {
 
   static savePrefs(kv: KV, p: Prefs): void {
     write(kv, PREFS_KEY, p)
+  }
+}
+
+// ---------- teams this browser has joined ----------
+
+/** A team this browser has joined, so it finds its way back without the link. */
+export interface Joined {
+  name: string
+  token: string
+  color: string
+}
+const JOINED_KEY = 'mbot-lab:v1:joined'
+
+export function loadJoined(kv: KV): Joined[] {
+  try {
+    const v = JSON.parse(kv.getItem(JOINED_KEY) ?? '[]')
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+
+export function rememberJoined(kv: KV, j: Joined) {
+  const list = [j, ...loadJoined(kv).filter((x) => x.token !== j.token)].slice(0, 5)
+  try {
+    kv.setItem(JOINED_KEY, JSON.stringify(list))
+  } catch {
+    /* storage full or blocked: the link is still shown */
   }
 }

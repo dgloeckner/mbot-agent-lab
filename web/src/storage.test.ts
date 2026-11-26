@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LocalStore, MAX_SNAPSHOTS, changeSize, dropOldKeys, memoryKV, shouldAutoSnapshot, type KV } from './storage'
+import { LocalStore, MAX_SNAPSHOTS, changeSize, dropOldKeys, loadJoined, memoryKV, rememberJoined, shouldAutoSnapshot, type KV } from './storage'
 
 describe('changeSize', () => {
   it('counts only the changed middle', () => {
@@ -94,8 +94,11 @@ describe('LocalStore per (team, task)', () => {
     kv.setItem('mbot-lab:v1:rot:history', '[]')
     LocalStore.savePrefs(kv, { theme: 'dark', split: 0.5, fontSize: 16, sideTab: 'notes' })
     new LocalStore(kv, 'rot', 'a1').saveDraft({ text: 'neu', base: 0, savedAt: 2 })
+    rememberJoined(kv, { name: 'Rot', token: 'tok', color: 'red' })
     dropOldKeys(kv)
     expect(kv.keys().filter((k) => k.startsWith('mbot-lab:v1:rot'))).toEqual([])
+    // The teams this browser joined stay: the join page and a wrong link list them.
+    expect(loadJoined(kv).map((j) => j.name)).toEqual(['Rot'])
     expect(LocalStore.loadPrefs(kv).theme).toBe('dark')
     expect(new LocalStore(kv, 'rot', 'a1').loadDraft()?.text).toBe('neu')
   })

@@ -1,34 +1,78 @@
 import { render } from 'preact'
-import { useState } from 'preact/hooks'
+import { useEffect, useState } from 'preact/hooks'
 import { COLOR_HEX, onColor } from '../format'
-import { browserKV } from '../storage'
+import { browserKV, loadJoined, rememberJoined, type Joined } from '../storage'
 import './join.css'
 
-// Teams this browser has joined, so a team finds its way back without the link.
-interface Joined {
-  name: string
-  token: string
-  color: string
-}
-const JOINED_KEY = 'mbot-lab:v1:joined'
 const kv = browserKV()
 
-function loadJoined(): Joined[] {
+/** The short join code of a team, for its other PCs (POST join-code on the team link). */
+async function fetchJoinCode(token: string): Promise<{ code: string; expires_at: string } | null> {
   try {
-    const v = JSON.parse(kv.getItem(JOINED_KEY) ?? '[]')
-    return Array.isArray(v) ? v : []
+    const resp = await fetch(`/t/${encodeURIComponent(token)}/join-code`, { method: 'POST' })
+    return resp.ok ? await resp.json() : null
   } catch {
-    return []
+    return null
   }
 }
 
-function remember(j: Joined) {
-  const list = [j, ...loadJoined().filter((x) => x.token !== j.token)].slice(0, 5)
-  try {
-    kv.setItem(JOINED_KEY, JSON.stringify(list))
-  } catch {
-    /* storage full or blocked: the link is still shown */
+/** Another PC of a team comes in with the code a PC of the team shows. */
+function JoinByCode() {
+  const [code, setCode] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const submit = async (ev: Event) => {
+    ev.preventDefault()
+    setError(null)
+    setBusy(true)
+    try {
+      const resp = await fetch('/api/join-team', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      })
+      const data = await resp.json().catch(() => null)
+      if (!resp.ok) {
+        setError(data?.error ?? `Der Server hat mit Fehler ${resp.status} geantwortet.`)
+        return
+      }
+      rememberJoined(kv, { name: data.name, token: data.token, color: data.color })
+      location.href = `/t/${data.token}`
+    } catch {
+      setError('Keine Verbindung zum Server. Prüft das Netzwerk und versucht es noch einmal.')
+    } finally {
+      setBusy(false)
+    }
   }
+  return (
+    <form onSubmit={submit} class="join-form join-by-code" aria-labelledby="join-by-code-title">
+      <h2 id="join-by-code-title">Zu einem Team dazukommen</h2>
+      <label>
+        <span>Team-Code</span>
+        <input
+          class="team-code-input"
+          value={code}
+          maxLength={7}
+          autoComplete="off"
+          autoCapitalize="characters"
+          spellcheck={false}
+          placeholder="z. B. K7P3QX"
+          aria-describedby="team-code-hint"
+          onInput={(e) => setCode(e.currentTarget.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))}
+          required
+        />
+        <small id="team-code-hint">Euer Team ist schon gegründet? Auf einem Rechner eures Teams steht der Code hinter dem Link-Knopf oben.</small>
+      </label>
+      {error && (
+        <p class="form-error" role="alert">
+          {error}
+        </p>
+      )}
+      <button class="btn btn-quiet btn-big" type="submit" disabled={busy || code.length < 6}>
+        {busy ? 'Komme dazu …' : 'Dazukommen'}
+      </button>
+    </form>
+  )
 }
 
 function JoinPage() {
@@ -39,7 +83,11 @@ function JoinPage() {
   const [joined, setJoined] = useState<Joined | null>(null)
   const [copied, setCopied] = useState(false)
   const [codeFocus, setCodeFocus] = useState(false)
-  const earlier = loadJoined()
+  const earlier = loadJoined(kv)
+  const [joinCode, setJoinCode] = useState<string | null>(null)
+  useEffect(() => {
+    if (joined) void fetchJoinCode(joined.token).then((c) => setJoinCode(c?.code ?? null))
+  }, [joined?.token])
 
   const submit = async (ev: Event) => {
     ev.preventDefault()
@@ -57,7 +105,7 @@ function JoinPage() {
         return
       }
       const j = { name: data.name, token: data.token, color: data.color }
-      remember(j)
+      rememberJoined(kv, j)
       setJoined(j)
     } catch {
       setError('Keine Verbindung zum Server. Prüft das Netzwerk und versucht es noch einmal.')
@@ -73,9 +121,17 @@ function JoinPage() {
       <main class="join" style={{ '--accent': accent, '--on-accent': onColor(accent) }}>
         <section class="join-card welcome">
           <h1>Willkommen, {joined.name}!</h1>
+          {joinCode && (
+            <div class="join-code-box">
+              <p>
+                Auf den anderen Rechnern eures Teams: <strong>{location.host}/join</strong> öffnen, unter „Zu einem Team dazukommen“ diesen Code
+                eingeben. Er gilt 10 Minuten; einen neuen zeigt euer Link-Knopf auf der Teamseite.
+              </p>
+              <code class="join-code">{joinCode}</code>
+            </div>
+          )}
           <p>
-            Das ist euer Team-Link. Öffnet ihn auf den anderen Rechnern eures Teams. Behaltet ihn für euch: Wer den Link hat, kann euren
-            Agenten steuern.
+            Oder öffnet dort euren Team-Link. Behaltet Link und Code für euch: Wer sie hat, kann euren Agenten steuern.
           </p>
           <div class="team-link">
             <code>{link}</code>
@@ -141,6 +197,7 @@ function JoinPage() {
             {busy ? 'Gründe …' : 'Team gründen'}
           </button>
         </form>
+        <JoinByCode />
         {earlier.length > 0 && (
           <div class="earlier">
             <h2>Auf diesem Rechner schon dabei</h2>

@@ -2818,3 +2818,45 @@ kbd {
   opacity: 0.45;
   transition: opacity 0.15s;
 }
+
+/* The link button's popover: the join code for another PC of the team. */
+.link-menu {
+  position: relative;
+}
+
+.link-popover {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  width: 320px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.4;
+  box-shadow: 0 12px 36px rgb(0 0 0 / 0.22);
+}
+
+.link-code {
+  font-family: var(--font-mono);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+}
+
+.unknown-team ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.unknown-team h2 {
+  margin-top: 12px;
+  font-size: 16px;
+}

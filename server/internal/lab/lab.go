@@ -93,6 +93,7 @@ type Service struct {
 	modelsGen atomic.Int64
 
 	conversationOff atomic.Bool
+	joins           joinCodes
 }
 
 // Start loads the lab code and restores robot assignments from the database.

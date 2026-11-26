@@ -178,3 +178,37 @@
   color: var(--muted);
   font-size: 14px;
 }
+
+/* Joining an existing team with its short code, below the founding form. */
+.join-by-code {
+  margin-top: 8px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.join-by-code h2 {
+  font-size: 20px;
+}
+
+.team-code-input {
+  font-family: var(--font-mono);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.join-code-box {
+  display: grid;
+  gap: 8px;
+}
+
+.join-code {
+  justify-self: start;
+  padding: 8px 16px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+}

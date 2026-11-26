@@ -28,6 +28,8 @@ export const conversation = signal<LogEntry[]>([])
 /** Agent answers in the conversation the team has not seen yet. */
 export const conversationUnread = signal(0)
 export const conn = signal<ConnState>('connecting')
+/** The team link is wrong or the team is gone: the page explains it instead of the team page. */
+export const unknownTeam = signal(false)
 /** When the last live event arrived: robot values are as old as this while the connection is lost. */
 export const lastLive = signal(Date.now())
 export const notes = signal<Note[]>([])
@@ -189,6 +191,7 @@ export async function init() {
   try {
     s = await api.session()
   } catch (err) {
+    unknownTeam.value = err instanceof ApiError && err.status === 404
     loadError.value = err instanceof Error ? err.message : String(err)
     return
   }

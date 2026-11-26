@@ -18,7 +18,10 @@ Englisch mit gleichem Dateinamen.
 2. **Veröffentlichen.** Ab dann ist der Text fest: Alle Teams und die Auswertung beziehen sich auf
    denselben Text. Wer etwas ändern will, dupliziert die Aufgabe und veröffentlicht die Kopie.
 3. **Teams gründen.** Die Teams öffnen `/join`, geben den Lab-Code ein und sehen dann „Wartet auf
-   eine Aufgabe von der Lab-Leitung“. Roboter könnt ihr ihnen schon zuteilen.
+   eine Aufgabe von der Lab-Leitung“. Roboter könnt ihr ihnen schon zuteilen. Die anderen Rechner
+   eines Teams kommen ohne den langen Team-Link dazu: Der Link-Knopf oben auf der Teamseite zeigt
+   einen Code aus sechs Zeichen (10 Minuten gültig), den man auf `/join` unter „Zu einem Team
+   dazukommen“ eingibt.
 4. **Zuweisen.** Eine offene Aufgabe auf eine Teamkarte ziehen oder über „Zuweisen …“ an ein Team
    oder an alle Teams geben. Teams, die später beitreten, bekommen nichts automatisch. Solange ein
    Team nicht angenommen hat, könnt ihr die Aufgabe zurückziehen.

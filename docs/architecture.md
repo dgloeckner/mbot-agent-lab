@@ -246,12 +246,15 @@ Pages and joining:
 | Route | Purpose |
 | --- | --- |
 | `GET /`, `GET /join`, `POST /api/join` | start page, join page, join with lab code and team name (rate limited) |
+| `POST /api/join-team` | another PC of a team: a join code gives the team link (rate limited) |
 | `GET /assets/…` | embedded team page and control room build |
 | `GET /healthz` | health check |
 
 Team routes (`/t/{token}/…`, the token is the secret part of the team link). Prompts, notes,
 runs, conversations and the log act on the team's active task: without one they answer 409, in
-a closed task writes answer 409 and reads work. Stop always works.
+a closed task writes answer 409 and reads work. Stop always works. An unknown token answers 404
+with JSON, except a browser opening the team page itself (`Accept: text/html`): it gets the page
+with 404, which explains the wrong link, links to `/join` and lists the teams this browser joined.
 
 | Route | Purpose |
 | --- | --- |
@@ -275,6 +278,7 @@ a closed task writes answer 409 and reads work. Stop always works.
 | `GET events` | SSE: `ping` (keep-alive with its interval), `log`, `robots`, `agent`, `totals`, `models`, `task` (active task changed), `tasks` (assigned, withdrawn, accepted or closed), `programs` (a team tool was saved or deleted; `id`), `program` (a step of a running team tool); `Last-Event-ID` or `?after=` catches up |
 | `GET/POST notes`, `PUT/DELETE notes/{id}` | notes |
 | `PUT name`, `PUT model` | rename the team, choose the model |
+| `POST join-code` | a short-lived join code for another PC of the team |
 | `PUT robots/{robot}/alias`, `POST robots/{robot}/identify` | rename a robot, make it blink and beep |
 
 Control room (`/admin`, admin password, session cookie):
@@ -524,7 +528,11 @@ embed compiling without a build. No CDN assets. Rarely used views are lazy-loade
     the new task's backlog; entries of another task are ignored (`web/src/taskview.ts`).
     Drafts and snapshots are stored per (team, task) (`mbot-lab:v2:<team>:<task>:…`); keys from
     before tasks are dropped on load, preferences stay.
-- **Join page** (`/join`): lab code and team name; the browser remembers joined teams.
+- **Join page** (`/join`): lab code and team name; or "Zu einem Team dazukommen" with a join
+  code. The browser remembers joined teams. Join codes (`lab.JoinCode`): six characters without
+  look-alikes, valid ten minutes, kept in memory; `POST /t/{token}/join-code` shows one (the same
+  one while it has more than three minutes left), on the welcome page and behind the band's link
+  button ("Weiteren Rechner dazuholen", which also copies the link).
 - **Control room** (`/admin`): lab code for the projector, all robots live, every team with its
   robots and open browsers, robot assignment by drag and drop or from a list, team rename and
   delete, released models, conversations switch, usage per team, stop all.
