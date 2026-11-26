@@ -116,6 +116,10 @@ def main(argv=None):
     if a.trace > 0:
         threading.Thread(target=trace, args=(simstate.world, a.trace), daemon=True).start()
     runpy.run_path(a.bundle, run_name="__main__")
+    # Like the firmware: the start handler runs once the script has loaded.
+    import event  # fakes/event.py
+    for t in event.fire_start():
+        t.join()
 
 
 if __name__ == "__main__":

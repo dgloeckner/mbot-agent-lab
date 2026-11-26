@@ -57,7 +57,16 @@ connects to the broker and never blocks.
 - **Bundle:** `robot/tools/bundle.py` joins the modules of `robot/src` in dependency order
   (`MODULES`) into one `main.py`, strips comments and docstrings and inlines `config.py`. All
   modules share one namespace after bundling. Only `hw.py` touches vendor modules (`cyberpi`,
-  `mbot2`, `mbuild`); the MQTT client is bundled (`mqtt.py`) because the firmware has no `umqtt`.
+  `mbot2`, `mbuild`, `event`); the MQTT client is bundled (`mqtt.py`) because the firmware has no
+  `umqtt`.
+- **Start:** the script's top level only defines names and ends with `hw_on_start(main)`, which
+  registers `main` as the firmware's start handler (`event.start`, as in the code mBlock generates)
+  and returns. Without the `event` module `main` runs right away. `main` starts the robot loop in
+  its own thread with a 32 KB stack (the program's thread has 6 KB, too little for the quad RGB
+  sensor library); without `_thread` the loop runs in the handler itself. The handler then sleeps
+  as long as its robot runs instead of returning. Every start bumps a counter kept in
+  `sys.modules`: after a new upload into the same interpreter, the older robot thread and its
+  handler see the newer value and stop, so only one robot uses the MQTT client ID.
 - **Upload:** `npx nx run robot:upload --config=…` bundles and runs `server/cmd/robotupload`
   (macOS, USB serial 115200 8N1; mBlock still works). The protocol lives in
   `server/internal/cyberpi`, ported from MIT-licensed community tools that reverse-engineered
@@ -501,9 +510,11 @@ embed compiling without a build. No CDN assets. Rarely used views are lazy-loade
 
 ## Simulator
 
-`sim/` runs the real bundled robot script under CPython with fakes for `cyberpi`, `mbot2` and
-`mbuild` (`sim/fakes/`) and a 2D world (`sim/world.py`) with optional seeded sensor noise. MQTT is
-real. The floor is a drawing of tape bands seen by four probes. Assumed robot geometry in
+`sim/` runs the real bundled robot script under CPython with fakes for `cyberpi`, `mbot2`,
+`mbuild` and `event` (`sim/fakes/`) and a 2D world (`sim/world.py`) with optional seeded sensor noise. MQTT is
+real. Like the firmware, the simulator loads the script first and then runs its start handler
+(`event.fire_start`); CPython refuses a 32 KB thread stack, so there the robot loop runs in the
+handler. The floor is a drawing of tape bands seen by four probes. Assumed robot geometry in
 `sim/mbot2.json`. Worlds: `arena`, `labyrinth`, `labyrinth_rechts` (up, right, down to blue:
 solvable by turning right at every wall), `labyrinth_gestoert` (the same with a box in the top
 corridor, a detour through the middle and the blue field in a side corridor: turning right at every

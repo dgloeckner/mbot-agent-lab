@@ -67,6 +67,50 @@ Notes on the hwcheck run of 2026-11-23:
   why the robot runs in its own thread with 32 KB (`robot/src/main.py`). The thread stack is not
   part of the heap above.
 
+### Start: entry or size?
+
+The 120 KB bundle that hung was started by a top level that never returned (`main()` called
+directly, then an endless sleep loop). Other uploaders report that top-level loops can hang the
+CyberPi at boot and block later uploads. The script now starts through the firmware's start event
+(`hw_on_start`, see `docs/architecture.md`). This measurement tells whether the hang came from
+the entry or from the size. Until it is filled in, the budget stays at 60 000 bytes.
+
+1. **New entry, normal bundle.** Build and upload the normal bundle. The robot connects (robot
+   chip in the control room).
+2. **Upload over the running script.** With the robot connected, upload the same bundle again.
+   mBlock uploads, the robot connects again, and the server log shows one robot, not two fighting
+   over the client ID.
+3. **Power cycle.** Switch off and on: the robot starts and connects without mBlock.
+4. **Size.** Upload bundles padded to about 80, 100 and 120 KB, in this order:
+
+   ```bash
+   npx nx run robot:bundle --config=robot/config.py --pad=40000
+   ```
+
+   ```bash
+   npx nx run robot:bundle --config=robot/config.py --pad=60000
+   ```
+
+   ```bash
+   npx nx run robot:bundle --config=robot/config.py --pad=80000
+   ```
+
+   For each: note the bundle size the bundler prints, whether the CyberPi starts and connects,
+   and whether mBlock can then still upload (upload the next bundle, or the normal one after the
+   last). Stop at the first size that hangs and follow "Recovery" below.
+
+| Bundle (pad, bytes) | Starts and connects | mBlock uploads afterwards | Date |
+| --- | --- | --- | --- |
+| Normal, pad 0 | | | |
+| Normal again over the running script | | | |
+| Normal after power cycle | | | |
+| pad 40000 | | | |
+| pad 60000 | | | |
+| pad 80000 | | | |
+
+If 120 KB starts and mBlock can upload afterwards, the hang came from the entry and the budget can
+be raised as in "What follows". If it still hangs, the limit is the size and the budget stays.
+
 ### Recovery after a bundle that is too big
 
 1. Switch off, wait 2 to 3 minutes after switching on again, then upload the normal bundle.
