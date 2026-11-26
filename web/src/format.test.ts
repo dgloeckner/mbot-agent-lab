@@ -1,5 +1,5 @@
 import { describe as group, expect, it } from 'vitest'
-import { describe, estimateTokens, programEnd, formatCost, formatPrices, formatUsage, logGroup, onColor, relativeTime } from './format'
+import { describe, estimateTokens, programEnd, formatCost, formatPrices, formatUsage, logGroup, onColor, relativeTime, versionSummary } from './format'
 
 group('describe', () => {
   it('words robot events in German', () => {
@@ -72,3 +72,11 @@ group('team tool lines', () => {
   })
 })
 
+
+group('versionSummary', () => {
+  it('says how much changed and how the runs ended', () => {
+    expect(versionSummary({ version: 2, delta: 12, runs: { finish: 1, stop: 1 } })).toBe('12 Zeichen geändert · 2 Läufe: 1 × fertig, 1 × gestoppt')
+    expect(versionSummary({ version: 3, delta: 0, runs: { '': 1 } })).toBe('Prompt gleich · 1 Lauf: 1 × läuft')
+    expect(versionSummary({ version: 1, delta: 240 })).toBe('240 Zeichen · kein Lauf')
+  })
+})

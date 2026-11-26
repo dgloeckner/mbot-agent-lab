@@ -2,6 +2,7 @@ package lab
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -134,11 +135,33 @@ func (s *Service) RestoreVersion(ctx context.Context, teamID string, version int
 	if err != nil {
 		return store.Prompt{}, err
 	}
+	before, err := s.Store.Programs(ctx, tt)
+	if err != nil {
+		return store.Prompt{}, err
+	}
 	p, err := s.Store.RestoreVersion(ctx, tt, version)
 	if err != nil {
 		return p, err
 	}
+	after, err := s.Store.Programs(ctx, tt)
+	if err != nil {
+		return p, err
+	}
 	s.Log.Info("version restored", "team", teamID, "task", tt.Task, "version", version)
+	// Every PC of the team reads it in the log: a tool may just disappear there.
+	text := fmt.Sprintf("Version %d wiederhergestellt", version)
+	for _, c := range store.DiffTools(before, after) {
+		switch c.Change {
+		case store.ToolNew:
+			text += fmt.Sprintf(", Werkzeug %s zurückgeholt", c.Name)
+		case store.ToolChanged:
+			text += fmt.Sprintf(", Werkzeug %s wie in Version %d", c.Name, version)
+		case store.ToolRemoved:
+			text += fmt.Sprintf(", Werkzeug %s entfernt", c.Name)
+		}
+	}
+	data, _ := json.Marshal(map[string]any{"version": version})
+	s.Hub.Publish(teamID, live.LogEntry{Source: live.SourceTeam, Kind: "restore", Text: text + ".", Data: data})
 	s.Hub.SignalRef(teamID, live.SignalPrograms, "")
 	return p, nil
 }

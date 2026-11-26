@@ -75,6 +75,9 @@ test('deploy from the tool editor, change both, restore the first version', asyn
   expect(tools.map((t: any) => [t.name, t.description])).toEqual([['quadrat', 'Fährt ein Quadrat.']])
   await page.getByRole('tab', { name: 'Werkzeug bauen' }).click()
   await expect(desc).toHaveValue('Fährt ein Quadrat.')
+  // The restore is in the log, for every PC of the team.
+  await page.getByRole('tab', { name: 'Protokoll' }).click()
+  await expect(page.locator('.log')).toContainText('Version 1 wiederhergestellt, Werkzeug quadrat wie in Version 1.')
 })
 
 test('the deploy warning: none for result words, a lasting warning for a missing tool', async ({ page }) => {
@@ -107,4 +110,31 @@ test('the deploy warning: none for result words, a lasting warning for a missing
   await page.screenshot({ path: join(SHOTS, 'deploy-warning.png') })
   await warning.getByRole('button', { name: 'Hinweis schließen' }).click()
   await expect(warning).toHaveCount(0)
+})
+
+test('a deploy without a change creates no version; the history says what changed', async ({ page }) => {
+  await page.goto(lab.page(team))
+  await page.getByRole('tab', { name: 'Prompt' }).click()
+  const deployBtn = page.locator('.deploy-actions').getByRole('button', { name: /^Deployen Strg/ })
+  // Deploy whatever the draft is now, so there is nothing left to deploy.
+  await deployBtn.click()
+  await expect(page.locator('.toast')).toContainText(/deployt|Nichts geändert/)
+  await expect(deployBtn).toHaveClass(/btn-quiet/)
+  const before = (await lab.teamCall(team, 'GET', '/prompts')).length
+
+  await deployBtn.click()
+  await expect(page.locator('.toast')).toContainText(`Nichts geändert seit Version ${before}`)
+  expect((await lab.teamCall(team, 'GET', '/prompts')).length).toBe(before)
+
+  // Typing makes it the primary button again.
+  await page.locator('.editor .cm-content').click()
+  await page.keyboard.press('Control+End')
+  await page.keyboard.type(' Noch ein Satz.')
+  await expect(deployBtn).toHaveClass(/btn-accent/)
+
+  await page.getByRole('tab', { name: 'Verlauf' }).click()
+  await expect(version(page, before).locator('.version-summary')).toContainText(/Zeichen|Prompt gleich/)
+  await expect(version(page, before).locator('.version-summary')).toContainText('kein Lauf')
+  await expect(page.locator('.history-item').filter({ has: page.locator('strong', { hasText: /^Version / }) })).toHaveCount(before)
+  await page.locator('.prompt-pane').screenshot({ path: join(SHOTS, 'deploy-history-summary.png') })
 })

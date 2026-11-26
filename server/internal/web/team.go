@@ -197,6 +197,18 @@ func (s *Server) deployPrompt(w http.ResponseWriter, r *http.Request, team store
 		s.serverError(w, err)
 		return
 	}
+	if p.Unchanged {
+		// Nothing changed since the newest version: no new version, no log line.
+		// "Deployen und neu starten" still starts a new run with it.
+		if req.Restart {
+			if err := s.Agents.Deployed(r.Context(), team.ID, p.Version, true); err != nil {
+				s.agentNotice(team.ID, err)
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"version": p.Version, "text": p.Text, "created_at": p.CreatedAt, "chars": p.Chars,
+			"tools": versionTools, "unchanged": true})
+		return
+	}
 	toolNames := []string{}
 	for _, t := range versionTools {
 		toolNames = append(toolNames, t.Name)

@@ -34,6 +34,10 @@ export interface PromptVersion {
   chars: number
   /** Team tools that are new, changed or removed in this version (the version list only). */
   tools?: ToolChange[]
+  /** Characters of the prompt changed against the version before (the version list only). */
+  delta?: number
+  /** Runs of this version by how they ended; "" is a run still going (the version list only). */
+  runs?: Record<string, number>
 }
 
 export interface ToolChange {

@@ -13,6 +13,7 @@ import {
   editorBridge,
   keepDraft,
   leftView,
+  needsDeploy,
   prefs,
   readOnly,
   remoteVersion,
@@ -156,7 +157,12 @@ export function PromptPane() {
           >
             Deployen und neu starten
           </button>
-          <button class="btn btn-accent" disabled={!canDeploy} onClick={() => deploy(false)} title={`Speichert eine neue Version (${MOD} + Enter)`}>
+          <button
+            class={`btn ${needsDeploy.value ? 'btn-accent' : 'btn-quiet'}`}
+            disabled={!canDeploy}
+            onClick={() => deploy(false)}
+            title={needsDeploy.value ? `Speichert eine neue Version (${MOD} + Enter)` : 'Prompt und eigene Werkzeuge sind schon so deployt.'}
+          >
             {busy.value === 'deploy' ? 'Deploye …' : 'Deployen'}
             <kbd>{MOD} ↵</kbd>
           </button>

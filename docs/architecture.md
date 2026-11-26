@@ -261,7 +261,7 @@ a closed task writes answer 409 and reads work. Stop always works.
 | `GET tasks/{id}` | one assigned task with its text (the "Aufgabe" tab) |
 | `POST tasks/{id}/accept` | accept and activate: `{prompt: "starter" \| "empty" \| "copy", from_task?}` |
 | `POST tasks/{id}/activate` | switch to another accepted task; 409 while a run is active |
-| `GET prompts`, `GET prompts/{version}`, `POST prompt` | versions (each with the team tools that are new, changed or removed against the version before); deploy, optionally with restart: answers the version's team tools and a warning |
+| `GET prompts`, `GET prompts/{version}`, `POST prompt` | versions (each with the team tools that are new, changed or removed against the version before, the prompt's changed characters and its runs by end); deploy, optionally with restart: answers the version's team tools and a warning, or `unchanged` without a new version |
 | `POST prompts/{version}/restore` | restore a version: team tools here, prompt text for the draft; SSE `programs` |
 | `GET prompts/{version}/tools?against=now\|{n}` | team tools that differ between the version and the working state (default) or version n: `{left, right, tools}`, the older state on the left, version 0 is the working state; reads work in a closed task |
 | `GET prompts/{version}/tools/{id}?against=now\|{n}` | one team tool in both states (`{left, right}` with `version` and the stored tool or null) and the changes between them (`docs/programs.md`, "Comparing versions"); 404 for an unknown version or a tool in neither |
@@ -360,10 +360,22 @@ Each note stores its origin: the run and the message after which it was written.
 
 ### Deploying prompts and team tools
 
-Every deploy creates a new version; old versions stay. A version is the prompt text and every team
-tool of the pair, valid or not (`prompt_programs`); a deploy in which only a tool changed creates a
-new version with the same text. A plain deploy takes effect at the next model call, never in the
-middle of a tool call. "Deploy and restart" begins a new run. Each run stores its version.
+Every deploy that changes something creates a new version; old versions stay. A version is the
+prompt text and every team tool of the pair, valid or not (`prompt_programs`); a deploy in which
+only a tool changed creates a new version with the same text. A deploy with the same text and the
+same team tools as the newest version creates nothing (`store.SavePrompt`): it answers that
+version with `unchanged` (200, no log line), and the page says "Nichts geändert seit Version N";
+"Deploy and restart" still begins a new run with it. A plain deploy takes effect at the next model
+call, never in the middle of a tool call. "Deploy and restart" begins a new run. Each run stores
+its version.
+
+- The version list (`GET prompts`) gives per version the team tools that changed, the characters
+  of the prompt that changed (`delta`, counted like the page's snapshots) and its runs by how
+  they ended (`runs`); the history shows that as one line ("12 Zeichen geändert · 2 Läufe:
+  1 × fertig, 1 × gestoppt"). "Deployen" is the primary button only while the draft or a team
+  tool differs from the newest version.
+- A restore writes a log line for every PC of the team ("Version 3 wiederhergestellt, Werkzeug
+  quadrat entfernt.").
 
 - The agent gets the team tools of the newest version that are valid and have a description
   (`tools.md`, "Team tools as agent tools").
