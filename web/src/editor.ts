@@ -16,8 +16,9 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { markdownKeymap, markdownLanguage } from '@codemirror/lang-markdown'
 import { HighlightStyle, LanguageSupport, syntaxHighlighting, indentOnInput, bracketMatching } from '@codemirror/language'
 import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search'
-import { Compartment, EditorState, type Extension } from '@codemirror/state'
+import { Compartment, EditorState, StateEffect, StateField, type Extension } from '@codemirror/state'
 import {
+  Decoration,
   EditorView,
   drawSelection,
   highlightActiveLine,
@@ -28,6 +29,7 @@ import {
 } from '@codemirror/view'
 import { tags as t } from '@lezer/highlight'
 import { matchTools } from './completion'
+import { planInsert } from './promptinsert'
 import type { ToolInfo } from './types'
 
 /** Highlighting uses CSS variables so light and dark themes switch without reconfiguring. */
@@ -100,6 +102,21 @@ function acceptFirstCompletion(view: EditorView): boolean {
   return acceptCompletion(view)
 }
 
+// A short highlight of inserted text, so the team sees where it landed.
+const flashEffect = StateEffect.define<{ from: number; to: number } | null>()
+const flashMark = Decoration.mark({ class: 'cm-flash' })
+const flashField = StateField.define({
+  create: () => Decoration.none,
+  update(deco, tr) {
+    deco = deco.map(tr.changes)
+    for (const e of tr.effects) {
+      if (e.is(flashEffect)) deco = e.value ? Decoration.set([flashMark.range(e.value.from, e.value.to)]) : Decoration.none
+    }
+    return deco
+  },
+  provide: (f) => EditorView.decorations.from(f),
+})
+
 export interface EditorOptions {
   parent: HTMLElement
   doc: string
@@ -113,7 +130,8 @@ export interface EditorOptions {
 export interface PromptEditor {
   view: EditorView
   replace(text: string): void
-  insert(text: string): void
+  /** Inserts text at the team's cursor, or at the end if they have not placed one; reports where. */
+  insert(text: string): 'cursor' | 'end'
   focus(): void
   destroy(): void
 }
@@ -150,10 +168,17 @@ export function createEditor(o: EditorOptions): PromptEditor {
       { key: 'Tab', run: acceptFirstCompletion },
       indentWithTab,
     ]),
+    flashField,
     EditorView.updateListener.of((u) => {
       if (u.docChanged) o.onChange(u.state.doc.toString())
+      // The cursor counts only once the team placed it: typing, clicking, moving.
+      if (u.transactions.some((tr) => tr.isUserEvent('select') || tr.isUserEvent('input') || tr.isUserEvent('delete') || tr.isUserEvent('move'))) {
+        placed = true
+      }
     }),
   ]
+  let placed = false
+  let flashTimer: number | undefined
   const view = new EditorView({ parent: o.parent, state: EditorState.create({ doc: o.doc, extensions }) })
   return {
     view,
@@ -163,9 +188,18 @@ export function createEditor(o: EditorOptions): PromptEditor {
       view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text }, selection: { anchor: Math.min(view.state.selection.main.head, text.length) } })
     },
     insert(text) {
-      const { from, to } = view.state.selection.main
-      view.dispatch({ changes: { from, to, insert: text }, selection: { anchor: from + text.length }, scrollIntoView: true })
+      const where = placed ? 'cursor' : 'end'
+      const p = planInsert(view.state.doc.toString(), text, placed ? view.state.selection.main : null)
+      view.dispatch({
+        changes: { from: p.from, to: p.to, insert: p.insert },
+        selection: { anchor: p.end },
+        effects: [flashEffect.of({ from: p.start, to: p.end }), EditorView.scrollIntoView(p.end, { y: 'center' })],
+      })
+      placed = true // from now on the team's cursor is where the name ended
+      window.clearTimeout(flashTimer)
+      flashTimer = window.setTimeout(() => view.dispatch({ effects: flashEffect.of(null) }), 1600)
       view.focus()
+      return where
     },
     focus: () => view.focus(),
     destroy: () => view.destroy(),

@@ -2731,3 +2731,16 @@ kbd {
   border-color: var(--diff-moved);
   border-style: dotted;
 }
+
+/* Text just inserted into the prompt ("In den Prompt einfügen"). */
+.cm-flash {
+  background: color-mix(in oklab, var(--accent) 30%, transparent);
+  border-radius: 3px;
+  transition: background 0.4s;
+}
+
+/* "Deployen" in the tool editor also ships a changed prompt draft: say so on the button. */
+.deploy-with-prompt {
+  color: var(--warn);
+  font-weight: 700;
+}

@@ -76,3 +76,42 @@ test('drive by hand in the Werkzeuge tab, then the console is off during a run',
 
   for (const line of lab.serverLines('tool by hand')) console.log('server: ' + line)
 })
+
+test('"In den Prompt einfügen" after a reload keeps the first line and says where', async ({ page }) => {
+  await lab.teamCall(team, 'POST', '/prompt', { text: 'Du steuerst einen kleinen Roboter.\nFahre los.' })
+  await page.goto(lab.page(team))
+  await page.reload() // the editor's cursor is at 0, the team has not placed it
+  const prompt = page.locator('.editor .cm-content')
+  await expect(prompt).toContainText('Du steuerst')
+  await page.getByRole('tab', { name: 'Werkzeuge' }).click()
+  const panel = page.locator('.tools-panel')
+
+  // An agent-only row opens like the others; the insert is a button inside.
+  await panel.getByRole('button', { name: /^say\b/ }).click()
+  await panel.getByRole('button', { name: 'In den Prompt einfügen' }).click()
+  await expect(page.locator('.toast')).toContainText('`say` in den Prompt eingefügt am Ende')
+  const lines = page.locator('.editor .cm-line')
+  await expect(lines.first()).toHaveText('Du steuerst einen kleinen Roboter.')
+  await expect(lines.last()).toHaveText('`say`')
+  await expect(page.locator('.cm-flash')).toBeVisible()
+
+  // Now the cursor is placed (after `say`): the next one goes there, with a space.
+  await panel.getByRole('button', { name: /^say\b/ }).click() // close
+  await panel.getByRole('button', { name: /^drive\b/ }).first().click()
+  await page.getByRole('form', { name: 'drive ausführen' }).getByRole('button', { name: 'In den Prompt einfügen' }).click()
+  await expect(lines.last()).toHaveText('`say` `drive`')
+  await expect(lines.first()).toHaveText('Du steuerst einen kleinen Roboter.')
+
+  // From the tool editor: the prompt comes into view, the toast says where the editor went.
+  await page.getByRole('tab', { name: 'Werkzeug bauen' }).click()
+  await page.getByRole('form', { name: 'drive ausführen' }).getByRole('button', { name: 'In den Prompt einfügen' }).click()
+  await expect(page.getByRole('tab', { name: 'Prompt', exact: true })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('.toast')).toContainText('Werkzeug bauen')
+
+  // Deploy from the tool editor ships the changed prompt and says so.
+  await page.getByRole('tab', { name: 'Werkzeug bauen' }).click()
+  const deployBtn = page.locator('.tool-head').getByRole('button', { name: /^Deployen/ })
+  await expect(deployBtn).toContainText('+ Prompt')
+  await deployBtn.click()
+  await expect(page.locator('.toast')).toContainText('mit geändertem Prompt')
+})

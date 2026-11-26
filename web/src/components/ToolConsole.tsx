@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks'
 import { FLOOR_FILL, argsOf, fieldsOf, floorSegments, keyFields, resultSentence, traceEnd, type Field } from '../console'
 import { clock } from '../format'
-import { editorBridge, runTool, type ToolRun } from '../state'
+import { insertIntoPrompt, runTool, type ToolRun } from '../state'
 import type { ToolInfo } from '../types'
 
 const BOOL_LABEL: Record<string, string> = { '': 'Standard', true: 'ja', false: 'nein' }
@@ -122,7 +122,7 @@ export default function ToolConsole({ tool, robot, blocked }: { tool: ToolInfo; 
           </svg>
           {running ? 'Läuft …' : 'Ausführen'}
         </button>
-        <button class="btn-link" type="button" onClick={() => editorBridge.insert?.('`' + tool.name + '`')}>
+        <button class="btn-link" type="button" onClick={() => insertIntoPrompt(tool.name)}>
           In den Prompt einfügen
         </button>
         {blocked && <span class="console-blocked">{blocked}</span>}
