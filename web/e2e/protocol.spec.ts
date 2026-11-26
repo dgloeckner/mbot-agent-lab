@@ -74,5 +74,6 @@ test('lab events on every tab, new entries below, Stopp answers, read stays read
   await page.reload()
   await expect(page.locator('.band')).toBeVisible()
   await page.waitForTimeout(1500) // the stream replays the conversation
+  expect(await page.locator('.toast').count()).toBe(0) // replayed lab events do not toast again
   await expect(page.getByRole('tab', { name: /Gespräch/ }).locator('.tab-badge')).toHaveCount(0)
 })

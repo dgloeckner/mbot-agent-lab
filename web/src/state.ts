@@ -121,6 +121,8 @@ effect(() => {
   }
 })
 
+const pageOpened = Date.now()
+
 /** Lab events a team must notice on any tab: they also show as a toast. */
 const LAB_NOTICES = new Set(['task_assigned', 'task_withdrawn', 'task_closed', 'robot_added', 'robot_removed'])
 
@@ -233,7 +235,8 @@ export async function init() {
         return
       }
       if (!append(log, e)) return
-      if (LAB_NOTICES.has(e.kind) && e.text) showToast(e.text, 'ok', 6000)
+      // Only what happened while the page is open: a reload replays older lines.
+      if (LAB_NOTICES.has(e.kind) && e.text && Date.parse(e.at) >= pageOpened) showToast(e.text, 'ok', 6000)
       if (e.kind === 'deploy') void onRemoteDeploy(Number(e.data?.version))
       if (e.kind === 'team_renamed' && session.value && typeof e.data?.name === 'string') {
         session.value = { ...session.value, team: { ...session.value.team, name: e.data.name } }
