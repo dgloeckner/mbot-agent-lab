@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -194,6 +195,41 @@ func (r *Registry) Known(name string) bool {
 		}
 	}
 	return false
+}
+
+var wordPattern = regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_]*`)
+
+// Words are the names a prompt may write in code style that are no tools:
+// argument names, enum values, end reasons and the result fields and values
+// the descriptions name (reason, wall, color, driven_cm, …). Tool names are
+// not among them.
+func (r *Registry) Words() map[string]bool {
+	words := map[string]bool{}
+	for _, t := range r.tools {
+		for _, w := range wordPattern.FindAllString(t.desc, -1) {
+			words[w] = true
+		}
+		for _, e := range t.ends {
+			words[e] = true
+		}
+		if t.props == nil {
+			continue
+		}
+		for name, spec := range t.props(&Env{}) {
+			words[name] = true
+			if m, ok := spec.(map[string]any); ok {
+				for _, v := range stringsOf(m["enum"]) {
+					words[v] = true
+				}
+			}
+		}
+	}
+	for name := range words {
+		if r.Known(name) {
+			delete(words, name)
+		}
+	}
+	return words
 }
 
 // CheckArgs checks the fixed arguments of a block against the tool's schema:

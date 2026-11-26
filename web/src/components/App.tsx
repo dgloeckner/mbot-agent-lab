@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'preact/hooks'
 import { COLOR_HEX, onColor } from '../format'
 import { lazyComponent } from '../lazy'
 import { pickerLists } from '../taskview'
-import { accepting, leftView, loadError, prefs, readOnly, session, task, tasks, toast, updatePrefs, wideTool } from '../state'
+import { accepting, deployWarning, leftView, loadError, prefs, readOnly, session, task, tasks, toast, updatePrefs, wideTool } from '../state'
 import { PromptPane } from './PromptPane'
 import { SidePane } from './SidePane'
 import { TeamBand } from './TeamBand'
@@ -115,6 +115,16 @@ export function App() {
         <Waiting />
       )}
       {accepting.value && <AcceptDialog key={accepting.value.id} task={accepting.value} />}
+      {deployWarning.value && (
+        <div class="deploy-warning" role="status">
+          <span>
+            <strong>Achtung:</strong> {deployWarning.value}
+          </span>
+          <button class="btn-link" onClick={() => (deployWarning.value = null)} aria-label="Hinweis schließen" title="Hinweis schließen">
+            ✕
+          </button>
+        </div>
+      )}
       {toast.value && (
         <div class={`toast toast-${toast.value.kind}`} role={toast.value.kind === 'error' ? 'alert' : 'status'}>
           {toast.value.text}
