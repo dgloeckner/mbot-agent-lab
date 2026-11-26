@@ -10,7 +10,7 @@ and goes here, not into `CLAUDE.md`. How the system works today: `architecture.m
 | --- | --- | --- |
 | Repository | `mbot-agent-lab`, one monorepo | everything in one place |
 | Server | Go, one binary `labserver` | embeddable broker, simple distribution |
-| Robot code | MicroPython in upload mode, uploaded with mBlock | the only option on the CyberPi |
+| Robot code | MicroPython in upload mode, uploaded over USB with `robot:upload` (Go CLI `robotupload`, macOS); mBlock still works | approved deviation: no clicking through mBlock per robot; the CyberPi's upload protocol is known from MIT-licensed community tools |
 | Robot bundle | one `main.py` built from `robot/src` | unclear whether mBlock uploads several files |
 | Simulator | Python, runs the real bundled script against fakes of the vendor modules | tests the robot code itself, not a copy |
 | Transport robot–server | MQTT, QoS 0, compact JSON | last will, retained state, easy to watch |

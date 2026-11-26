@@ -27,7 +27,8 @@ with approved deviations on top).
 
 ## Layout
 
-- `server/`: Go module `github.com/dgloeckner/mbot-agent-lab/server`, one binary `labserver`.
+- `server/`: Go module `github.com/dgloeckner/mbot-agent-lab/server`, one binary `labserver`
+  (`cmd/labserver`) plus the USB uploader `cmd/robotupload` (macOS; protocol in `internal/cyberpi`).
   Packages in `internal/`: config, protocol, broker (mochi-mqtt, auth/ACL), robots (registry,
   heartbeat, cmd/result, reassignment), store (SQLite via modernc, migrations in
   `store/migrations`), lab (joining, teams, assignments, robot names, lab code: the rules live
@@ -85,6 +86,8 @@ the user chose Nx over Make). Run `npm install` once.
   `sim:e2e` (built `labserver`, scripted model, simulated robots), driven through the team page.
   Screenshots go to the git-ignored `web/e2e/screenshots/`. Runs in CI.
 - `npx nx run robot:bundle [--config=robot/config.py]`: build `robot/dist/main.py`.
+- `npx nx run robot:upload --config=robot/config.py [--port=/dev/cu.…]`: bundle and upload to a
+  CyberPi on USB (macOS; battery on, mBlock closed). Not cached, not in CI.
 - `npx nx run sim:grid`: regenerate the line field world and build plan after changing `sim/grid.py`.
 - `go test -race ./...` in `server/` before touching agent, robots or tools: they are concurrent.
 - New inputs a task depends on (e.g. shared example files) must be listed in its `inputs`, or the
