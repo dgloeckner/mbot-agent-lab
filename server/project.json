@@ -30,7 +30,8 @@
         "protocol",
         "{workspaceRoot}/configs/*.example.yaml",
         "{workspaceRoot}/deploy/local/*.yaml",
-        "{workspaceRoot}/docs/examples/programs/**/*"
+        "{workspaceRoot}/docs/examples/programs/**/*",
+        "{workspaceRoot}/docs/lab/aufgaben/**/*"
       ],
       "options": {
         "cwd": "server",

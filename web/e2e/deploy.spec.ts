@@ -76,3 +76,35 @@ test('deploy from the tool editor, change both, restore the first version', asyn
   await page.getByRole('tab', { name: 'Werkzeug bauen' }).click()
   await expect(desc).toHaveValue('Fährt ein Quadrat.')
 })
+
+test('the deploy warning: none for result words, a lasting warning for a missing tool', async ({ page }) => {
+  test.setTimeout(60_000)
+  await page.goto(lab.page(team))
+  await page.getByRole('tab', { name: 'Prompt' }).click()
+  const prompt = page.locator('.editor .cm-content')
+  const deployBtn = page.locator('.deploy-actions').getByRole('button', { name: /^Deployen Strg/ })
+  const write = async (text: string) => {
+    await prompt.click()
+    await page.keyboard.press('Control+A')
+    await page.keyboard.type(text)
+  }
+
+  // Words of the starter prompts (result fields and values) are no false alarm.
+  await write('Fahr mit `drive_until`. Schau dir den `reason` an: bei `wall` drehst du dich, bei `color` prüfst du die Farbe. Dann `finish`.')
+  await deployBtn.click()
+  await expect(page.locator('.toast')).toContainText('deployt')
+  await expect(page.locator('.deploy-warning')).toHaveCount(0)
+
+  // A name without a tool: a warning, not an error, and it stays.
+  await write('Fahre mit `zickzack` und dann `finish`.')
+  await deployBtn.click()
+  const warning = page.locator('.deploy-warning')
+  await expect(warning).toContainText('`zickzack`')
+  await expect(page.locator('.toast-error')).toHaveCount(0)
+  await page.waitForTimeout(10_000)
+  await expect(warning).toBeVisible()
+  await expect(page.locator('.log')).toContainText('`zickzack`')
+  await page.screenshot({ path: join(SHOTS, 'deploy-warning.png') })
+  await warning.getByRole('button', { name: 'Hinweis schließen' }).click()
+  await expect(warning).toHaveCount(0)
+})

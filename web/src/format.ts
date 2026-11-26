@@ -146,8 +146,10 @@ export function describe(e: LogEntry): string {
       return `${d.skill}: ${reasonName(String(d.reason))}`
     case 'skill_aborted':
       return `${d.skill} abgebrochen: ${reasonName(String(d.reason))}`
-    case 'deploy':
-      return d.restart ? `Version ${d.version} deployt, Neustart angefordert` : `Version ${d.version} deployt`
+    case 'deploy': {
+      const done = d.restart ? `Version ${d.version} deployt, Neustart angefordert` : `Version ${d.version} deployt`
+      return d.warning ? `${done}. ${d.warning}` : done
+    }
     case 'stop':
       return 'Stopp gedrückt'
     case 'run_start':

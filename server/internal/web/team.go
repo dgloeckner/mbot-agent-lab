@@ -201,10 +201,18 @@ func (s *Server) deployPrompt(w http.ResponseWriter, r *http.Request, team store
 	for _, t := range versionTools {
 		toolNames = append(toolNames, t.Name)
 	}
-	warning := s.Lab.DeployWarning(team.ID, req.Text, versionTools)
+	toolSet := store.AgentToolsAll
+	if task, err := s.Store.Task(r.Context(), tt.Task); err == nil && task.AgentTools != "" {
+		toolSet = task.AgentTools
+	}
+	warning := s.Lab.DeployWarning(team.ID, req.Text, toolSet, versionTools)
 	s.Lab.Record(r.Context(), store.Event{Kind: store.EventPromptDeployed, Actor: store.ActorTeam, Team: tt.Team, Task: tt.Task, Prompt: p.ID,
 		Data: map[string]any{"version": p.Version, "chars": p.Chars, "restart": req.Restart, "tools": toolNames}})
-	data, _ := json.Marshal(map[string]any{"version": p.Version, "restart": req.Restart, "chars": p.Chars, "tools": toolNames})
+	logData := map[string]any{"version": p.Version, "restart": req.Restart, "chars": p.Chars, "tools": toolNames}
+	if warning != "" {
+		logData["warning"] = warning // the second PC and later readers see it in the log
+	}
+	data, _ := json.Marshal(logData)
 	s.Hub.Publish(team.ID, live.LogEntry{Source: live.SourceTeam, Kind: "deploy", Data: data})
 	if req.Restart || s.Agents.Status(team.ID).Running {
 		if err := s.Agents.Deployed(r.Context(), team.ID, p.Version, req.Restart); err != nil {

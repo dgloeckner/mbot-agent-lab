@@ -54,6 +54,8 @@ export const remoteVersion = signal<PromptVersion | null>(null)
 export const prefs = signal<Prefs>(LocalStore.loadPrefs(kv))
 export const toast = signal<{ text: string; kind: 'ok' | 'error' } | null>(null)
 export const busy = signal<'deploy' | 'stop' | null>(null)
+/** The warning of the last deploy (names the agent has no tool for); stays until closed or the next deploy. */
+export const deployWarning = signal<string | null>(null)
 
 /** Set by the editor so other parts of the page can replace its content or insert text. */
 export const editorBridge: {
@@ -249,7 +251,8 @@ export async function deploy(restart: boolean) {
     if (local) history.value = local.addSnapshot(text, 'deploy', p.version)
     const withTools = p.tools.filter((t) => t.agent).length
     const done = `Version ${p.version} deployt${withTools === 1 ? ' mit 1 eigenen Werkzeug' : withTools ? ` mit ${withTools} eigenen Werkzeugen` : ''}`
-    showToast(p.warning ? `${done}. ${p.warning}` : done, p.warning ? 'error' : 'ok')
+    deployWarning.value = p.warning || null
+    showToast(done)
     void reloadVersions()
     void loadTeamTools()
   } catch (err) {

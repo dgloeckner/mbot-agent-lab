@@ -1640,6 +1640,38 @@ kbd {
   color: #fff;
 }
 
+/* The deploy warning: not an error (the deploy happened), so the warning color,
+   and it stays above the toasts until closed or the next deploy. */
+.deploy-warning {
+  position: fixed;
+  left: 50%;
+  bottom: 72px;
+  z-index: 20;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: max-content;
+  max-width: min(92vw, 640px);
+  padding: 10px 12px 10px 16px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in oklab, var(--warn) 55%, transparent);
+  background: color-mix(in oklab, var(--warn) 12%, var(--surface));
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.4;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
+}
+
+.deploy-warning strong {
+  color: var(--warn);
+}
+
+.deploy-warning .btn-link {
+  flex: none;
+  color: var(--muted);
+}
+
 @keyframes toast-in {
   from {
     opacity: 0;

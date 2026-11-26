@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/agent"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/live"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/store"
 )
@@ -56,10 +57,19 @@ func (s *Service) VersionTools(ctx context.Context, promptID int64) ([]VersionTo
 
 var codeName = regexp.MustCompile("`([A-Za-z_][A-Za-z0-9_]*)`")
 
-// DeployWarning names what the prompt writes in code style that is neither a
-// team tool of the version, nor a built-in tool, nor one of the team's
-// robots. It is a warning, not a block: the deploy happens anyway.
-func (s *Service) DeployWarning(teamID, text string, tools []VersionTool) string {
+// toolWords is what the deploy warning needs from the tool registry.
+type toolWords interface {
+	Known(name string) bool
+	Words() map[string]bool
+}
+
+// DeployWarning names what the prompt writes in code style like a tool call
+// the agent cannot make: a name that is no team tool of the version, no
+// built-in tool, no robot of the team and no word of the tools (argument
+// names, result fields and values such as reason, wall or color); and in a
+// task with the tool set team_tools, a built-in tool the agent does not have
+// there. It is a warning, not a block: the deploy happens anyway.
+func (s *Service) DeployWarning(teamID, text, toolSet string, tools []VersionTool) string {
 	known := map[string]bool{"alle": true, "all": true}
 	for _, t := range tools {
 		known[t.Name] = true
@@ -67,23 +77,52 @@ func (s *Service) DeployWarning(teamID, text string, tools []VersionTool) string
 	for _, rb := range s.Robots.TeamRobots(teamID) {
 		known[strings.ToLower(rb.Alias)] = true
 	}
-	var unknown []string
+	reg, _ := s.Tools.(toolWords)
+	var words map[string]bool
+	if reg != nil {
+		words = reg.Words()
+	}
+	var unknown, missing []string
 	seen := map[string]bool{}
 	for _, m := range codeName.FindAllStringSubmatch(text, -1) {
 		name := m[1]
-		if known[name] || known[strings.ToLower(name)] || seen[name] || (s.Tools != nil && s.Tools.Known(name)) {
+		if seen[name] || known[name] || known[strings.ToLower(name)] {
 			continue
 		}
 		seen[name] = true
-		unknown = append(unknown, "`"+name+"`")
+		switch {
+		case reg != nil && reg.Known(name):
+			if toolSet == store.AgentToolsTeam && !agent.TeamOnlyTools[name] {
+				missing = append(missing, "`"+name+"`")
+			}
+		case words[name]:
+		default:
+			unknown = append(unknown, "`"+name+"`")
+		}
 	}
+	var out []string
 	switch len(unknown) {
 	case 0:
-		return ""
 	case 1:
-		return fmt.Sprintf("Im Prompt steht %s, aber ein Werkzeug mit diesem Namen hat euer Agent nicht. Deployt ist trotzdem.", unknown[0])
+		out = append(out, fmt.Sprintf("Im Prompt steht %s, aber ein Werkzeug mit diesem Namen hat euer Agent nicht.", unknown[0]))
+	default:
+		out = append(out, fmt.Sprintf("Im Prompt stehen %s, aber Werkzeuge mit diesen Namen hat euer Agent nicht.", strings.Join(unknown, ", ")))
 	}
-	return fmt.Sprintf("Im Prompt stehen %s, aber Werkzeuge mit diesen Namen hat euer Agent nicht. Deployt ist trotzdem.", strings.Join(unknown, ", "))
+	if len(missing) > 0 {
+		out = append(out, fmt.Sprintf("%s hat euer Agent in dieser Aufgabe nicht.", joinAnd(missing)))
+	}
+	if len(out) == 0 {
+		return ""
+	}
+	return strings.Join(out, " ") + " Deployt ist trotzdem."
+}
+
+// joinAnd joins names German style: "a", "a und b", "a, b und c".
+func joinAnd(names []string) string {
+	if len(names) == 1 {
+		return names[0]
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " und " + names[len(names)-1]
 }
 
 // RestoreVersion replaces the working state of the active, open task with a

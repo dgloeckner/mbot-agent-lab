@@ -368,7 +368,13 @@ middle of a tool call. "Deploy and restart" begins a new run. Each run stores it
 - The agent gets the team tools of the newest version that are valid and have a description
   (`tools.md`, "Team tools as agent tools").
 - The deploy answers the version with its team tools (whether the agent has each, and why not) and
-  a warning for names in code style the agent has no tool for.
+  a warning (`lab.DeployWarning`) for names in code style that look like a tool call the agent
+  cannot make: no team tool of the version, no built-in tool, no robot of the team and no word of
+  the tools (argument names, result fields and values such as `reason`, `wall`, `color`, collected
+  by `tools.Registry.Words`). In a task with the tool set `team_tools` a built-in tool outside the
+  kept list is named too ("`drive_until` hat euer Agent in dieser Aufgabe nicht."). The deploy's
+  log entry carries the warning (`data.warning`); the page shows it as a warning that stays until
+  it is closed or the next deploy.
 - **Zurück:** `POST prompts/{version}/restore` replaces the working state with a version: the team
   tools of the pair (also ones deleted since, with their ids) and, on the page, the prompt draft.
   Nothing is deleted from the history; the next deploy is a new version.
