@@ -1,262 +1,247 @@
 # mBot2 Agent Lab
 
-A lab in which teams of students instruct AI agents that drive real robots.
+**Teams of teenagers write the prompt of an AI agent, and the agent drives a real robot.**
 
-Each team writes and deploys the prompt of its agent. The agent runs as a loop inside the server,
-controls the team's Makeblock mBot2 through a small set of tools and reacts to messages from the
-robot, from its team and from other agents. Students only need a browser.
+Each team gets one or more Makeblock mBot2 robots and an agent that runs inside the lab server.
+The team never steers the robot directly during a run: it writes the agent's prompt, builds tools
+from blocks, deploys, presses "Lauf starten" and watches what the agent makes of it. Students only
+need a browser: no accounts, no installs, no API keys.
 
-Learning goals: instructing precisely, recognising failures and limits of agents, designing
-tools and treating tokens as a cost.
+What they learn:
+
+- **Instructing precisely:** the agent never sees the task text. Turning a task into a prompt is
+  the job.
+- **Recognising the limits of agents:** compare the agent's report with the protocol of what the
+  robot really did ("Lügendetektor").
+- **Designing tools:** build your own tools from blocks and decide what belongs in a tool and what
+  the agent should decide.
+- **Treating tokens as a cost:** every run shows its tokens and cost; the ranking rewards few
+  model calls.
+- **Spotting attacks:** agents of different teams talk to each other, and not everything they say
+  is true.
 
 > Repository, code and technical docs are in English. Lab material and the student-facing UI are
-> in German; task files for the lab exist in both languages.
+> in German; task files exist in both languages.
+
+## How a lab session runs
+
+```mermaid
+flowchart TB
+    classDef lead fill:#fde68a,stroke:#b45309,color:#1f2937
+    classDef team fill:#bfdbfe,stroke:#1d4ed8,color:#1f2937
+    classDef agent fill:#bbf7d0,stroke:#15803d,color:#1f2937
+
+    subgraph prep ["Before the lab day"]
+        direction LR
+        P1["Upload the robot script<br/>to every CyberPi"]:::lead
+        P2["Import task files<br/>and publish them"]:::lead
+        P1 ~~~ P2
+    end
+
+    subgraph setup ["Start"]
+        direction LR
+        S1["Teams join with<br/>the lab code"]:::team
+        S2["Lab lead drags robots<br/>onto the teams"]:::lead
+        S3["Lab lead assigns<br/>a task"]:::lead
+        S4["Team accepts it and<br/>picks a start prompt"]:::team
+        S1 --> S2 --> S3 --> S4
+    end
+
+    subgraph work ["Work loop of a team"]
+        direction LR
+        W1["Write the prompt,<br/>build tools from blocks"]:::team
+        W2["Try tools by hand<br/>in the console"]:::team
+        W3["Deploy:<br/>new version"]:::team
+        W4["Start a run"]:::team
+        W5["Agent thinks and<br/>drives the robot"]:::agent
+        W6["Compare report<br/>and protocol"]:::team
+        W1 --> W2 --> W3 --> W4 --> W5 --> W6
+        W6 -- "improve" --> W1
+    end
+
+    subgraph score ["Scoring"]
+        direction LR
+        C1["Mark each run:<br/>geschafft or nicht"]:::lead
+        C2["Ranking: best run<br/>per team"]:::lead
+        C3["Close the task, debrief,<br/>assign the next stage"]:::lead
+        C1 --> C2 --> C3
+    end
+
+    prep --> setup --> work --> score
+```
+
+<sub>🟨 lab lead in the control room · 🟦 team on its team page · 🟩 the team's agent</sub>
+
+A lab day walks through a **learning path of five stages**, one task each
+([guide for the lab lead](docs/lab/werkzeuge.md), German):
+
+| Stage | Who decides | Concept |
+| --- | --- | --- |
+| 1. Selbst steuern | the student is the agent: run one tool by hand, read the result, choose the next | instruction, sequence, result |
+| 2. Wiederholen | the student writes the repetition down as blocks | loops |
+| 3. Entscheiden | the student writes the decision down as blocks | conditions, special cases |
+| 4. Agent | a language model picks which tool runs when | tool, description, prompt |
+| 5. Challenge | what belongs in a tool, and what does the agent decide? | big and rigid or small and flexible |
+
+More tasks: exploring, two robots per team, a line field with colored stripes and a negotiation
+between teams as a prompt-injection exercise ([all tasks](docs/lab/README.md)).
+
+## What happens in a run
+
+The agent sleeps until something wakes it: the start of a run, a team message, another agent or a
+robot event such as a button press or tipping over. Routine readings wait in its inbox, so they do
+not burn tokens. The robot keeps real-time control: a tool like "drive until the wall" runs as a
+skill on the robot and reports back when it is done.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Team
+    participant Agent as Agent (server)
+    participant Model as Language model
+    participant Robot as mBot2
+
+    Team->>Agent: Lauf starten
+    loop until finish, stop or budget
+        Agent->>Model: rules, prompt, notes, history, inbox
+        Model-->>Agent: tool calls, e.g. drive_until(max_cm=100)
+        Agent->>Robot: command over MQTT
+        Note over Robot: skill runs on the robot<br/>reflexes stop it before walls
+        Robot-->>Agent: result with floor trace
+    end
+    Agent-->>Team: finish(report)
+    Note over Team: compare the report with the protocol
+```
 
 ## Architecture
 
+```mermaid
+flowchart LR
+    classDef ext fill:#e5e7eb,stroke:#4b5563,color:#1f2937
+
+    subgraph pcs ["Lab PCs: browser only"]
+        TP["Team page<br/>/t/&lt;token&gt;"]
+        CR["Control room<br/>/admin"]
+    end
+
+    subgraph server ["labserver: one Go binary"]
+        WEB["Web UI and API<br/>live updates over SSE"]
+        LAB["Lab rules<br/>teams, tasks, robots"]
+        AG["Agents<br/>one actor per team"]
+        TOOLS["Tools<br/>built-in and team tools"]
+        BR["Embedded<br/>MQTT broker"]
+        DB[("SQLite<br/>versions, runs,<br/>protocol")]
+        WEB --> LAB
+        WEB --> AG
+        AG --> TOOLS --> BR
+        LAB --> DB
+        AG --> DB
+    end
+
+    LLM["Language model<br/>Claude, Mistral, Ollama, …"]:::ext
+
+    subgraph robots ["Robots"]
+        R1["mBot2 + CyberPi<br/>MicroPython"]
+        R2["Simulated robots<br/>same script, fake hardware"]
+    end
+
+    TP <-->|HTTPS| WEB
+    CR <-->|HTTPS| WEB
+    AG <-->|chat with tools| LLM
+    BR <-->|"MQTT over TLS"| R1
+    BR <-->|MQTT| R2
 ```
- Lab PCs (browser) ──HTTPS/SSE──┐
-                                ▼
-                    ┌──────────────────────────┐        OpenAI-compatible API
-                    │ labserver (one Go binary)│ ─────▶ (Mistral, Ollama, …) or Claude
-                    │  web · agents · tools    │
-                    │  robots · store (SQLite) │
-                    │  embedded MQTT broker    │
-                    └──────────▲───────────────┘
-                               │ MQTT (TLS), QoS 0, compact JSON
-                 ┌─────────────┴─────────────┐
-           mBot2 + CyberPi             simulated robots
-           (MicroPython)               (same script, fake hardware)
-```
 
-- **Robot** (`robot/`): one MicroPython script per robot, uploaded over USB with `robot:upload`. Non-blocking main
-  loop with skills as state machines, local reflexes (emergency stop, watchdog, tilt) and events.
-  All decisions use filtered sensors (median, steady floor patterns, hysteresis). Goal-oriented
-  skills such as `turn_until_clear`, `scan` and `follow_line_until` keep real-time control on the
-  robot. Every motion reports its floor trace: what the four floor probes saw on the way.
-- **Server** (`server/`): broker, robot registry, agent runtime, model access, storage and web UI.
-- **Team page** (`web/`): Preact and CodeMirror 6, built with Vite and embedded into the server
-  binary. No CDN, so it works behind corporate proxies.
-- **Simulator** (`sim/`): runs the real bundled robot script under CPython with fakes for the
-  vendor modules and a 2D world with realistic sensor noise (ultrasonic dropouts and ghost echoes,
-  color flicker at edges, gyro spikes, RGB noise and a color cast per robot; `--no-noise` for ideal
-  sensors). The floor is a drawing of tape bands seen by four probes. Talks real MQTT to the
-  server. Worlds: `arena`, `labyrinth`, `linie` (line course), `gitter` (line grid with colored
-  stripes, generated by `sim/grid.py` together with its build plan).
-- **Protocol** (`docs/protocol.md`): the single source of truth, with shared example messages
-  that server, robot and simulator are all tested against.
+- **Robot** (`robot/`): one MicroPython script per robot with a non-blocking main loop. Skills such
+  as `drive_until`, `turn_until_clear`, `scan` and `follow_line_until` run as state machines on the
+  robot; reflexes (emergency stop, watchdog, tilt) work without the server. Decisions use filtered
+  sensors, never a single raw reading. Every motion reports its floor trace.
+- **Server** (`server/`): broker, robot registry, agent runtime, team tools interpreter, model
+  access (any OpenAI-compatible endpoint or Claude), SQLite store and the web UI, in one binary.
+- **Web** (`web/`): team page and control room (Preact, CodeMirror, Blockly), embedded into the
+  server. No CDN, so it works behind corporate proxies.
+- **Simulator** (`sim/`): runs the real robot script with fake hardware in a 2D world with
+  realistic sensor noise and network delay. Labyrinths, an arena, a line course and the line field.
 
-## Quick start (no hardware needed)
+Details: [architecture](docs/architecture.md), [MQTT protocol](docs/protocol.md),
+[decisions](docs/decisions.md).
 
-Requirements: Go (see `server/go.mod`), Python 3.10+, Node.js 20.19+ (build tooling and team page).
+## Features
+
+**Team page** (`/t/<token>`, in the team's color, the same color as its robots' LEDs)
+
+- Prompt editor with Markdown highlighting and tool name completion; preview; version history with
+  side-by-side diffs and restore.
+- Own tools ("Eigene Werkzeuge") built from blocks: repeat, if/else, return a result. The team
+  runs them by hand, also step by step, and after a deploy the agent gets them as tools. The
+  history compares the blocks of two versions.
+- Console: every built-in tool as a form, run by hand, result with the floor trace.
+- Live log of the run, a conversation with the agent between runs, notes the agent keeps across
+  runs.
+- Robots live, rename, "Finden" (blink and beep); tokens and cost per run; model choice.
+
+**Control room** (`/admin`)
+
+- Lab code for the projector, every robot live, every team with its robots and open browsers.
+- Robots and tasks are assigned by drag and drop; emergency stop for all robots.
+- Tasks: import from a file, edit with preview, publish, assign, close. A task can limit the agent
+  to the team's own tools.
+- "Läufe": every run of every team with version, success, time, model calls and interventions,
+  and the ranking.
+- Release models for teams to choose; switch conversations off for a competition.
+
+**Agents**
+
+- One agent per team with an inbox; it calls the model only when woken.
+- Several robots per team; tool calls for different robots run at the same time.
+- Budgets for steps, tokens, minutes and messages; every model call is stored with tokens and cost.
+- Messages from other agents are marked as such: the agent has to check claims.
+
+## Getting started
+
+No hardware needed: the simulator stands in for the robots and a scripted test model for the
+language model.
 
 ```bash
 npm install
 ```
 
-Start the server and the team page dev server (hot reload):
-
 ```bash
 npm run dev
 ```
-
-In a second terminal:
 
 ```bash
 npx nx run sim:run --robots=3 --world=sim/worlds/labyrinth.json
 ```
 
-1. Control room: http://localhost:5173/admin, password `dev`. It shows the lab code `DEV1`.
-2. Found a team: http://localhost:5173/join with code `DEV1` and a team name. The page then leads
-   to the team page `/t/<token>`.
-3. In the control room, drag robots onto the team (or pick them from the list).
-4. In the control room, create a task (or import one from `docs/lab/aufgaben/`), publish it and
-   assign it to the team. The team accepts it on its page; only then can it deploy and start runs.
+Then open the control room at http://localhost:5173/admin (password `dev`) and join a team at
+http://localhost:5173/join (lab code `DEV1`).
 
-Port 5173 is the Vite dev server with hot reload; http://127.0.0.1:8080 serves the embedded build
-as on the VM.
+Tests, real robots, API keys and deployment: **[developer guide](docs/development.md)**.
 
-```bash
-npx nx run-many -t lint test
-```
+## Documentation
 
-## Tasks
-
-Tasks run through [Nx](https://nx.dev). The workspace has four projects: `server`, `web`, `robot`
-and `sim`. Server builds depend on `web:build`, so the binary always embeds the current team page. Results of `lint`, `test` and the builds are cached, and `npx nx affected -t test` only
-tests what changed compared to `main`.
-
-| Command | What it does |
+| Document | Content |
 | --- | --- |
-| `npx nx run server:dev` | server with `deploy/local/lab.yaml` and dev secrets (HTTP 127.0.0.1:8080, MQTT :1883) |
-| `npx nx run sim:run [--robots=2] [--world=…]` | simulated robots against the local server |
-| `npm run dev` | `server:dev` and `web:dev` together |
-| `npx nx run web:dev` | team page with hot reload on :5173, API calls go to the Go server |
-| `npx nx run-many -t lint test` | gofmt, go vet, TypeScript, Go tests, web tests, robot and simulator tests |
-| `npx nx run sim:e2e` | smoke test: built server + one simulated robot + scripted model, no API key |
-| `npx nx run robot:bundle [--config=robot/config.py]` | build `robot/dist/main.py` |
-| `npx nx run robot:upload --config=robot/config.py [--port=…]` | bundle and upload to a CyberPi on USB (macOS) |
-| `npx nx run server:build` / `server:build-linux` | build the server into `bin/` |
-| `HOST=user@vm npx nx run server:deploy` | build for linux/amd64, copy to the VM, restart |
-| `npx nx graph` | show projects and task dependencies |
-
-## Real robots
-
-1. Copy `robot/config_example.py` to `robot/config.py` and fill in robot ID, Wi-Fi (2.4 GHz) and
-   broker credentials. `config.py` is git-ignored.
-2. Connect the CyberPi with a USB data cable (a charge-only cable does not work), switch the
-   battery on (on USB power alone the CyberPi does not answer) and close mBlock (it holds the
-   port). Then bundle with the config inlined and upload:
-
-   ```bash
-   npx nx run robot:upload --config=robot/config.py
-   ```
-
-   It finds the CyberPi when exactly one `/dev/cu.usbserial-*` or `/dev/cu.wchusbserial*` exists;
-   otherwise it lists the ports and you pass one with `--port=/dev/cu.…`. It waits 3 s for the
-   CyberPi to boot, uploads to the firmware's staging slot (an interrupted upload keeps the old
-   program), restarts the CyberPi and prints its output while uploading. macOS only.
-
-   mBlock still works: `npx nx run robot:bundle --config=robot/config.py`, then upload
-   `robot/dist/main.py` in upload mode.
-
-On a new robot or firmware, first upload `robot/tools/hwcheck.py` alone (wheels in the air,
-`cd server && go run ./cmd/robotupload ../robot/tools/hwcheck.py`). It
-tries every vendor call the script uses and prints `HW OK …` or `HW ERR …` per call to the display
-and the serial log.
-
-All vendor API calls live in `robot/src/hw.py` and are marked `VERIFY` until checked on hardware.
-
-## Repository layout
-
-| Path | Content |
-| --- | --- |
-| `docs/` | architecture, decisions, protocol, tool catalog, field, example messages |
-| `docs/lab/` | lab material (German), task files to import (German and English) |
-| `robot/` | robot script sources, bundler, config example |
-| `sim/` | simulator: fakes, world, worlds, tests |
-| `server/` | Go server (`cmd/labserver`, `internal/*`), robot uploader (`cmd/robotupload`) |
-| `web/` | team page (Preact, CodeMirror, Vite) |
-| `configs/` | example lab configuration |
-| `deploy/` | Azure VM, systemd unit, local development config |
-
-## Control room and teams
-
-- **Joining:** teams open `/join`, enter the lab code and a team name, and get a secret team link
-  `/t/<token>` to open on their other PCs. The browser remembers teams it joined. Wrong codes are
-  rate limited.
-- **Control room** (`/admin`, admin password): shows the lab code large for the projector, all
-  robots live (online, battery, what they do) and every team with its robots and open browsers.
-  Robots are assigned by drag and drop or from a list; a team can have any number of robots, and
-  every robot has at most one team. Teams can be renamed or deleted, team links copied, the lab
-  code replaced, and all robots stopped at once. Each team card shows the tokens and cost of the
-  current or last run and the total over all its runs and conversations, the conversations'
-  share shown on its own. A checkbox switches conversations off for the whole lab, for example
-  for a competition (setting `conversation`).
-- **Robot names:** a newly assigned robot is called after its sticker color (`rot`, `blau`, …).
-  Teams rename their robots on the team page; these names are what the agent uses for the `robot`
-  parameter. The robot's display shows its name and team, and its LEDs show the team color.
-- **Models:** each team picks its language model on the team page, among the providers of
-  `llm.providers` the control room released (the `default` provider is always released). The
-  control room lists every configured provider with its model and prices, shows which model each
-  team uses, and releases or revokes models with a checkbox; teams on a revoked model go back to
-  the default. A choice applies at the team's next run, so a run keeps one model throughout. The
-  release list lives in the database (setting `team_models`), the choice in `teams.provider`.
-- **Reassigning** a robot stops it, ends a running command with `reassigned` and clears its trip
-  log. Renaming a team or robot does not interrupt anything.
-
-## Team page
-
-Each team opens its secret link `/t/<token>`. The page has the team's color, the same color the
-robot's LEDs show, and the color band pulses in the robot's rhythm while the agent is thinking.
-
-- **Prompt editor:** Markdown source with highlighting, search, undo, list continuation and
-  completion of tool names. Shortcuts: `Ctrl/⌘ + Enter` deploys, `Ctrl/⌘ + S` keeps a snapshot.
-- **Preview** of the rendered Markdown and **history** with a side-by-side diff against any
-  deployed version or local snapshot, plus restore.
-- **Live log** over Server-Sent Events: robot events, deploys, messages, system notices. A
-  reconnecting browser catches up via `Last-Event-ID`. Team messages go here during a run.
-- **Conversation** ("Gespräch"): while no run is active, the team talks with its agent in its
-  own tab, apart from the run protocol. A message sent without a run lands there; "Neues
-  Gespräch" starts over.
-- **Notes** the agent sees every round, and the **tool catalog** with one-click insertion.
-- **Robots:** live state per robot, rename by clicking the name, and "Finden" to make a robot
-  blink and beep. The team name can be changed by clicking it; the link button copies the team link.
-- **Usage:** tokens and cost of the current or last run, the total over all runs and
-  conversations, and the conversations' share.
-- **Model:** the model of the next run with its price per million tokens, as a choice when the
-  control room released more than one.
-- **Browser storage** (`localStorage`, per team and task): the unsaved draft, up to 80 draft snapshots and
-  UI preferences (theme, split, font size). Deployed versions live on the server. If another PC of
-  the team deploys while this draft has changes, the page offers to take over the new version.
-
-## Agents
-
-Every team has one agent: a loop in the server with an inbox. It calls the model only when a
-message wakes it (team message, another agent, a robot pressing a button or tipping over, the
-start of a run). Routine readings such as obstacles or floor colors wait in the inbox for the next
-wake-up, so they do not burn tokens.
-
-- **Runs** start with "Lauf starten" and end with `finish(report)`, "Stopp" (which cancels a
-  running model call or tool calls and stops the robots), the time limit (likewise) or the token
-  limit. "Deployen und neu starten" begins a
-  new run; a plain deploy takes effect at the next model call.
-- **Conversations:** while no run is active, a team message wakes the agent in conversation
-  mode instead of being dropped. It runs in the same actor on the team's model, but starts no
-  run: it is a `runs` row with `kind = 'conversation'`, so its messages, tool calls and model
-  calls are stored like a run's and its tokens count into the team totals, shown separately.
-  The context has conversation rules instead of the platform rules, every tool as text, the
-  team, prompt and notes, and the numbered protocol of the last run (`[2. drive]` = the second
-  `drive` call). Only `read_sensors` and `remember` can be called; motion and `finish` never.
-  The conversation never goes into a run's context, only notes do. It ends when a run starts,
-  with "Neues Gespräch", or at its token budget. Limits: 4 model calls per message,
-  `max_conversation_messages_per_minute`, `max_tokens_per_conversation`.
-- **Context** per model call: platform rules, the team prompt in its newest version, the notes,
-  the last messages of the run (older ones are left out), then the inbox as one JSON line per
-  message. The sender field (`Team`, `Roboter <Name>`, `Agent <Name>`, `System`) is set by the
-  server, so another agent cannot pose as the team.
-- **Tools** (`server/internal/tools`): robot tools become MQTT commands; with several robots
-  they get a `robot` parameter with the team's robot names. The tool calls of one model answer
-  run at the same time when they act on different robots, so several robots can move at once;
-  calls for the same robot and calls without a robot keep their order (`docs/tools.md`). Mistakes by the model come back as
-  results with `ok: false` and a German explanation, so the agent can correct itself.
-- **Budgets** in the config: steps per wake-up, tokens per run, minutes per run, messages to
-  other agents per minute, messages kept in the context, team messages per minute and tokens
-  per conversation.
-- **Models** (`server/internal/llm`): any OpenAI-compatible endpoint (Mistral, Ollama, …) or
-  Claude (`kind: anthropic`, official Anthropic Go SDK), with retries, a fallback provider and a
-  cost estimate from the configured prices (prompt-cache reads and writes priced separately).
-  `kind: fake` is a scripted test model that explores with the real tools and needs no API key;
-  the local development config uses it by default. Set `default: mistral` and `MISTRAL_API_KEY`,
-  or `default: claude` and `ANTHROPIC_API_KEY`, for a real model. Only the `default` and
-  `fallback` providers need their key; the server leaves out any other provider whose key
-  variable is not set and logs it at startup. Teams run on `default` unless they choose another
-  released provider (see "Control room and teams"); the fallback applies to every team.
-  Locally, put the keys into `server/.env.local` (dotenv format, `export` allowed, git-ignored);
-  Nx loads it for every `server` task, and Claude Code copies it into new worktrees
-  (`.worktreeinclude`).
-- **Claude:** the key comes from a Claude Console organization. Claude Max, Ultra and Team plans
-  include monthly API credits for such an organization (claim them on claude.ai under Settings →
-  Billing); the subscription login itself is not an API credential. Claude's thinking blocks go
-  back unchanged with tool results; when trimmed history or changed notes invalidate them, the API
-  drops them (`drop_block`) instead of failing. The example configs use Claude Haiku 5.5, the
-  cheapest model (about 40 times cheaper than Opus 5.5); switch `model` to `claude-sonnet-5-5` or
-  `claude-opus-5-5` for harder tasks. Opus/Sonnet 5.5 use the server-side refusal fallback;
-  Haiku 5.5 has none. If a request is declined, the client moves on to the configured fallback
-  provider.
-- **Log:** every run, message, tool call and model call is stored in SQLite for the comparison of
-  report and protocol ("Lügendetektor").
+| [Developer guide](docs/development.md) | setup, Nx tasks, simulator, models and keys, real robots, deployment |
+| [Architecture](docs/architecture.md) | components, robot script, server, agent runtime, web UI |
+| [Decisions](docs/decisions.md) | binding decisions and approved deviations |
+| [Protocol](docs/protocol.md) | MQTT messages between server and robots |
+| [Tool catalog](docs/tools.md) | the agent's tools, their results and block texts |
+| [Team tools](docs/programs.md) | tools built from blocks: tree, validation, interpreter |
+| [Event log](docs/events.md) | events, run measures and ranking |
+| [Line field](docs/field.md) | the field with colored stripes |
+| [Lab material](docs/lab/README.md) | for the lab lead, German: running a lab day, tasks, learning path |
 
 ## Status
 
-Working: configuration with validation, protocol, embedded broker with per-robot auth and ACL,
-robot registry, SQLite store, team joining with lab code, control room with robot assignment
-(1..N robots per team), team page with prompt editor, versions, notes, robot names and live log,
-agent runtime with tool registry, LLM client and test model, robot script with filtered sensors,
-`drive`, `turn`, `drive_until`, the goal-oriented `turn_until_clear`, `scan` and
-`follow_line_until`, `retrace_path`, reflexes and events, bundler, simulator with realistic sensor
-noise. Not yet: `gesture`, `play_melody` on the robot, summaries of long runs, a run history view,
-chat wall, MCP. Vendor API calls on the robot are not verified on hardware yet.
+Working: the full lab loop with tasks, team tools from blocks, by-hand console, agent runs and
+conversations, scoring and ranking, several robots per team, Claude and OpenAI-compatible models,
+USB upload without mBlock, and the simulator with noise and network delay.
+
+Not yet: `gesture` and `play_melody` on the robot, summaries of long runs, a run history on the
+team page, a chat wall, MCP. Vendor API calls on
+the robot are still being verified on hardware ([measurements](docs/measurements.md)).
 
 ## License
 

@@ -2,7 +2,7 @@
 
 Current state of the mBot2 Agent Lab. This document describes the system as it is; a PR that
 changes behaviour updates it in the same PR. Why things are the way they are: `decisions.md`.
-MQTT: `protocol.md`. Tools: `tools.md`. Team tools: `programs.md`. Event log: `events.md`. The line field: `field.md`.
+MQTT: `protocol.md`. Tools: `tools.md`. Team tools: `programs.md`. Event log: `events.md`. The line field: `field.md`. Setup, tasks and deployment: `development.md`.
 
 ## Purpose
 

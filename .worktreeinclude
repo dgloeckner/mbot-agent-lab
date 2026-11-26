@@ -1,3 +1,3 @@
 # Git-ignored files Claude Code copies into new worktrees.
-# Local API keys for `npx nx run server:dev` (see README, "Models").
+# Local API keys for `npx nx run server:dev` (see docs/development.md, "Models and API keys").
 server/.env.local
