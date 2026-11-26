@@ -16,6 +16,7 @@ interface AdminRobot {
   accepted: boolean
   script: string
   mem_free: number
+  hello_at?: string // last (re)connect of the script; used by labctl robot flash
   team: string
   alias: string
   state: RobotState

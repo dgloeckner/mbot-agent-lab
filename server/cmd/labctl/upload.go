@@ -1,14 +1,7 @@
-// Command robotupload uploads a MicroPython program (normally robot/dist/main.py) to a CyberPi
-// (mBot2) over USB serial, without mBlock. macOS only.
-//
-//	robotupload [--port /dev/cu.usbserial-XXXX] FILE
-//
-// Run it through Nx, which bundles first: npx nx run robot:upload --config=robot/config.py
 package main
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,42 +20,21 @@ const hints = `Check:
   - mBlock is closed (it holds the serial port)
   - the USB cable is a data cable, not a charge-only cable`
 
-func main() {
-	port := flag.String("port", "", "serial device, e.g. /dev/cu.usbserial-110 (default: the only CyberPi found)")
-	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: robotupload [--port /dev/cu.usbserial-XXXX] FILE")
-		fmt.Fprintln(os.Stderr, "Uploads FILE as main.py to a CyberPi (mBot2) on USB and restarts it.")
-		flag.PrintDefaults()
-	}
-	flag.Parse()
-	if flag.NArg() != 1 {
-		flag.Usage()
-		os.Exit(2)
-	}
-	if err := run(flag.Arg(0), *port); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
-	}
-}
-
-func run(file, port string) error {
-	src, err := os.ReadFile(file)
-	if err != nil {
-		return err
-	}
+// uploadAndRestart uploads src to the CyberPi on port (or the only one found) and restarts it.
+// name only appears in messages.
+func uploadAndRestart(name string, src []byte, port string) error {
 	if len(src) == 0 {
-		return fmt.Errorf("%s is empty", file)
+		return fmt.Errorf("%s is empty", name)
 	}
 	path, err := choosePort(port, filepath.Glob)
 	if err != nil {
 		return err
 	}
-
 	p, err := open(path)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "Uploading %s (%d bytes) to %s\n", file, len(src), path)
+	fmt.Fprintf(os.Stderr, "Uploading %s (%d bytes) to %s\n", name, len(src), path)
 	opt := cyberpi.DefaultOptions()
 	opt.Output = func(b []byte) { os.Stdout.Write(b) }
 	opt.Log = func(s string) { fmt.Fprintln(os.Stderr, s) }
@@ -93,7 +65,7 @@ func run(file, port string) error {
 	}
 	time.Sleep(500 * time.Millisecond)
 	p.Close()
-	fmt.Fprintf(os.Stderr, "Done: %d bytes uploaded, the CyberPi runs the new program.\n", res.Bytes)
+	fmt.Fprintf(os.Stderr, "Uploaded %d bytes, the CyberPi runs the new program.\n", res.Bytes)
 	return nil
 }
 
@@ -130,7 +102,8 @@ func choosePort(port string, glob func(string) ([]string, error)) (string, error
 		if len(all) > 0 {
 			msg += "\nserial ports: " + strings.Join(all, ", ") + "\npick one with --port"
 		}
-		return "", errors.New(msg)
+		return "", errors.New(msg + "\nnpx nx run robot:usb lists the USB devices")
 	}
-	return "", fmt.Errorf("several serial ports found, pick one with --port:\n  %s", strings.Join(found, "\n  "))
+	return "", fmt.Errorf("several serial ports found, pick one with --port:\n  %s\nnpx nx run robot:usb shows which device each belongs to",
+		strings.Join(found, "\n  "))
 }

@@ -6,7 +6,9 @@ TLS (8883), the lab PCs in the corporate network only need HTTPS (443) in the br
 1. Create a small Ubuntu VM (e.g. B2s) with a public IP and DNS names for `lab.` and `mqtt.`;
    pass `cloud-init.yaml` as custom data. Open ports 80, 443 and 8883 in the NSG.
 2. Copy `configs/lab.example.yaml` to `/etc/labserver/lab.yaml` and adapt hosts, robots, teams.
-3. Create `/etc/labserver/secrets.env` (mode 600) with all variables named in the config.
+3. Create `/etc/labserver/secrets.env` (mode 600) with all variables named in the config,
+   including the robots' Wi-Fi password from `robot_setup`. Robots get their setup from here:
+   `npx nx run robot:flash --robot=mbot-1 --server=https://lab.example.org`.
 4. Install `deploy/systemd/labserver.service` to `/etc/systemd/system/` and enable it.
 5. `HOST=user@vm npx nx run server:deploy` builds for linux/amd64, copies the binary and restarts the service.
 

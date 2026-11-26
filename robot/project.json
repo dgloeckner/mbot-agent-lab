@@ -12,22 +12,66 @@
         "command": "python3 robot/tools/bundle.py"
       }
     },
-    "upload": {
+    "flash": {
       "executor": "nx:run-commands",
       "cache": false,
       "inputs": [
         "{projectRoot}/src/**/*",
         "{projectRoot}/tools/bundle.py",
-        "{workspaceRoot}/server/cmd/robotupload/**/*",
+        "{workspaceRoot}/server/cmd/labctl/**/*",
         "{workspaceRoot}/server/internal/cyberpi/**/*",
+        "{workspaceRoot}/server/internal/config/**/*",
         "{workspaceRoot}/server/go.mod",
         "{workspaceRoot}/server/go.sum"
       ],
       "options": {
         "commands": [
-          "test -n \"{args.config}\" || (echo 'usage: npx nx run robot:upload --config=robot/config.py [--port=/dev/cu.usbserial-XXXX]' >&2 && exit 1)",
-          "python3 robot/tools/bundle.py --config \"{args.config}\"",
-          "cd server && go run ./cmd/robotupload --port=\"{args.port}\" ../robot/dist/main.py"
+          "test -n \"{args.robot}\" || (echo 'usage: npx nx run robot:flash --robot=mbot-1 [--server=https://lab.example.org] [--port=/dev/cu.usbserial-XXXX]' >&2 && exit 1)",
+          {
+            "command": "go -C server build -o ../bin/labctl ./cmd/labctl",
+            "forwardAllArgs": false
+          },
+          "bin/labctl robot flash --server=\"{args.server}\" --port=\"{args.port}\" \"{args.robot}\""
+        ],
+        "parallel": false
+      }
+    },
+    "upload": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "inputs": [
+        "{workspaceRoot}/server/cmd/labctl/**/*",
+        "{workspaceRoot}/server/internal/cyberpi/**/*",
+        "{workspaceRoot}/server/internal/config/**/*",
+        "{workspaceRoot}/server/go.mod",
+        "{workspaceRoot}/server/go.sum"
+      ],
+      "options": {
+        "commands": [
+          "test -n \"{args.file}\" || (echo 'usage: npx nx run robot:upload --file=robot/tools/hwcheck.py [--port=/dev/cu.usbserial-XXXX]' >&2 && exit 1)",
+          {
+            "command": "go -C server build -o ../bin/labctl ./cmd/labctl",
+            "forwardAllArgs": false
+          },
+          "bin/labctl robot upload --port=\"{args.port}\" \"{args.file}\""
+        ],
+        "parallel": false
+      }
+    },
+    "usb": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "inputs": [
+        "{workspaceRoot}/server/cmd/labctl/**/*",
+        "{workspaceRoot}/server/internal/cyberpi/**/*",
+        "{workspaceRoot}/server/internal/config/**/*",
+        "{workspaceRoot}/server/go.mod",
+        "{workspaceRoot}/server/go.sum"
+      ],
+      "options": {
+        "commands": [
+          "go -C server build -o ../bin/labctl ./cmd/labctl",
+          "bin/labctl usb"
         ],
         "parallel": false
       }

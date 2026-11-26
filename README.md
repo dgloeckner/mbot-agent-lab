@@ -29,7 +29,7 @@ tools and treating tokens as a cost.
            (MicroPython)               (same script, fake hardware)
 ```
 
-- **Robot** (`robot/`): one MicroPython script per robot, uploaded over USB with `robot:upload`. Non-blocking main
+- **Robot** (`robot/`): one MicroPython script per robot, flashed over USB with `robot:flash`. Non-blocking main
   loop with skills as state machines, local reflexes (emergency stop, watchdog, tilt) and events.
   All decisions use filtered sensors (median, steady floor patterns, hysteresis). Goal-oriented
   skills such as `turn_until_clear`, `scan` and `follow_line_until` keep real-time control on the
@@ -95,33 +95,43 @@ tests what changed compared to `main`.
 | `npx nx run-many -t lint test` | gofmt, go vet, TypeScript, Go tests, web tests, robot and simulator tests |
 | `npx nx run sim:e2e` | smoke test: built server + one simulated robot + scripted model, no API key |
 | `npx nx run robot:bundle [--config=robot/config.py]` | build `robot/dist/main.py` |
-| `npx nx run robot:upload --config=robot/config.py [--port=…]` | bundle and upload to a CyberPi on USB (macOS) |
+| `npx nx run robot:flash --robot=mbot-1 [--server=…] [--port=…]` | bundle with the robot's setup from the server, upload over USB, wait until online (macOS) |
+| `npx nx run robot:upload --file=robot/tools/hwcheck.py [--port=…]` | upload a file as it is (macOS) |
+| `npx nx run robot:usb` | list USB devices, their serial ports, the port flash picks and who holds a port (macOS) |
 | `npx nx run server:build` / `server:build-linux` | build the server into `bin/` |
 | `HOST=user@vm npx nx run server:deploy` | build for linux/amd64, copy to the VM, restart |
 | `npx nx graph` | show projects and task dependencies |
 
 ## Real robots
 
-1. Copy `robot/config_example.py` to `robot/config.py` and fill in robot ID, Wi-Fi (2.4 GHz) and
-   broker credentials. `config.py` is git-ignored.
-2. Connect the CyberPi with a USB data cable (a charge-only cable does not work), switch the
+The lab server holds everything a robot needs: the robots in `robots:` of `lab.yaml`, Wi-Fi and
+broker in `robot_setup:` (see `configs/lab.example.yaml`), the passwords in its environment.
+Nothing robot-specific lives on the laptop.
+
+1. Connect the CyberPi with a USB data cable (a charge-only cable does not work), switch the
    battery on (on USB power alone the CyberPi does not answer) and close mBlock (it holds the
-   port). Then bundle with the config inlined and upload:
+   port).
+2. Flash it (macOS):
 
    ```bash
-   npx nx run robot:upload --config=robot/config.py
+   npx nx run robot:flash --robot=mbot-1 --server=https://lab.example.org
    ```
 
-   It finds the CyberPi when exactly one `/dev/cu.usbserial-*` or `/dev/cu.wchusbserial*` exists;
-   otherwise it lists the ports and you pass one with `--port=/dev/cu.…`. It waits 3 s for the
-   CyberPi to boot, uploads to the firmware's staging slot (an interrupted upload keeps the old
-   program), restarts the CyberPi and prints its output while uploading. macOS only.
+   `labctl` logs in with the admin password (`LAB_ADMIN_PASSWORD` or asked for), gets the robot's
+   setup from the server, bundles `robot/src` with it in a temporary directory, uploads the bundle
+   and waits until the robot connects to the server (`--wait=90s`). Without `--server` it uses the
+   local server (`http://127.0.0.1:8080`); plain `http` is refused for other hosts. It finds the
+   CyberPi when exactly one `/dev/cu.usbserial-*` or `/dev/cu.wchusbserial*` exists; otherwise
+   pass `--port=/dev/cu.…`. `npx nx run robot:usb` lists the USB devices with their serial ports,
+   marks the one flash would pick and names a program that holds a port open (e.g. mBlock). The upload goes to the firmware's staging slot, so an interrupted
+   upload keeps the old program.
 
-   mBlock still works: `npx nx run robot:bundle --config=robot/config.py`, then upload
-   `robot/dist/main.py` in upload mode.
+   mBlock still works: copy `robot/config_example.py` to the git-ignored `robot/config.py`, fill
+   it in, run `npx nx run robot:bundle --config=robot/config.py` and upload `robot/dist/main.py`
+   in upload mode.
 
 On a new robot or firmware, first upload `robot/tools/hwcheck.py` alone (wheels in the air,
-`cd server && go run ./cmd/robotupload ../robot/tools/hwcheck.py`). It
+`npx nx run robot:upload --file=robot/tools/hwcheck.py`). It
 tries every vendor call the script uses and prints `HW OK …` or `HW ERR …` per call to the display
 and the serial log.
 
@@ -135,7 +145,7 @@ All vendor API calls live in `robot/src/hw.py` and are marked `VERIFY` until che
 | `docs/lab/` | lab material (German), task files to import (German and English) |
 | `robot/` | robot script sources, bundler, config example |
 | `sim/` | simulator: fakes, world, worlds, tests |
-| `server/` | Go server (`cmd/labserver`, `internal/*`), robot uploader (`cmd/robotupload`) |
+| `server/` | Go server (`cmd/labserver`, `internal/*`), lab setup CLI (`cmd/labctl`) |
 | `web/` | team page (Preact, CodeMirror, Vite) |
 | `configs/` | example lab configuration |
 | `deploy/` | Azure VM, systemd unit, local development config |

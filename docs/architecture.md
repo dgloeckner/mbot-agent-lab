@@ -39,7 +39,7 @@ robots, from its team and from other agents.
 
 | Path | Content |
 | --- | --- |
-| `server/` | Go module, one binary `labserver`: broker, robot registry, agents, model access, store, web; the USB uploader `robotupload` |
+| `server/` | Go module, one binary `labserver`: broker, robot registry, agents, model access, store, web; the setup CLI `labctl` |
 | `web/` | team page and control room (Preact + signals, CodeMirror 6, Vite), embedded into the binary |
 | `robot/` | MicroPython sources (`robot/src`), bundler, config example |
 | `sim/` | simulator: fakes for the vendor modules, 2D world, worlds, tests, end-to-end test |
@@ -58,8 +58,16 @@ connects to the broker and never blocks.
   (`MODULES`) into one `main.py`, strips comments and docstrings and inlines `config.py`. All
   modules share one namespace after bundling. Only `hw.py` touches vendor modules (`cyberpi`,
   `mbot2`, `mbuild`); the MQTT client is bundled (`mqtt.py`) because the firmware has no `umqtt`.
-- **Upload:** `npx nx run robot:upload --config=…` bundles and runs `server/cmd/robotupload`
-  (macOS, USB serial 115200 8N1; mBlock still works). The protocol lives in
+- **Flash:** `npx nx run robot:flash --robot=… --server=…` runs `server/cmd/labctl robot flash`
+  (macOS): it logs in to the admin API, gets the robot's script config from
+  `GET /admin/api/robots/{id}/setup` (Wi-Fi and broker from `robot_setup`, the robot's password),
+  writes it as `config.py` into a private temporary directory, bundles with it, uploads over USB
+  and polls `GET /admin/api/state` until the robot's `hello_at` is newer than before the upload.
+  Plain `http` only to loopback. `robot:upload --file=…` uploads a file as it is. `robot:usb`
+  (`labctl usb`) lists USB devices from `ioreg` with their serial ports and asks `lsof` who holds
+  a port; it never opens a port, because opening restarts the CyberPi. mBlock still
+  works with a hand-written `robot/config.py`.
+- **Upload protocol** (USB serial 115200 8N1) in
   `server/internal/cyberpi`, ported from MIT-licensed community tools that reverse-engineered
   mBlock: F3/F4 frames (`F3, (F3+len_lo+len_hi)&FF, len_lo, len_hi, body, sum(body)&FF, F4`);
   ping and two scripts (import `config`, turn the REPL off) twice before the file and once after;
@@ -115,7 +123,9 @@ standard library.
 `configs/lab.example.yaml` documents every key: `server` (HTTP and MQTT addresses, TLS mode
 `off`/`autocert`, admin password and optional fixed lab code by variable name, database path),
 `llm` (providers with `kind` OpenAI-compatible, `anthropic` or `fake`, `default`, `fallback`,
-prices, parallel calls), `budgets` and `robots` (ID, password variable, sticker color). Teams and
+prices, parallel calls), `budgets`, `robots` (ID, password variable, sticker color) and the
+optional `robot_setup` (Wi-Fi name and password variable, broker host, port and TLS as the robots
+reach it; validated against the MQTT listeners and TLS hosts) for `labctl robot flash`. Teams and
 assignments are not in the configuration; they live in the database.
 
 ### Robot ownership
@@ -273,7 +283,8 @@ Control room (`/admin`, admin password, session cookie):
 | Route | Purpose |
 | --- | --- |
 | `GET /admin`, `POST /admin/api/login`, `/logout` | page and session |
-| `GET /admin/api/state`, `GET /admin/api/events` | board payload and its SSE stream |
+| `GET /admin/api/state`, `GET /admin/api/events` | board payload and its SSE stream; per robot `hello_at`, the last (re)connect |
+| `GET /admin/api/robots/{id}/setup` | the robot's script config for `labctl` (Wi-Fi, broker, password; `no-store`); 409 without `robot_setup` |
 | `POST /admin/api/assign` | assign or free a robot |
 | `POST /admin/api/lab-code` | replace the lab code |
 | `PUT /admin/api/teams/{id}`, `PUT …/color`, `DELETE …` | rename, recolor, delete a team |

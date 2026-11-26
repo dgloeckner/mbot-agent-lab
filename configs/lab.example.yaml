@@ -55,5 +55,13 @@ robots:
   - { id: mbot-4, password_env: MBOT4_PASSWORD, color: yellow }
   - { id: mbot-5, password_env: MBOT5_PASSWORD, color: purple }
 
+# What `npx nx run robot:flash --robot=mbot-1 --server=https://lab.example.org` writes into a
+# robot's script, together with that robot's password. The robots' Wi-Fi is the guest Wi-Fi.
+robot_setup:
+  wifi_ssid: lab-guest             # 2.4 GHz only
+  wifi_password_env: LAB_WIFI_PASSWORD   # leave out for an open network
+  broker_host: mqtt.example.org    # must be one of server.tls.hosts
+  broker_tls: true                 # broker_port defaults to 8883 with TLS, 1883 without
+
 # Teams join on /join with the lab code shown in the control room (/admin).
 # The control room assigns robots to teams; both are stored in the database.

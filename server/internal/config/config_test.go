@@ -102,6 +102,61 @@ func TestParseErrors(t *testing.T) {
 	}
 }
 
+const robotSetupYAML = `
+robot_setup:
+  wifi_ssid: lab-guest
+  wifi_password_env: WIFI
+  broker_host: 192.168.1.10
+`
+
+func TestRobotScriptConfig(t *testing.T) {
+	c, err := Parse([]byte(validYAML), env(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.RobotScriptConfigFor("mbot-1"); err != ErrNoRobotSetup {
+		t.Errorf("without robot_setup: %v", err)
+	}
+	c, err = Parse([]byte(validYAML+robotSetupYAML), env(map[string]string{"WIFI": "w"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := c.RobotScriptConfigFor("mbot-2")
+	want := RobotScriptConfig{RobotID: "mbot-2", WiFiSSID: "lab-guest", WiFiPassword: "w",
+		BrokerHost: "192.168.1.10", BrokerPort: 1883, BrokerPassword: "p2"}
+	if err != nil || got != want {
+		t.Errorf("got %+v, %v; want %+v", got, err, want)
+	}
+	if _, err := c.RobotScriptConfigFor("mbot-9"); err != ErrUnknownRobot {
+		t.Errorf("unknown robot: %v", err)
+	}
+}
+
+func TestRobotSetupErrors(t *testing.T) {
+	tlsYAML := strings.Replace(validYAML, `  mqtt_plain_addr: ":1883"`,
+		"  mqtt_tls_addr: \":8883\"\n  tls: { mode: autocert, hosts: [lab.example.org] }", 1)
+	cases := []struct {
+		name, yaml string
+		env        map[string]string
+		want       string
+	}{
+		{"wifi password missing", validYAML + robotSetupYAML, nil, "WIFI"},
+		{"no ssid", validYAML + strings.Replace(robotSetupYAML, "wifi_ssid: lab-guest", `wifi_ssid: ""`, 1), map[string]string{"WIFI": "w"}, "wifi_ssid and broker_host"},
+		{"tls without tls listener", validYAML + robotSetupYAML + "  broker_tls: true\n", map[string]string{"WIFI": "w"}, "needs server.mqtt_tls_addr"},
+		{"tls host not in cert", tlsYAML + robotSetupYAML + "  broker_tls: true\n", map[string]string{"WIFI": "w"}, "not in server.tls.hosts"},
+		{"plain without plain listener", tlsYAML + robotSetupYAML, map[string]string{"WIFI": "w"}, "needs server.mqtt_plain_addr"},
+		{"bad port", validYAML + robotSetupYAML + "  broker_port: 70000\n", map[string]string{"WIFI": "w"}, "invalid broker_port"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Parse([]byte(tc.yaml), env(tc.env))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("want error containing %q, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
 // TestExampleConfigs makes sure the shipped example configurations stay valid.
 func TestExampleConfigs(t *testing.T) {
 	files, _ := filepath.Glob("../../../configs/*.example.yaml")

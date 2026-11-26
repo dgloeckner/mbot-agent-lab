@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/agent"
+	"github.com/dgloeckner/mbot-agent-lab/server/internal/config"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/lab"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/live"
 	"github.com/dgloeckner/mbot-agent-lab/server/internal/protocol"
@@ -22,6 +24,7 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/api/logout", s.adminLogout)
 	admin := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, s.withAdmin(h)) }
 	admin("GET /admin/api/state", s.adminState)
+	admin("GET /admin/api/robots/{id}/setup", s.adminRobotSetup)
 	admin("GET /admin/api/events", s.adminEvents)
 	admin("POST /admin/api/assign", s.adminAssign)
 	admin("POST /admin/api/lab-code", s.adminNewLabCode)
@@ -45,8 +48,9 @@ type AdminRobot struct {
 	Online   bool           `json:"online"`
 	Accepted bool           `json:"accepted"`
 	Script   string         `json:"script"`
-	MemFree  int            `json:"mem_free"` // free heap after connecting, -1 unknown
-	Team     string         `json:"team"`     // team ID, empty if free
+	MemFree  int            `json:"mem_free"`          // free heap after connecting, -1 unknown
+	HelloAt  time.Time      `json:"hello_at,omitzero"` // last (re)connect of the script
+	Team     string         `json:"team"`              // team ID, empty if free
 	Alias    string         `json:"alias"`
 	State    protocol.State `json:"state"`
 }
@@ -113,7 +117,7 @@ func (s *Server) buildAdminState(ctx context.Context) (adminState, error) {
 	}
 	for _, rb := range s.Robots.Snapshot() {
 		st.Robots = append(st.Robots, AdminRobot{
-			ID: rb.ID, Color: rb.Color, Online: rb.Online, Accepted: rb.Accepted, Script: rb.Hello.Script, MemFree: rb.Hello.MemFree,
+			ID: rb.ID, Color: rb.Color, Online: rb.Online, Accepted: rb.Accepted, Script: rb.Hello.Script, MemFree: rb.Hello.MemFree, HelloAt: rb.HelloAt,
 			Team: rb.Owner, Alias: rb.Alias, State: rb.State,
 		})
 	}
@@ -127,6 +131,23 @@ func (s *Server) adminState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, st)
+}
+
+// adminRobotSetup hands out what a robot's script needs (Wi-Fi, broker, the robot's password)
+// to `labctl robot flash`. It contains secrets: never cached.
+func (s *Server) adminRobotSetup(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	cfg, err := s.Config.RobotScriptConfigFor(r.PathValue("id"))
+	switch {
+	case errors.Is(err, config.ErrUnknownRobot):
+		writeError(w, http.StatusNotFound, "Diesen Roboter gibt es nicht.")
+	case errors.Is(err, config.ErrNoRobotSetup):
+		writeError(w, http.StatusConflict, "In der Server-Konfiguration fehlt robot_setup.")
+	case err != nil:
+		s.serverError(w, err)
+	default:
+		writeJSON(w, http.StatusOK, cfg)
+	}
 }
 
 // adminEvents streams the full state whenever it changes.

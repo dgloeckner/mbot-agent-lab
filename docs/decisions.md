@@ -10,7 +10,8 @@ and goes here, not into `CLAUDE.md`. How the system works today: `architecture.m
 | --- | --- | --- |
 | Repository | `mbot-agent-lab`, one monorepo | everything in one place |
 | Server | Go, one binary `labserver` | embeddable broker, simple distribution |
-| Robot code | MicroPython in upload mode, uploaded over USB with `robot:upload` (Go CLI `robotupload`, macOS); mBlock still works | approved deviation: no clicking through mBlock per robot; the CyberPi's upload protocol is known from MIT-licensed community tools |
+| Robot code | MicroPython in upload mode, flashed over USB with `robot:flash` (Go CLI `labctl`, macOS); mBlock still works | approved deviation: no clicking through mBlock per robot; the CyberPi's upload protocol is known from MIT-licensed community tools |
+| Robot setup | the lab server is the only source of a robot's Wi-Fi, broker and password (`robot_setup` in `lab.yaml`); `labctl` gets it over HTTPS from the admin API and bundles it in a temporary file | approved deviation: no secrets on the laptop, no drift between laptop and VM, works behind the corporate proxy |
 | Robot bundle | one `main.py` built from `robot/src` | unclear whether mBlock uploads several files |
 | Simulator | Python, runs the real bundled script against fakes of the vendor modules | tests the robot code itself, not a copy |
 | Transport robot–server | MQTT, QoS 0, compact JSON | last will, retained state, easy to watch |
@@ -61,7 +62,7 @@ and goes here, not into `CLAUDE.md`. How the system works today: `architecture.m
 | Topic | Decision | Why |
 | --- | --- | --- |
 | Teams | join on `/join` with a lab code and get a secret link; not configured in YAML | approved deviation: teams form on the lab day |
-| Secrets | never in YAML or the repo; config names environment variables (`*_env`); `robot/config.py` is git-ignored | no leaked keys |
+| Secrets | never in YAML or the repo; config names environment variables (`*_env`); `robot/config.py` (mBlock path only) is git-ignored | no leaked keys |
 
 ## Data
 

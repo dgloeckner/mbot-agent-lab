@@ -50,5 +50,13 @@ robots:
   - { id: mbot-2, password_env: MBOT2_PASSWORD, color: blue }
   - { id: mbot-3, password_env: MBOT3_PASSWORD, color: green }
 
+# To flash a real robot against this server (`npx nx run robot:flash --robot=mbot-1`), uncomment
+# and set broker_host to this machine's address in the robot's Wi-Fi; put LAB_WIFI_PASSWORD into
+# server/.env.local.
+# robot_setup:
+#   wifi_ssid: my-wifi
+#   wifi_password_env: LAB_WIFI_PASSWORD
+#   broker_host: 192.168.1.10
+
 # Teams join on /join with the lab code shown in the control room (/admin).
 # The control room assigns robots to teams; both are stored in the database.

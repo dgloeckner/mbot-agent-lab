@@ -27,6 +27,9 @@ type Config struct {
 	LLM     LLM     `yaml:"llm"`
 	Budgets Budgets `yaml:"budgets"`
 	Robots  []Robot `yaml:"robots"`
+
+	// RobotSetup is optional: without it the server hands out no robot setups (robot:flash).
+	RobotSetup *RobotSetup `yaml:"robot_setup"`
 }
 
 // Server holds listener addresses, TLS and storage settings.
@@ -113,6 +116,54 @@ type Robot struct {
 	Password string `yaml:"-"`
 }
 
+// RobotSetup tells how robots reach the Wi-Fi and the broker. `labctl robot flash` gets it from
+// the server (together with the robot's password) and inlines it into the robot's script.
+type RobotSetup struct {
+	WiFiSSID        string `yaml:"wifi_ssid"`
+	WiFiPasswordEnv string `yaml:"wifi_password_env"` // empty for an open network
+	BrokerHost      string `yaml:"broker_host"`
+	BrokerPort      int    `yaml:"broker_port"` // default 8883 with TLS, else 1883
+	BrokerTLS       bool   `yaml:"broker_tls"`
+
+	WiFiPassword string `yaml:"-"`
+}
+
+// RobotScriptConfig is everything one robot's script needs (the names in
+// robot/config_example.py); the server hands it to labctl, which inlines it into the bundle.
+type RobotScriptConfig struct {
+	RobotID        string `json:"robot_id"`
+	WiFiSSID       string `json:"wifi_ssid"`
+	WiFiPassword   string `json:"wifi_password"`
+	BrokerHost     string `json:"broker_host"`
+	BrokerPort     int    `json:"broker_port"`
+	BrokerTLS      bool   `json:"broker_tls"`
+	BrokerPassword string `json:"broker_password"`
+}
+
+// Errors of RobotScriptConfigFor.
+var (
+	ErrNoRobotSetup = errors.New("config: no robot_setup section")
+	ErrUnknownRobot = errors.New("config: unknown robot")
+)
+
+// RobotScriptConfigFor returns the script configuration of robot id.
+func (c *Config) RobotScriptConfigFor(id string) (RobotScriptConfig, error) {
+	if c.RobotSetup == nil {
+		return RobotScriptConfig{}, ErrNoRobotSetup
+	}
+	for _, r := range c.Robots {
+		if r.ID == id {
+			s := c.RobotSetup
+			return RobotScriptConfig{
+				RobotID: r.ID, WiFiSSID: s.WiFiSSID, WiFiPassword: s.WiFiPassword,
+				BrokerHost: s.BrokerHost, BrokerPort: s.BrokerPort, BrokerTLS: s.BrokerTLS,
+				BrokerPassword: r.Password,
+			}, nil
+		}
+	}
+	return RobotScriptConfig{}, ErrUnknownRobot
+}
+
 // Defaults applied before validation.
 const (
 	DefaultHTTPAddr          = ":8080"
@@ -195,6 +246,12 @@ func (c *Config) applyDefaults() {
 	if c.Budgets.MaxTokensPerConversation == 0 {
 		c.Budgets.MaxTokensPerConversation = DefaultMaxTokensPerConversation
 	}
+	if s := c.RobotSetup; s != nil && s.BrokerPort == 0 {
+		s.BrokerPort = 1883
+		if s.BrokerTLS {
+			s.BrokerPort = 8883
+		}
+	}
 	for name, p := range c.LLM.Providers {
 		if p.Kind == "" {
 			p.Kind = ProviderOpenAI
@@ -227,6 +284,9 @@ func (c *Config) resolveSecrets(lookup func(string) (string, bool)) error {
 	c.Server.AdminPassword = get(c.Server.AdminPasswordEnv, true)
 	for i := range c.Robots {
 		c.Robots[i].Password = get(c.Robots[i].PasswordEnv, true)
+	}
+	if c.RobotSetup != nil && c.RobotSetup.WiFiPasswordEnv != "" {
+		c.RobotSetup.WiFiPassword = get(c.RobotSetup.WiFiPasswordEnv, true)
 	}
 	if c.Server.LabCodeEnv != "" {
 		c.Server.LabCode = strings.ToUpper(strings.TrimSpace(get(c.Server.LabCodeEnv, false)))
@@ -316,6 +376,22 @@ func (c *Config) Validate() error {
 			add("robots: duplicate id %q", r.ID)
 		}
 		robots[r.ID] = true
+	}
+	if s := c.RobotSetup; s != nil {
+		if s.WiFiSSID == "" || s.BrokerHost == "" {
+			add("robot_setup: wifi_ssid and broker_host are required")
+		}
+		if s.BrokerPort < 1 || s.BrokerPort > 65535 {
+			add("robot_setup: invalid broker_port %d", s.BrokerPort)
+		}
+		switch {
+		case s.BrokerTLS && c.Server.MQTTTLSAddr == "":
+			add("robot_setup: broker_tls needs server.mqtt_tls_addr")
+		case s.BrokerTLS && !slices.Contains(c.Server.TLS.Hosts, s.BrokerHost):
+			add("robot_setup: broker_host %q is not in server.tls.hosts, its certificate would not match", s.BrokerHost)
+		case !s.BrokerTLS && c.Server.MQTTPlainAddr == "":
+			add("robot_setup: broker_tls false needs server.mqtt_plain_addr")
+		}
 	}
 	return errors.Join(errs...)
 }

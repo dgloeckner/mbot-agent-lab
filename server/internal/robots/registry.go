@@ -49,6 +49,7 @@ type Robot struct {
 	Online    bool
 	Accepted  bool // hello with a supported protocol version received
 	Hello     protocol.Hello
+	HelloAt   time.Time // last hello, i.e. last (re)connect of the script
 	State     protocol.State
 	StateAt   time.Time
 	SeenAt    time.Time
@@ -272,7 +273,7 @@ func (r *Registry) handle(topic string, payload []byte) {
 			r.log.Warn("bad hello", "robot", id, "err", err)
 			return
 		}
-		rb.Hello, rb.SeenAt = h, now
+		rb.Hello, rb.HelloAt, rb.SeenAt = h, now, now
 		rb.Accepted = h.V == protocol.Version
 		if !rb.Accepted {
 			r.log.Warn("unsupported protocol version", "robot", id, "v", h.V)

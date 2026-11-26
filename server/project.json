@@ -30,7 +30,10 @@
         "protocol",
         "{workspaceRoot}/configs/*.example.yaml",
         "{workspaceRoot}/deploy/local/*.yaml",
-        "{workspaceRoot}/docs/examples/programs/**/*"
+        "{workspaceRoot}/docs/examples/programs/**/*",
+        "{workspaceRoot}/robot/config_example.py",
+        "{workspaceRoot}/robot/src/**/*",
+        "{workspaceRoot}/robot/tools/bundle.py"
       ],
       "options": {
         "cwd": "server",

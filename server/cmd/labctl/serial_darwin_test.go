@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -134,5 +135,18 @@ func TestUploadOverPTY(t *testing.T) {
 	}
 	if res.Bytes != len(data) || !bytes.Equal(got, data) {
 		t.Errorf("fake CyberPi received a different file (result %+v)", res)
+	}
+}
+
+func TestPortUsersNamesTheHolder(t *testing.T) {
+	_, path := openPTY(t)
+	p, err := openSerial(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+	users := portUsers([]string{path})
+	if u := users[path]; !strings.Contains(u, "(pid "+strconv.Itoa(os.Getpid())+")") {
+		t.Errorf("users = %v", users)
 	}
 }
