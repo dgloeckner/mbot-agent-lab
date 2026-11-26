@@ -306,7 +306,11 @@ func (s *Service) AssignRobot(ctx context.Context, robotID, teamID string) error
 		} else if err != nil {
 			return err
 		}
+		// A robot the team had before gets the name the team gave it, if that is still free.
 		alias := s.freeAlias(teamID, cfgRobot)
+		if old, err := s.Store.LastReleasedAlias(ctx, teamID, robotID); err == nil && old != "" && s.aliasFree(teamID, old) {
+			alias = old
+		}
 		owner = robots.Owner{TeamID: t.ID, TeamName: t.Name, Color: t.Color, Alias: alias}
 	}
 	if err := s.Store.Assign(ctx, robotID, teamID, owner.Alias); err != nil {
@@ -421,6 +425,16 @@ func (s *Service) freeAlias(teamID string, r config.Robot) string {
 		alias = fmt.Sprintf("%s%d", base, n)
 	}
 	return alias
+}
+
+// aliasFree reports whether no robot of the team has this name.
+func (s *Service) aliasFree(teamID, alias string) bool {
+	for _, rb := range s.Robots.Snapshot() {
+		if rb.Owner == teamID && strings.EqualFold(rb.Alias, alias) {
+			return false
+		}
+	}
+	return true
 }
 
 // nextColor returns the least used team color.

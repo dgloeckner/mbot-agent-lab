@@ -464,7 +464,7 @@ function ToolsPanel() {
   return (
     <div class="tools-panel scroll">
       <p class="panel-intro">
-        Diese Werkzeuge hat euer Agent. Solange kein Lauf läuft, könnt ihr sie selbst ausprobieren: anklicken, Werte eintragen, ausführen. Beim
+        {missing ? 'Diese Werkzeuge gibt es; welche euer Agent in dieser Aufgabe hat, steht im Kasten unten.' : 'Diese Werkzeuge hat euer Agent.'} Solange kein Lauf läuft, könnt ihr sie selbst ausprobieren: anklicken, Werte eintragen, ausführen. Beim
         Schreiben schlägt der Editor ab drei Buchstaben passende Werkzeuge vor; <kbd>Tab</kbd> übernimmt den Vorschlag.
       </p>
       {team.length > 1 && (

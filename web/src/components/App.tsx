@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'preact/hooks'
 import { COLOR_HEX, onColor } from '../format'
 import { lazyComponent } from '../lazy'
 import { pickerLists } from '../taskview'
-import { accepting, deployWarning, leftView, loadError, unknownTeam, prefs, readOnly, session, task, tasks, toast, updatePrefs, wideTool } from '../state'
+import { accepting, deployWarning, leftView, loadError, robots, unknownTeam, prefs, readOnly, session, task, tasks, toast, updatePrefs, wideTool } from '../state'
 import { browserKV, defaultPrefs, loadJoined } from '../storage'
 import { PromptPane } from './PromptPane'
 import { SidePane } from './SidePane'
@@ -67,7 +67,14 @@ function Waiting() {
       {fresh.length === 0 ? (
         <div class="waiting-card">
           <h2>Wartet auf eine Aufgabe von der Lab-Leitung</h2>
-          <p>Sobald ihr eine bekommt, erscheint sie hier. Eure Roboter seht ihr oben schon.</p>
+          <p>
+            Sobald ihr eine bekommt, erscheint sie hier.{' '}
+            {robots.value.length === 0
+              ? 'Roboter teilt euch der Leitstand gleich zu; ihr seht sie dann oben.'
+              : robots.value.length === 1
+                ? 'Euren Roboter seht ihr oben schon.'
+                : 'Eure Roboter seht ihr oben schon.'}
+          </p>
         </div>
       ) : (
         <div class="waiting-card">

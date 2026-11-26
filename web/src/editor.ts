@@ -154,11 +154,13 @@ export function createEditor(o: EditorOptions): PromptEditor {
     syntaxHighlighting(markdownHighlight),
     EditorView.lineWrapping,
     placeholder('Beschreibt hier, was euer Agent tun soll.\n\nZum Beispiel: Finde das blaue Feld und bleib darauf stehen.'),
-    EditorView.contentAttributes.of({ 'aria-label': 'Prompt', spellcheck: 'true', lang: 'de' }),
+    EditorView.contentAttributes.of({ 'aria-label': 'Prompt', 'aria-description': 'Tab rückt ein. Escape und dann Tab verlässt den Editor.', spellcheck: 'true', lang: 'de' }),
     baseTheme,
     keymap.of([
       { key: 'Mod-s', preventDefault: true, run: () => (o.onSave(), true) },
       { key: 'Mod-Enter', preventDefault: true, run: () => (o.onDeploy(), true) },
+      // Tab indents; Escape and then Tab leaves the editor (keyboard users are not trapped).
+      { key: 'Escape', run: (v) => (v.setTabFocusMode(2000), false) },
       ...markdownKeymap,
       ...closeBracketsKeymap,
       ...defaultKeymap,

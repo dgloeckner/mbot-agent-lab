@@ -69,7 +69,7 @@ function EditorHost() {
     editorBridge.replace = ed.replace
     editorBridge.insert = ed.insert
     editorBridge.focus = ed.focus
-    ed.focus()
+    // No focus on load: keyboard users start at the band, not inside the editor.
     return () => {
       editorBridge.replace = editorBridge.insert = editorBridge.focus = undefined
       ed.destroy()

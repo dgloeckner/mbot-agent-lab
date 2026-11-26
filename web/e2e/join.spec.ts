@@ -50,3 +50,28 @@ test('a second PC joins with the code the band shows', async ({ page, browser })
   await pc2.screenshot({ path: join(SHOTS, 'join-unknown-link.png') })
   await other.close()
 })
+
+test('small fixes: a rename is logged once, Escape and Tab leave the editor', async ({ page }) => {
+  await page.goto(lab.page(team))
+  await page.getByRole('tab', { name: 'Protokoll' }).click()
+
+  // Rename the team with Enter: one save, one log line.
+  await page.locator('.band h1').getByRole('button').click()
+  const input = page.getByRole('textbox', { name: 'Teamname' })
+  await input.fill('Zweitrechner Neu')
+  await input.press('Enter')
+  const renamed = page.locator('.log-line', { hasText: 'Euer Team heißt jetzt „Zweitrechner Neu“' })
+  await expect(renamed).toHaveCount(1)
+  await page.waitForTimeout(800)
+  await expect(renamed).toHaveCount(1)
+
+  // The editor does not take the focus on load; Tab indents, Escape then Tab moves on.
+  await page.reload()
+  await expect(page.locator('.editor .cm-content')).not.toBeFocused()
+  await page.locator('.editor .cm-content').click()
+  await page.keyboard.press('Tab')
+  await expect(page.locator('.editor .cm-content')).toBeFocused()
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Tab')
+  await expect(page.locator('.editor .cm-content')).not.toBeFocused()
+})

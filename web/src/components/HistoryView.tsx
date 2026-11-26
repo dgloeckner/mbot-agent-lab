@@ -23,6 +23,8 @@ const REASON: Record<Snapshot['reason'], string> = {
 }
 
 const readOnly = [
+  // German for the merge view's own words.
+  EditorState.phrases.of({ '$ unchanged lines': '$ unveränderte Zeilen', Accept: 'Übernehmen', Reject: 'Verwerfen', 'Revert this chunk': 'Diese Stelle zurücknehmen' }),
   EditorView.editable.of(false),
   EditorState.readOnly.of(true),
   EditorView.lineWrapping,

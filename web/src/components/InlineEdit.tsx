@@ -15,6 +15,9 @@ export function InlineEdit(props: {
   const [text, setText] = useState(props.value)
   const [saving, setSaving] = useState(false)
   const input = useRef<HTMLInputElement>(null)
+  // Enter saves and disables the input, which then loses the focus and would
+  // save a second time on blur: one save per edit.
+  const inFlight = useRef(false)
 
   // Select the whole name when editing starts, so typing replaces it.
   useEffect(() => {
@@ -40,12 +43,18 @@ export function InlineEdit(props: {
     )
   }
   const save = async () => {
+    if (inFlight.current) return
     const v = text.trim()
     if (!v || v === props.value) return setEditing(false)
+    inFlight.current = true
     setSaving(true)
-    const ok = await props.onSave(v)
-    setSaving(false)
-    if (ok) setEditing(false)
+    try {
+      const ok = await props.onSave(v)
+      if (ok) setEditing(false)
+    } finally {
+      inFlight.current = false
+      setSaving(false)
+    }
   }
   return (
     <input

@@ -25,12 +25,10 @@ könnt, was der Agent dabei selbst entschieden hat.
 
 ## Startprompt
 
-Du steuerst einen kleinen Roboter in einem Labyrinth. Irgendwo liegt ein blaues Feld auf dem
-Boden.
+Du steuerst einen kleinen Roboter in einem Labyrinth. Irgendwo liegt ein blaues Feld auf dem Boden.
 
 Deine Aufgabe: Bring den Roboter auf das blaue Feld.
 
 - Nutze `labyrinth`, um zum blauen Feld zu kommen.
-- Schau dir das Ergebnis an. Wenn das Werkzeug nicht fertig wurde, überleg, warum, und versuch
-  es noch einmal.
+- Schau dir das Ergebnis an. Wenn das Werkzeug nicht fertig wurde, überleg, warum, und versuch es noch einmal.
 - Wenn du angekommen bist, ruf `finish` mit einem kurzen Bericht auf.
