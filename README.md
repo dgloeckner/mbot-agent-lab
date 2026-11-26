@@ -1,6 +1,6 @@
 # mBot2 Agent Lab
 
-**Teams of teenagers write the prompt of an AI agent, and the agent drives a real robot.**
+**Teams write the prompt of an AI agent, and the agent drives a real robot.**
 
 Each team gets one or more Makeblock mBot2 robots and an agent that runs inside the lab server.
 The team never steers the robot directly during a run: it writes the agent's prompt, builds tools
