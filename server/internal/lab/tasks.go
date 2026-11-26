@@ -2,6 +2,7 @@ package lab
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -166,6 +167,9 @@ func (s *Service) CloseTask(ctx context.Context, id string) (store.Task, error) 
 	}
 	for _, team := range teams {
 		s.Hub.Signal(team, live.SignalTasks)
+		// A line in the log: the page shows it as a notice on every tab.
+		data, _ := json.Marshal(map[string]string{"task": id, "title": t.Title})
+		s.Hub.Publish(team, live.LogEntry{Source: live.SourceSystem, Kind: "task_closed", Text: "Die Lab-Leitung hat die Aufgabe „" + t.Title + "“ geschlossen.", Data: data})
 	}
 	s.mu.Unlock()
 	s.Log.Info("task closed", "task", id)

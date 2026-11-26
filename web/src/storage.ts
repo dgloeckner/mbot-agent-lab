@@ -67,9 +67,11 @@ export interface Prefs {
   split: number // share of the width for the editor, 0.3 .. 0.8
   fontSize: number // editor font size in px
   sideTab: SideTab
+  /** Per task: when the newest conversation answer this browser has shown was written. */
+  talkSeen: Record<string, string>
 }
 
-export const defaultPrefs: Prefs = { theme: 'system', split: 0.58, fontSize: 15, sideTab: 'log' }
+export const defaultPrefs: Prefs = { theme: 'system', split: 0.58, fontSize: 15, sideTab: 'log', talkSeen: {} }
 
 export const MAX_SNAPSHOTS = 80
 const AUTO_MIN_GAP_MS = 30_000
@@ -180,6 +182,7 @@ export class LocalStore {
     const merged = { ...defaultPrefs, ...p }
     merged.split = Math.min(0.8, Math.max(0.3, Number(merged.split) || defaultPrefs.split))
     merged.fontSize = Math.min(22, Math.max(12, Number(merged.fontSize) || defaultPrefs.fontSize))
+    if (!merged.talkSeen || typeof merged.talkSeen !== 'object') merged.talkSeen = {}
     return merged
   }
 

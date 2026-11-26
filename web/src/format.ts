@@ -98,8 +98,9 @@ function compactResult(result: unknown): string {
 export const resultText = (result: Record<string, any>) => compactResult(result)
 
 /** Tool call for the log: name, arguments and outcome. */
-export function describeTool(d: Record<string, any>): { call: string; outcome: string; failed: boolean } {
-  const args = compactArgs(d.args)
+export function describeTool(d: Record<string, any>, withRobot = false): { call: string; outcome: string; failed: boolean } {
+  // A step of a team tool carries its robot apart from the arguments; with several robots it is named.
+  const args = compactArgs(withRobot && typeof d.robot === 'string' && d.robot ? { robot: d.robot, ...(d.args ?? {}) } : d.args)
   const result = d.result as Record<string, any> | undefined
   return { call: `${d.name}(${args})`, outcome: compactResult(result), failed: result?.ok === false }
 }

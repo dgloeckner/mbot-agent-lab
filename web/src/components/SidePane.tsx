@@ -42,7 +42,7 @@ const FILTERS: [Filter, string][] = [
 const SOURCE_LABEL = { robot: 'Roboter', team: 'Ihr', agent: 'Agent', system: 'System' } as const
 
 function ToolText({ d }: { d: Record<string, any> }) {
-  const t = describeTool(d)
+  const t = describeTool(d, robots.value.length > 1)
   return (
     <>
       <code class="tool-call">{t.call}</code> <span class={t.failed ? 'tool-failed' : 'tool-ok'}>{t.outcome}</span>
@@ -65,25 +65,49 @@ function LogLine({ e }: { e: LogEntry }) {
   )
 }
 
-/** Keeps a list scrolled to the bottom while the reader is there. */
-function useStickToBottom(...deps: unknown[]) {
+/** Keeps a list scrolled to the bottom while the reader is there; counts what arrives below otherwise. */
+function useStickToBottom(count: number, ...deps: unknown[]) {
   const list = useRef<HTMLOListElement>(null)
   const stick = useRef(true)
+  const seen = useRef(count)
+  const [below, setBelow] = useState(0)
   useLayoutEffect(() => {
     const el = list.current
-    if (el && stick.current) el.scrollTop = el.scrollHeight
-  }, deps)
+    if (el && stick.current) {
+      el.scrollTop = el.scrollHeight
+      seen.current = count
+    }
+    setBelow(stick.current ? 0 : Math.max(0, count - seen.current))
+  }, [count, ...deps])
   const onScroll = (ev: Event) => {
     const el = ev.currentTarget as HTMLElement
     stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+    if (stick.current) {
+      seen.current = count
+      setBelow(0)
+    }
   }
-  return { list, onScroll }
+  const toBottom = () => {
+    const el = list.current
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+  }
+  return { list, onScroll, below, toBottom }
+}
+
+/** "Neue Einträge ↓" at the lower edge while the reader is scrolled up and new lines arrived. */
+function NewBelow({ n, onClick }: { n: number; onClick: () => void }) {
+  if (n <= 0) return null
+  return (
+    <button class="new-below" onClick={onClick}>
+      {n === 1 ? 'Neuer Eintrag' : `${n} neue Einträge`} ↓
+    </button>
+  )
 }
 
 function LogPanel() {
   const filter = useSignal<Filter>('all')
   const entries = filter.value === 'all' ? log.value : log.value.filter((e) => logGroup(e) === filter.value)
-  const { list, onScroll } = useStickToBottom(entries.length, filter.value)
+  const { list, onScroll, below, toBottom } = useStickToBottom(entries.length, filter.value)
 
   return (
     <div class="log-panel">
@@ -94,24 +118,27 @@ function LogPanel() {
           </button>
         ))}
       </div>
-      <ol
-        class="log"
-        ref={list}
-        aria-live="polite"
-        onScroll={onScroll}
-      >
-        {entries.length === 0 ? (
-          <li class="empty-state">
-            {filter.value === 'all'
-              ? deployed.value
-                ? `Noch ist nichts passiert. Version ${deployed.value.version} ist deployt: startet einen Lauf oder schreibt eurem Agenten eine Nachricht.`
-                : 'Noch ist nichts passiert. Deployt euren Prompt oder schreibt eurem Agenten eine Nachricht.'
-              : 'Dazu gibt es noch keine Einträge.'}
-          </li>
-        ) : (
-          entries.map((e) => <LogLine key={e.id} e={e} />)
-        )}
-      </ol>
+      <div class="log-wrap">
+        <ol
+          class="log"
+          ref={list}
+          aria-live="polite"
+          onScroll={onScroll}
+        >
+          {entries.length === 0 ? (
+            <li class="empty-state">
+              {filter.value === 'all'
+                ? deployed.value
+                  ? `Noch ist nichts passiert. Version ${deployed.value.version} ist deployt: startet einen Lauf oder schreibt eurem Agenten eine Nachricht.`
+                  : 'Noch ist nichts passiert. Deployt euren Prompt oder schreibt eurem Agenten eine Nachricht.'
+                : 'Dazu gibt es noch keine Einträge.'}
+            </li>
+          ) : (
+            entries.map((e) => <LogLine key={e.id} e={e} />)
+          )}
+        </ol>
+        <NewBelow n={below} onClick={toBottom} />
+      </div>
       {agent.value.running ? <Composer placeholder="Nachricht an euren Agenten" /> : <NoRunHint />}
     </div>
   )

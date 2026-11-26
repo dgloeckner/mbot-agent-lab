@@ -108,10 +108,23 @@ export function updatePrefs(patch: Partial<Prefs>) {
   LocalStore.savePrefs(kv, prefs.value)
 }
 
-// Seeing the conversation tab marks its answers as read.
+// Seeing the conversation tab marks its answers as read, also after a reload.
 effect(() => {
-  if (prefs.value.sideTab === 'conversation') conversationUnread.value = 0
+  if (prefs.value.sideTab !== 'conversation') return
+  conversationUnread.value = 0
+  const id = task.value?.id
+  const last = conversation.value[conversation.value.length - 1]
+  if (id && last && (prefs.peek().talkSeen[id] ?? '') < last.at) {
+    // Keep only a few tasks: the map is per browser and never needs old ones.
+    const seen = Object.fromEntries(Object.entries({ ...prefs.peek().talkSeen, [id]: last.at }).slice(-10))
+    updatePrefs({ talkSeen: seen })
+  }
 })
+
+const pageOpened = Date.now()
+
+/** Lab events a team must notice on any tab: they also show as a toast. */
+const LAB_NOTICES = new Set(['task_assigned', 'task_withdrawn', 'task_closed', 'robot_added', 'robot_removed'])
 
 /** Appends a live entry; false if it was a replay after a reconnect. */
 function append(list: typeof log, e: LogEntry): boolean {
@@ -215,12 +228,15 @@ export async function init() {
     log: (e) => {
       if (!belongsTo(e, task.peek()?.id)) return
       if (e.channel === 'conversation') {
-        if (append(conversation, e) && e.source === 'agent' && e.kind === 'text' && prefs.value.sideTab !== 'conversation') {
+        const seen = prefs.peek().talkSeen[task.peek()?.id ?? ''] ?? ''
+        if (append(conversation, e) && e.source === 'agent' && e.kind === 'text' && prefs.value.sideTab !== 'conversation' && e.at > seen) {
           conversationUnread.value++
         }
         return
       }
       if (!append(log, e)) return
+      // Only what happened while the page is open: a reload replays older lines.
+      if (LAB_NOTICES.has(e.kind) && e.text && Date.parse(e.at) >= pageOpened) showToast(e.text, 'ok', 6000)
       if (e.kind === 'deploy') void onRemoteDeploy(Number(e.data?.version))
       if (e.kind === 'team_renamed' && session.value && typeof e.data?.name === 'string') {
         session.value = { ...session.value, team: { ...session.value.team, name: e.data.name } }
@@ -422,7 +438,9 @@ export async function stopAll() {
   // Without a live connection, say it at once; the request may hang until its timeout.
   if (conn.peek() !== 'live') showToast(NOT_STOPPED, 'error', 12_000)
   try {
+    const running = agent.peek().running
     await api.stop()
+    showToast(running ? 'Alle Roboter angehalten, der Lauf ist beendet.' : 'Alle Roboter angehalten.')
   } catch (err) {
     if (err instanceof NoConnection) showToast(NOT_STOPPED, 'error', 12_000)
     else fail(err)
