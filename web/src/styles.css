@@ -194,9 +194,9 @@ kbd {
   z-index: 10; /* the task menu opens over the panes below */
   isolation: isolate;
   display: grid;
-  /* The team column may grow to its usage line, but never at the cost of the robot card:
-     the robot column keeps at least the card's width, and the usage line wraps instead. */
-  grid-template-columns: minmax(200px, max-content) minmax(min-content, 1fr) auto;
+  /* Fixed tracks: the band keeps its height and the robot cards their place,
+     whatever the agent does and however long the usage line gets. */
+  grid-template-columns: minmax(0, 300px) minmax(0, 1fr) auto;
   gap: 28px;
   align-items: center;
   padding: 14px 20px 14px 24px;
@@ -233,11 +233,15 @@ kbd {
   letter-spacing: -0.015em;
 }
 
+.band-team {
+  min-width: 0;
+}
+
 .agent-state {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 2px 8px;
+  gap: 8px;
+  white-space: nowrap;
   margin-top: 6px;
   font-size: 14px;
   opacity: 0.92;
@@ -262,12 +266,19 @@ kbd {
   box-shadow: inset 0 0 0 1.5px currentColor;
 }
 
+.agent-label {
+  flex: none;
+}
+
+/* One line: shortened, all numbers in the tooltip. */
 .run-usage {
-  margin-left: 6px;
+  min-width: 0;
+  margin-left: 2px;
   padding-left: 10px;
   border-left: 1px solid color-mix(in oklab, currentColor 40%, transparent);
   opacity: 0.85;
-  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .band-robots {
@@ -305,16 +316,50 @@ kbd {
   font-weight: 720;
 }
 
-/* Several robots: they get a row of their own below team name and actions. */
+/* Several robots: compact cards that share the row, values without labels
+   (the labels stay for screen readers and as tooltips). */
 .band[data-robots='many'] {
-  grid-template-columns: minmax(180px, 1fr) auto;
+  grid-template-columns: minmax(0, 250px) minmax(0, 1fr) auto;
+  gap: 20px;
 }
 
-.band[data-robots='many'] .band-robots {
-  grid-column: 1 / -1;
-  grid-row: 2;
+.band[data-robots='many'] .robot {
+  flex: 1 1 0;
+  min-width: 190px;
+  max-width: 340px;
+  display: grid;
+  gap: 4px;
+  padding: 7px 12px;
+}
+
+.band[data-robots='many'] .robot-name {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.band[data-robots='many'] .robot-name .robot-alias {
+  font-size: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.band[data-robots='many'] .robot-facts {
   flex-wrap: wrap;
-  overflow: visible;
+  gap: 2px 12px;
+}
+
+.band[data-robots='many'] .robot-facts dt {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.band[data-robots='many'] .robot-facts dd {
+  font-size: 13.5px;
 }
 
 .robot-id {
@@ -1597,7 +1642,8 @@ kbd {
 /* Team, one robot card and the actions no longer fit side by side:
    the robot gets a row of its own, as with several robots. */
 @media (max-width: 1240px) {
-  .band {
+  .band,
+  .band[data-robots='many'] {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
@@ -1608,8 +1654,9 @@ kbd {
 }
 
 @media (max-width: 960px) {
-  .band {
-    grid-template-columns: 1fr auto;
+  .band,
+  .band[data-robots='many'] {
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 12px 16px;
     padding: 12px 16px;
   }
@@ -1658,7 +1705,8 @@ kbd {
 }
 
 @media (max-width: 560px) {
-  .band {
+  .band,
+  .band[data-robots='many'] {
     grid-template-columns: minmax(0, 1fr);
   }
 

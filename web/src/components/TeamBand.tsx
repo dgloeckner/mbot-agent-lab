@@ -28,29 +28,29 @@ function RobotCard({ r }: { r: Robot }) {
         </span>
       </div>
       <dl class="robot-facts">
-        <div>
+        <div title="Status">
           <dt>Status</dt>
           <dd><span class="dot" />{status}</dd>
         </div>
-        <div class={near ? 'near' : undefined}>
+        <div class={near ? 'near' : undefined} title="Abstand">
           <dt>Abstand</dt>
           <dd>
             <span class="gauge" style={{ '--v': gauge }} aria-hidden="true" />
             {r.online ? `${s.distance_cm} cm` : '–'}
           </dd>
         </div>
-        <div>
+        <div title="Boden">
           <dt>Boden</dt>
           <dd>
             <span class="swatch" style={{ background: COLOR_HEX[s.color] ?? 'transparent' }} aria-hidden="true" />
             {r.online ? colorName(s.color || 'none') : '–'}
           </dd>
         </div>
-        <div>
+        <div title="Akku">
           <dt>Akku</dt>
           <dd>{r.online ? `${s.battery} %` : '–'}</dd>
         </div>
-        <div>
+        <div title="Macht">
           <dt>Macht</dt>
           <dd class="mono">{r.online ? skillName(s.skill) : '–'}</dd>
         </div>
@@ -86,6 +86,26 @@ function ModelPick() {
   )
 }
 
+/** One line of token use: the current run while it runs, else the team's total; all numbers in the tooltip. */
+function Usage() {
+  const a = agent.value
+  const t = totals.value
+  const run = a.calls > 0 ? `${a.running ? 'dieser Lauf' : 'letzter Lauf'}: ${formatUsage(a.tokens_in + a.tokens_out, a.cost_micro_eur)}` : ''
+  const total = t.runs > 1 || t.conversation.count > 0 ? `gesamt: ${formatUsage(t.tokens_in + t.tokens_out, t.cost_micro_eur)}` : ''
+  const talk =
+    t.conversation.count > 0
+      ? `davon Gespräche: ${formatUsage(t.conversation.tokens_in + t.conversation.tokens_out, t.conversation.cost_micro_eur)}`
+      : ''
+  const shown = a.running ? run : total || run
+  if (!shown) return null
+  const details = [run && a.model ? `${run} (Modell ${a.model}, ${a.calls} Aufrufe)` : run, total, talk].filter(Boolean).join('\n')
+  return (
+    <span class="run-usage" title={details}>
+      {shown}
+    </span>
+  )
+}
+
 export function TeamBand() {
   const s = session.value!
   const theme = prefs.value.theme
@@ -106,24 +126,12 @@ export function TeamBand() {
         <h1>
           <InlineEdit value={s.team.name} label="Teamname" maxLength={30} onSave={renameTeam} />
         </h1>
-        <p class="agent-state" aria-live="polite">
+        <p class="agent-state">
           <span class="agent-dot" aria-hidden="true" />
-          {a.running ? `Agent ${AGENT_LABEL[a.state]}` : a.state !== 'waiting' ? 'Kein Lauf, Agent antwortet im Gespräch' : 'Kein Lauf'}
-          {a.calls > 0 && (
-            <span class="run-usage" title={`Modell ${a.model ?? ''}, ${a.calls} Aufrufe`}>
-              {a.running ? 'dieser Lauf' : 'letzter Lauf'}: {formatUsage(a.tokens_in + a.tokens_out, a.cost_micro_eur)}
-            </span>
-          )}
-          {(totals.value.runs > 1 || totals.value.conversation.count > 0) && (
-            <span class="run-usage" title={`Alle ${totals.value.runs} Läufe und ${totals.value.conversation.count} Gespräche eures Teams`}>
-              gesamt: {formatUsage(totals.value.tokens_in + totals.value.tokens_out, totals.value.cost_micro_eur)}
-            </span>
-          )}
-          {totals.value.conversation.count > 0 && (
-            <span class="run-usage" title="Davon eure Gespräche mit dem Agenten ohne Lauf">
-              davon Gespräche: {formatUsage(totals.value.conversation.tokens_in + totals.value.conversation.tokens_out, totals.value.conversation.cost_micro_eur)}
-            </span>
-          )}
+          <span class="agent-label" aria-live="polite">
+            {a.running ? `Agent ${AGENT_LABEL[a.state]}` : a.state !== 'waiting' ? 'Agent antwortet im Gespräch' : 'Kein Lauf'}
+          </span>
+          <Usage />
         </p>
         <ModelPick />
         <TaskPicker />
@@ -154,11 +162,14 @@ export function TeamBand() {
         >
           <ThemeIcon />
         </button>
-        {!a.running && (
-          <button class="btn btn-on-band" onClick={startRun} disabled={!s.agent_available || !task.value || readOnly.value || !deployed.value} title={startHint}>
-            <PlayIcon /> Lauf starten
-          </button>
-        )}
+        <button
+          class="btn btn-on-band"
+          onClick={startRun}
+          disabled={a.running || !s.agent_available || !task.value || readOnly.value || !deployed.value}
+          title={a.running ? 'Ein Lauf läuft schon. Mit Stopp beendet ihr ihn.' : startHint}
+        >
+          <PlayIcon /> Lauf starten
+        </button>
         <button
           class="btn btn-stop"
           onClick={stopAll}
