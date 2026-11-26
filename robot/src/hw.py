@@ -1,5 +1,5 @@
 # Hardware abstraction: the ONLY module that touches the vendor modules
-# cyberpi, mbot2 and mbuild. The simulator provides fakes with the same names.
+# cyberpi, mbot2, mbuild and event. The simulator provides fakes with the same names.
 #
 # Every vendor call is marked VERIFY until it has been checked against the
 # Makeblock documentation and on a real robot (names, units, signs, blocking).
@@ -7,6 +7,13 @@
 import cyberpi
 import mbot2
 import mbuild
+
+# The firmware's event system, as in the code mBlock generates for upload mode
+# (`@event.start`). VERIFY on the robot; without it the script starts directly.
+try:
+    import event
+except Exception:
+    event = None
 
 # Wheel geometry: centimetres per wheel degree. VERIFY/calibrate on the floor.
 WHEEL_DIAMETER_CM = 6.5
@@ -24,6 +31,18 @@ COLOR_RGB = {
     "white": (255, 255, 255), "orange": (255, 100, 0), "off": (0, 0, 0),
     "gray": (120, 120, 120),
 }
+
+
+def hw_on_start(fn):
+    """Run fn as the firmware's start handler, or right away without the event module.
+
+    The start handler runs once the whole program has loaded, so the top level
+    of the script returns to the firmware instead of looping there.
+    """
+    if event is None:
+        fn()
+    else:
+        event.start(fn)  # VERIFY: same as decorating fn with @event.start
 
 
 def hw_wifi_connect(ssid, password):

@@ -32,6 +32,7 @@ class MemoryClient:
         self.published = []   # (topic, payload str, retain)
         self.incoming = []
         self.will = None
+        self.closed = False
         MemoryClient.instances.append(self)
 
     def set_callback(self, f):
@@ -58,13 +59,18 @@ class MemoryClient:
         pass
 
     def disconnect(self):
-        pass
+        self.closed = True
 
     def deliver(self, topic, obj):
         self.incoming.append((topic, json.dumps(obj)))
 
     def messages(self, suffix):
         return [json.loads(m) for t, m, _ in self.published if t.endswith("/" + suffix) and m.startswith("{")]
+
+
+# The bundle's last line: starts the robot (robot/src/main.py). load_robot leaves
+# it out; exec it in the returned namespace to start the robot as the firmware does.
+ENTRY = "hw_on_start(main)"
 
 
 def load_robot(world_spec, robot_id="mbot-1", noise=None):
@@ -81,7 +87,7 @@ def load_robot(world_spec, robot_id="mbot-1", noise=None):
 
     source = bundle.bundle()
     body, last = source.rstrip().rsplit("\n", 1)
-    assert last.strip() == "main()", "bundle must end with main()"
+    assert last.strip() == ENTRY, "bundle must end with " + ENTRY
     ns = {"__name__": "robot_under_test"}
     exec(compile(body, "main.py", "exec"), ns)
     ns["MQTTClient"] = MemoryClient

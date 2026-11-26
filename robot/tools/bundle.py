@@ -152,7 +152,7 @@ def bundle(config_path=None, strip=True, pad=0):
                 raise SystemExit("bundle: name %r defined in both %s and %s" % (n, seen[n], name))
             seen[n] = name
         if name == "main" and pad:
-            # Before main: main() never returns.
+            # Before main, whose last line starts the robot.
             parts.append("# ---- padding (%d bytes, never called)\n\n%s" % (pad, padding(pad)))
         parts.append("# ---- %s %s\n\n%s" % (name, "-" * (70 - len(name)), text))
 

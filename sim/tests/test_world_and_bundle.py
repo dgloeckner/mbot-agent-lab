@@ -66,14 +66,15 @@ class BundleTest(unittest.TestCase):
         for node in tree.body:
             if isinstance(node, ast.ImportFrom):
                 self.assertNotIn(node.module, local)
-        self.assertTrue(src.rstrip().endswith("main()"))
+        self.assertTrue(src.rstrip().endswith("\nhw_on_start(main)"))
 
     def test_bundle_imports_only_firmware_modules(self):
         # Every import must exist on the CyberPi: the firmware had no umqtt, so the
         # robot crashed with ImportError at start. Add a module only after checking
-        # it on the robot. json/time are fallbacks for CPython, _thread and gc are optional,
-        # all behind try/except.
-        allowed = {"config", "cyberpi", "mbot2", "mbuild", "socket", "ssl", "time", "json", "ujson", "_thread", "sys", "gc"}
+        # it on the robot. json/time are fallbacks for CPython, _thread, gc and event are
+        # optional, all behind try/except (event: mBlock's generated code imports it, VERIFY).
+        allowed = {"config", "cyberpi", "mbot2", "mbuild", "event", "socket", "ssl", "time", "json", "ujson",
+                   "_thread", "sys", "gc"}
         found = set()
         for node in ast.walk(ast.parse(bundle.bundle())):
             if isinstance(node, ast.Import):
