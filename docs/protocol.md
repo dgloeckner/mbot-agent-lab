@@ -127,11 +127,12 @@ QoS 0 messages get lost. A free robot shows "frei" and stands still.
 - **One motion skill at a time:** a new motion command during a drive ends with `ok:false` and
   `reason:"busy"`. `stop` is always accepted and idempotent.
 - **Values for `reason`:** `done`, `wall`, `color`, `max_cm`, `timeout`, `stopped`, `obstacle`,
-  `busy`, `tilted`, `reassigned`, `error`, and for the goal skills `clear` and `max_deg`
+  `blocked`, `busy`, `tilted`, `reassigned`, `error`, and for the goal skills `clear` and `max_deg`
   (`turn_until_clear`), `crossing` and `line_lost` (`follow_line_until`), `empty`
   (`retrace_path` with an empty trip log).
 - **Trace:** every motion skill except `scan` and `retrace_path` reports `floor` (and `floor_truncated` when cut
-  off) and `min_distance_cm`, also when it ends with `stopped`, `obstacle` or another abort.
+  off) and `min_distance_cm`, also when it ends with `stopped`, `obstacle`, `blocked` or another
+  abort.
 - **`stop_on_color`:** `white`, `black`, `red`, `yellow`, `green`, `blue` or `any` (anything but
   white). It triggers when one of the four probes sees the color. A color the probes already see
   at the start counts only after they have left it (a robot in the red start field can drive back
@@ -140,7 +141,8 @@ QoS 0 messages get lost. A free robot shows "frei" and stands still.
   distance as the median of the last 7 valid readings (dropouts below 2 cm ignored; 10 dropouts
   in a row mean the sensor is blind, and the distance reads 0), the floor
   pattern only after 3 equal readings in a row, tilt with hysteresis (on above 45°, off below 30°)
-  and a minimum duration. Stop conditions must hold for several loop iterations. `state` and
+  and a minimum duration, the nose-up and motor power states as described under "Blocked". Stop
+  conditions must hold for several loop iterations. `state` and
   `event` carry the same filtered values. The emergency stop distance grows with speed
   (8 cm + 0.05 cm per RPM).
 - **Obstacles:** the ultrasonic sensor looks forward in a cone of about 30°. Every forward motion
@@ -151,6 +153,26 @@ QoS 0 messages get lost. A free robot shows "frei" and stands still.
   beside itself: `drive` with negative `cm` is blind, which the agent has to know; turns on the
   spot do not check; a wall grazed at a flatter angle can be touched. `retrace_path` decides its
   moves itself and therefore never drives backwards.
+- **Blocked:** what the ultrasonic sensor does not see (too low, nearer than 5 cm, behind or
+  beside the robot) the robot can only feel. A motion that is held up ends with `ok:false` and
+  `reason:"blocked"`, with the same `data` as any other abort plus `blocked_by`, which names the
+  case:
+  - **`motor_power`**, in every motion skill, also backwards and when turning: the motors need
+    more power than their speed asks for. A held robot's wheels do not stand, the speed control
+    keeps them turning and they slip; what rises is the power. Free driving needs
+    3.2 + 0.41 × RPM percent. The robot reads one motor per loop iteration, in turns, and ends
+    the motion when the mean of both lies above that by more than 4 plus a tenth of it, for
+    0.4 s. Every motor stop starts the check anew.
+  - **`nose_up`**, in forward motions only (the ones that end with `obstacle`): the pitch (median of
+    the last three readings) rises more than 8° above its level at rest for 0.3 s (off again
+    below 4°): the robot climbs what
+    it ran into. The level follows the pitch while the motors are off, so the CyberPi's mounting
+    angle and a sloped floor do not count; driving up a ramp does.
+
+  The wheels slip until the motion ends, so `driven_cm` and the trip log count more than the
+  robot moved. A light obstacle that gives way is pushed along and not reported. The thresholds
+  were measured on one robot (`docs/measurements.md`, "Blocked"). No event of its own: the
+  result carries the reason, and `skill_aborted` repeats it.
 - **`calibrate_colors`** is maintenance for the control room, not an agent tool. The robot stands
   right before the reference strip and drives across it; it finds the black field itself, so the
   start position needs no precision. The references apply at once and are lost on restart until
@@ -176,7 +198,7 @@ back through earlier runs; a robot that is offline then keeps its log.
 - The retrace's own moves are not logged. `segments` counts the log entries worked off,
   `driven_cm` the cm this call drove (turns not counted).
 - `done` (or `empty` when there was nothing to do) leaves the log empty: the robot's pose is the
-  new beginning. An abort (`obstacle`, `stopped`, `tilted`, `timeout`, …) leaves the way still to
+  new beginning. An abort (`obstacle`, `blocked`, `stopped`, `tilted`, `timeout`, …) leaves the way still to
   go in the log plus a turn for the extra rotation, so the log again describes the way from the
   beginning to here. A new `retrace_path` continues from there, also after detours.
 - The whole retrace counts as one command: it ends with `timeout` after 20 seconds like every

@@ -7,6 +7,9 @@ group('describe', () => {
     expect(describe({ id: 1, at: '', source: 'robot', kind: 'skill_aborted', data: { skill: 'drive', reason: 'obstacle' } })).toBe(
       'drive abgebrochen: Hindernis im Weg',
     )
+    expect(describe({ id: 1, at: '', source: 'robot', kind: 'skill_aborted', data: { skill: 'drive', reason: 'blocked' } })).toBe(
+      'drive abgebrochen: steckt fest',
+    )
     expect(describe({ id: 1, at: '', source: 'robot', kind: 'color_changed', data: { color: 'blue' } })).toBe('Boden ist jetzt blau')
   })
   it('falls back to free text', () => {
@@ -34,6 +37,8 @@ it('estimates tokens and relative times', () => {
 it('words tool calls and runs', () => {
   const tool = { id: 1, at: '', source: 'agent', kind: 'tool', data: { name: 'drive_until', args: { max_cm: 120, robot: 'Scout' }, result: { ok: true, reason: 'wall', driven_cm: 41.6, distance_cm: 14 } } }
   expect(describe(tool)).toBe('drive_until(max_cm: 120, robot: Scout) → Wand erreicht, 42 cm gefahren, Abstand 14 cm')
+  const blocked = { ...tool, data: { name: 'drive', args: { cm: 50 }, result: { ok: false, reason: 'blocked', blocked_by: 'motor_power', driven_cm: 31 } } }
+  expect(describe(blocked)).toBe('drive(cm: 50) → steckt fest (Motoren brauchen zu viel Kraft)')
   const failed = { ...tool, data: { name: 'turn', args: {}, result: { ok: false, error: 'Es fehlt das Argument "degrees".' } } }
   expect(describe(failed)).toBe('turn() → Es fehlt das Argument "degrees".')
   expect(describe({ id: 2, at: '', source: 'system', kind: 'run_end', data: { reason: 'stop', by: 'Team' } })).toBe('Lauf gestoppt von euch')

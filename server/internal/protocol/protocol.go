@@ -62,6 +62,7 @@ const (
 	ReasonObstacle   Reason = "obstacle"
 	ReasonBusy       Reason = "busy"
 	ReasonTilted     Reason = "tilted"
+	ReasonBlocked    Reason = "blocked" // held up: the wheels stand or the nose lifts
 	ReasonReassigned Reason = "reassigned"
 	ReasonError      Reason = "error"
 	ReasonClear      Reason = "clear"     // turn_until_clear found open space

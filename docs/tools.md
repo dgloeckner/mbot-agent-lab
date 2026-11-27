@@ -18,13 +18,13 @@ takes a color only, no pattern.
 
 | Group | Tool | Parameters | Result | By hand | Normal ends |
 | --- | --- | --- | --- | --- | --- |
-| Move | `drive` | `cm`, `speed?` | `driven_cm`, `reason`, `floor`, `min_distance_cm` | yes | `done` |
-| Move | `turn` | `degrees`, positive is right | `turned_deg`, `reason`, `distance_cm`, `floor` | yes | `done` |
-| Move | `drive_arc` | `radius_cm`, `degrees` (positive is right), `stop_on_color?`, `speed?` | `turned_deg`, `driven_cm`, `reason` (`done`, `color`), `distance_cm`, `color`, `floor`, `min_distance_cm` | yes | `done`, `color` |
-| Move | `drive_until` | `max_cm`, `stop_below_cm?`, `stop_on_color?` | `driven_cm`, `reason`, `distance_cm`, `color`, `floor`, `min_distance_cm` | yes | `wall`, `color`, `obstacle`, `max_cm` |
+| Move | `drive` | `cm`, `speed?` | `driven_cm`, `reason` (`done`, `obstacle`, `blocked`), `floor`, `min_distance_cm` | yes | `done` |
+| Move | `turn` | `degrees`, positive is right | `turned_deg`, `reason` (`done`, `blocked`), `distance_cm`, `floor` | yes | `done` |
+| Move | `drive_arc` | `radius_cm`, `degrees` (positive is right), `stop_on_color?`, `speed?` | `turned_deg`, `driven_cm`, `reason` (`done`, `color`, `obstacle`, `blocked`), `distance_cm`, `color`, `floor`, `min_distance_cm` | yes | `done`, `color` |
+| Move | `drive_until` | `max_cm`, `stop_below_cm?`, `stop_on_color?` | `driven_cm`, `reason` (`wall`, `color`, `obstacle`, `max_cm`, `blocked`), `distance_cm`, `color`, `floor`, `min_distance_cm` | yes | `wall`, `color`, `obstacle`, `max_cm` |
 | Move | `turn_until_clear` | `direction`, `min_cm?`, `min_deg?`, `max_deg?` | `turned_deg`, `reason` (`clear`, `max_deg`), `distance_cm`, `floor` | yes | `clear`, `max_deg` |
-| Move | `follow_line_until` | `max_cm`, `stop_on_color?`, `stop_at_crossing?` | `driven_cm`, `reason` (`color`, `crossing`, `line_lost`, `max_cm`), `color`, `floor` | yes | `color`, `crossing`, `max_cm` |
-| Move | `retrace_path` | none | `segments`, `driven_cm`, `reason` (`done`, `empty`, `obstacle`, `stopped`, `timeout`), `distance_cm` | yes | `done`, `empty` |
+| Move | `follow_line_until` | `max_cm`, `stop_on_color?`, `stop_at_crossing?` | `driven_cm`, `reason` (`color`, `crossing`, `line_lost`, `max_cm`, `obstacle`, `blocked`), `color`, `floor` | yes | `color`, `crossing`, `max_cm` |
+| Move | `retrace_path` | none | `segments`, `driven_cm`, `reason` (`done`, `empty`, `obstacle`, `blocked`, `stopped`, `timeout`), `distance_cm` | yes | `done`, `empty` |
 | Move | `stop` | none | `ok` | no | `done` |
 | Sense | `read_sensors` | none | `distance_cm`, `floor` (current pattern), `color`, `line`, `yaw`, `battery`, `tilted` | yes | `done` |
 | Sense | `scan` | `from_deg?`, `to_deg?`, `step_deg?`, `face?` | `profile` `[[deg, cm], …]`, `best_deg`, `best_cm`, `turned_deg` | yes | `done` |
@@ -47,7 +47,8 @@ takes a color only, no pattern.
 - **By hand and normal ends:** the registry flags which tools a person (the console) or a team
   tool may run without an agent ("by hand"), and which stop reasons count as a normal end. A
   result without a reason ends normally when it is ok; every other reason is unexpected (for
-  example `drive` with `obstacle`, `follow_line_until` with `line_lost`, any tool with `offline`).
+  example `drive` with `obstacle`, `follow_line_until` with `line_lost`, any motion with `blocked`,
+  any tool with `offline`).
   `say`, `finish`, `remember` and `forget` need the agent runtime; `tell_team`, `list_robots` and
   `stop` are pointless by hand (the team sits there, the robots are on the page, stop is a
   button). **A new tool is agent-only until it is flagged.** Console, blocks and interpreter read
@@ -75,6 +76,17 @@ takes a color only, no pattern.
 - **Obstacles:** every forward motion stops by itself before an obstacle the ultrasonic sensor
   sees (reason `obstacle`). The sensor looks forward only: `drive` backwards is blind, and the
   tool description tells the agent so. Details and limits in `docs/protocol.md`, "Rules".
+- **Blocked:** an obstacle the sensor does not see (too low, nearer than 5 cm, behind or beside
+  the robot) the robot only feels: the motors need clearly more power than their speed asks for,
+  or the nose lifts while it drives forward. The motion then ends within a second with
+  `ok: false` and reason `blocked`, for every motion tool, also `turn` and `drive` backwards. The
+  result says what told the robot in `blocked_by`: `motor_power` (it pushes against something
+  that does not give way, the wheels slip) or `nose_up` (it climbs onto something). The
+  description of `drive` tells the agent what both mean, that `driven_cm` is too large then, and
+  what to do (back off the way it came, turn away, take another way); it also explains `tilted`.
+  The other motion tools refer to it. It is never a normal end: a team tool goes on only if an
+  `if` on the reason handles it ("Grund ist steckt fest"). The team page words the cause with the
+  reason ("steckt fest (Motoren brauchen zu viel Kraft)"). Details in `docs/protocol.md`, "Rules".
 - **`retrace_path` turns around:** it drives the way back forward, also a stretch the team drove
   backwards, so the obstacle reflex stays on, and ends at the start facing the way it came. The way counts from the start of the
   run: the server clears the trip log of the team's robots when a run starts. After an abort the

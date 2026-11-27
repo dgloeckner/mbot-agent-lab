@@ -58,6 +58,8 @@ func TestNormalEnd(t *testing.T) {
 	}{
 		{"drive", `{"ok":true,"reason":"done","driven_cm":20}`, true},
 		{"drive", `{"ok":true,"reason":"obstacle","driven_cm":8}`, false},
+		{"drive", `{"ok":false,"reason":"blocked","driven_cm":8}`, false},
+		{"drive_until", `{"ok":false,"reason":"blocked"}`, false},
 		{"turn", `{"ok":true,"reason":"done"}`, true},
 		{"turn", `{"ok":false,"reason":"tilted"}`, false},
 		{"drive_arc", `{"ok":true,"reason":"color"}`, true},

@@ -16,12 +16,18 @@ export const COLOR_HEX: Record<string, string> = {
 const REASONS: Record<string, string> = {
   done: 'fertig', wall: 'Wand erreicht', color: 'Farbe erreicht', max_cm: 'Strecke erreicht',
   timeout: 'Zeit abgelaufen', stopped: 'gestoppt', obstacle: 'Hindernis im Weg', busy: 'noch beschäftigt',
-  tilted: 'umgekippt', reassigned: 'neu zugeteilt', error: 'Fehler',
+  tilted: 'umgekippt', blocked: 'steckt fest', reassigned: 'neu zugeteilt', error: 'Fehler',
   clear: 'Weg frei', max_deg: 'kein freier Weg gefunden', line_lost: 'Linie zu Ende', crossing: 'Kreuzung erreicht',
 }
 
 export const colorName = (c: string) => COLORS[c] ?? c
 export const reasonName = (r: string) => REASONS[r] ?? r
+
+/** What told the robot it is blocked (`blocked_by` in a motion result). */
+const BLOCKED_BY: Record<string, string> = {
+  motor_power: 'Motoren brauchen zu viel Kraft',
+  nose_up: 'Nase hebt sich',
+}
 
 export function skillName(skill: string): string {
   return skill === 'idle' || !skill ? 'steht' : skill
@@ -76,7 +82,10 @@ function compactArgs(args: unknown): string {
 function compactResult(result: unknown): string {
   if (!result || typeof result !== 'object') return ''
   const r = result as Record<string, any>
-  if (r.ok === false) return r.error ?? (r.reason ? reasonName(String(r.reason)) : 'fehlgeschlagen')
+  if (r.ok === false) {
+    const by = BLOCKED_BY[String(r.blocked_by)]
+    return r.error ?? (r.reason ? reasonName(String(r.reason)) + (by ? ` (${by})` : '') : 'fehlgeschlagen')
+  }
   const parts: string[] = []
   if (r.reason) parts.push(reasonName(String(r.reason)))
   if (typeof r.driven_cm === 'number') parts.push(`${Math.round(r.driven_cm)} cm gefahren`)

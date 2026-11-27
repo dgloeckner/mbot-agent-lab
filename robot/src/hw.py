@@ -25,6 +25,14 @@ TRACK_CM = 12.0
 # Motor direction: the right motor is mounted mirrored. VERIFY sign.
 RIGHT_MOTOR_SIGN = -1
 
+# Pitch direction: hw_tilt reports nose up as positive. Checked on the robot on
+# 2026-11-27: the front lifted by 2 cm reads +8 (docs/measurements.md, "Blocked").
+PITCH_NOSE_UP_SIGN = 1
+
+# What the motors were last told: left RPM, right RPM, and how often they were
+# stopped. sense.py compares it with the power the motors need for it.
+hw_cmd = [0, 0, 0]
+
 COLOR_RGB = {
     "red": (255, 0, 0), "green": (0, 255, 0), "blue": (0, 0, 255),
     "yellow": (255, 200, 0), "purple": (160, 0, 255), "cyan": (0, 255, 255),
@@ -62,10 +70,13 @@ def hw_mac():
 
 def hw_motors(left, right):
     """Run both motors at the given speed (RPM, forward positive). Non-blocking."""
+    hw_cmd[0], hw_cmd[1] = left, right
     mbot2.drive_speed(left, RIGHT_MOTOR_SIGN * right)  # VERIFY argument order and sign
 
 
 def hw_motors_stop():
+    hw_cmd[0] = hw_cmd[1] = 0
+    hw_cmd[2] += 1
     mbot2.EM_stop("all")  # VERIFY
 
 
@@ -78,6 +89,14 @@ def hw_wheels_deg():
     left = mbot2.EM_get_angle("EM1")  # VERIFY port names and which side is EM1
     right = mbot2.EM_get_angle("EM2")
     return left, RIGHT_MOTOR_SIGN * right
+
+
+def hw_power(i):
+    """Power of the left (0) or right (1) motor in percent, forward positive: what
+    its speed control gives it to hold the speed. One call takes about 32 ms."""
+    if i:
+        return RIGHT_MOTOR_SIGN * mbot2.EM_get_power("EM2")
+    return mbot2.EM_get_power("EM1")
 
 
 def hw_yaw():
@@ -93,7 +112,8 @@ def hw_yaw():
 
 
 def hw_tilt():
-    return cyberpi.get_pitch(), cyberpi.get_roll()  # VERIFY
+    """(pitch, roll) in degrees; a lifted nose is a positive pitch."""
+    return PITCH_NOSE_UP_SIGN * cyberpi.get_pitch(), cyberpi.get_roll()
 
 
 def hw_distance_cm():

@@ -10,7 +10,7 @@ from events import Events, EV_HUSH_MOTION_MS, EV_HUSH_SOUND_MS
 from net import Link
 from skills import MOTION_SKILLS, make_motion_skill
 from calib import CalibrateColorsSkill
-from reflexes import RF_WATCHDOG_MS, reflex_abort_reason, stop_distance
+from reflexes import RF_WATCHDOG_MS, reflex_abort_reason, blocked_by, stop_distance
 
 SCRIPT_VERSION = "0.1.0"
 PROTOCOL_VERSION = 1
@@ -141,10 +141,13 @@ class Robot:
         self.skill = skill
         self.skill_cmd_id = cmd_id
 
-    def end_skill(self, reason):
-        """Abort the running motion skill, if any, with reason."""
+    def end_skill(self, reason, by=None):
+        """Abort the running motion skill, if any, with reason; by is what blocked it."""
         if self.skill is not None:
-            self.finish_skill(self.skill.abort(reason, self.s))
+            result = self.skill.abort(reason, self.s)
+            if by:
+                result[2]["blocked_by"] = by
+            self.finish_skill(result)
 
     def finish_skill(self, result):
         ok, reason, data = result
@@ -246,7 +249,7 @@ class Robot:
         # 3. Reflexes.
         reason = reflex_abort_reason(self.skill, self.s)
         if reason:
-            self.end_skill(reason)
+            self.end_skill(reason, blocked_by(self.s) if reason == "blocked" else None)
         self.check_watchdog(now)
 
         # 4. Events.

@@ -62,7 +62,7 @@ var (
 	floorColor = [][2]string{{"weiß", "white"}, {"schwarz", "black"}, {"rot", "red"}, {"gelb", "yellow"}, {"grün", "green"}, {"blau", "blue"}}
 	letters    = [][2]string{{"schwarz", "k"}, {"rot", "r"}, {"gelb", "y"}, {"grün", "g"}, {"blau", "b"}, {"weiß", "w"}}
 	reasons    = [][2]string{
-		{"Wand", "wall"}, {"Farbe", "color"}, {"Hindernis", "obstacle"}, {"Strecke erreicht", "max_cm"}, {"fertig", "done"},
+		{"Wand", "wall"}, {"Farbe", "color"}, {"Hindernis", "obstacle"}, {"steckt fest", "blocked"}, {"Strecke erreicht", "max_cm"}, {"fertig", "done"},
 		{"frei", "clear"}, {"kein freier Weg", "max_deg"}, {"Kreuzung", "crossing"}, {"Linie verloren", "line_lost"},
 		{"kein Weg gespeichert", "empty"}, {"Zeit abgelaufen", "timeout"}, {"umgekippt", "tilted"},
 	}

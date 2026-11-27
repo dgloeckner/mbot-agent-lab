@@ -18,6 +18,17 @@ command with a lag (motor_lag_s in mbot2.json; with noise it differs per
 robot), so after a stop the wheels run on. With "stand": true the robot sits
 on a stand: the wheels and encoders turn, the body does not move.
 
+"low_obstacles" lie below the ultrasonic cone: the sensor does not see them,
+but they stop the robot like a wall. Each is {"from": [x, y], "to": [x, y]}
+plus "nose_up_deg" (default 0): how far the nose lifts while the robot pushes.
+
+Held by a wall or a low obstacle, the wheels slip on the spot at full speed,
+as on the real robot: the encoders keep counting. What shows is the motor
+power (motor_power): free driving needs power_base + power_per_rpm * speed
+percent, speeding up a little more for a moment, pushing against something
+that does not give way clearly more (measured values in mbot2.json; with
+noise the motors differ per robot).
+
 Units are centimetres and degrees. Heading 0 points along +y, positive headings
 turn clockwise (to the right), matching the robot's yaw convention.
 Time advances lazily: every sensor read or motor change integrates the motion
@@ -48,6 +59,13 @@ LINE_OFFSETS_CM = PROBE_LATERAL_CM
 PROBE_SPOT_CM = GEOMETRY["probe_spot_cm"]
 MOTOR_LAG_S = GEOMETRY["motor_lag_s"]  # time constant of the wheel speed
 MOTOR_SNAP_RPM = 2       # below this a stopped motor stands still
+NOSE_LAG_S = 0.1         # time constant of the nose lifting on a low obstacle and coming down
+PUSH_LAG_S = 0.05        # time constant of the load on the motors while the robot pushes
+POWER_BASE = GEOMETRY["power_base"]                # motor power in percent, free driving ...
+POWER_PER_RPM = GEOMETRY["power_per_rpm"]          # ... per RPM of wheel speed
+POWER_SPEEDUP = GEOMETRY["power_speedup_per_rpm"]  # on top per RPM the wheel is behind its command
+POWER_HELD = GEOMETRY["power_held"]                # on top while the robot pushes and does not move ...
+POWER_HELD_PER_RPM = GEOMETRY["power_held_per_rpm"]  # ... per RPM commanded
 PROBE_JITTER_CM = 0.2    # the bar is fixed; only the edge blur wobbles
 PROBE_SAMPLE_S = 0.004   # one RGB measurement serves the three channel reads
 MAX_RANGE_CM = 300
@@ -69,6 +87,8 @@ class World:
             noise = random.Random()
         self.rng = noise
         self.walls = [tuple(w) for w in spec.get("walls", [])]
+        self.low = [(tuple(o["from"]) + tuple(o["to"]), float(o.get("nose_up_deg", 0)))
+                    for o in spec.get("low_obstacles", [])]
         self.fields = spec.get("fields", [])
         self.lines = spec.get("lines", [])
         self.floor = spec.get("floor", "white")
@@ -81,12 +101,17 @@ class World:
             gain = self.rng.uniform(0.85, 1.05)
             self.tint = tuple(gain * self.rng.uniform(0.92, 1.08) for _ in range(3))
         self.motor_lag = MOTOR_LAG_S
+        self.power_gain = 1.0    # this robot's motors against the measured ones
         if self.rng:
             self.motor_lag *= self.rng.uniform(0.7, 1.3)
+            self.power_gain = self.rng.uniform(0.9, 1.1)
         start = spec.get("start", {"x": 0, "y": 0, "heading": 0})
         self.x, self.y, self.heading = float(start["x"]), float(start["y"]), float(start.get("heading", 0))
         self.pitch = 0.0
         self.roll = 0.0
+        self.nose_up = 0.0       # degrees the nose is lifted on a low obstacle, on top of pitch
+        self.push = 0.0          # share of the time it pushes against a wall or a low obstacle
+        self.held_at = None      # clock time of the first push
         self.left_rpm = 0.0      # commanded
         self.right_rpm = 0.0
         self.wheel_rpm = [0.0, 0.0]  # what the wheels actually do
@@ -129,21 +154,37 @@ class World:
                 w[i] = 0.0
         dl_deg = w[0] * 6 * dt     # rpm * 360 / 60
         dr_deg = w[1] * 6 * dt
-        self.left_deg += dl_deg
-        self.right_deg += dr_deg
         if self.stand:
+            self.left_deg += dl_deg
+            self.right_deg += dr_deg
             return
         dl, dr = dl_deg * CM_PER_WHEEL_DEG, dr_deg * CM_PER_WHEEL_DEG
         d = (dl + dr) / 2
         dtheta = math.degrees((dl - dr) / TRACK_CM)
         mid = math.radians(self.heading + dtheta / 2)
         nx, ny = self.x + d * math.sin(mid), self.y + d * math.cos(mid)
-        if self._collides(nx, ny):
-            # Blocked: wheels slip, the pose only rotates.
+        low = self._low_hit(nx, ny)
+        self.nose_up += ((low[1] if low else 0.0) - self.nose_up) * min(1.0, dt / NOSE_LAG_S)
+        self.left_deg += dl_deg
+        self.right_deg += dr_deg
+        held = bool(low) or self._collides(nx, ny)
+        # A body that grinds along a wall is held in most steps, not in every one.
+        self.push += (held - self.push) * min(1.0, dt / PUSH_LAG_S)
+        if held:
+            # The pose only rotates: the wheels slip.
+            if self.held_at is None:
+                self.held_at = self.t
             self.bumped = True
             nx, ny = self.x, self.y
         self.x, self.y = nx, ny
         self.heading = (self.heading + dtheta) % 360
+
+    def _low_hit(self, x, y):
+        """The low obstacle the body would run into at (x, y), or None."""
+        for o in self.low:
+            if _point_segment_dist(x, y, o[0]) < ROBOT_RADIUS_CM:
+                return o
+        return None
 
     def _collides(self, x, y):
         return any(_point_segment_dist(x, y, w) < ROBOT_RADIUS_CM for w in self.walls)
@@ -160,6 +201,23 @@ class World:
         self.update()
         return self.left_deg, self.right_deg
 
+    def motor_power(self):
+        """(left, right) motor power in percent, forward positive."""
+        self.update()
+        out = []
+        for i, cmd in enumerate((self.left_rpm, self.right_rpm)):
+            if cmd == 0:
+                out.append(0.0)
+                continue
+            sign = 1 if cmd > 0 else -1
+            w = self.wheel_rpm[i]
+            p = (POWER_BASE + POWER_PER_RPM * abs(w)) * self.power_gain + POWER_SPEEDUP * max(0.0, (cmd - w) * sign)
+            p += self.push * (POWER_HELD + POWER_HELD_PER_RPM * abs(cmd))
+            if self.rng:
+                p += self.rng.gauss(0, 0.5)
+            out.append(sign * p)
+        return out
+
     def yaw(self):
         self.update()
         jitter = self.rng.gauss(0, 0.3) if self.rng else 0
@@ -167,7 +225,7 @@ class World:
 
     def tilt_reading(self):
         """Pitch and roll as the gyro reports them: small jitter, rare spikes."""
-        pitch, roll = self.pitch, self.roll
+        pitch, roll = self.pitch + self.nose_up, self.roll
         if self.rng:
             pitch += self.rng.gauss(0, 1.5)
             roll += self.rng.gauss(0, 1.5)
