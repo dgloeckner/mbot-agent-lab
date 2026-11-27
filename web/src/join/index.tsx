@@ -2,6 +2,7 @@ import { render } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
 import { COLOR_HEX, onColor } from '../format'
 import { browserKV, loadJoined, rememberJoined, type Joined } from '../storage'
+import { cleanLabCode, codeFromSearch } from './link'
 import './join.css'
 
 const kv = browserKV()
@@ -76,7 +77,9 @@ function JoinByCode() {
 }
 
 function JoinPage() {
-  const [code, setCode] = useState('')
+  // A join link (the control room's QR code) brings the lab code along.
+  const linked = codeFromSearch(location.search)
+  const [code, setCode] = useState(linked)
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -173,7 +176,7 @@ function JoinPage() {
                 aria-describedby="code-hint"
                 onFocus={() => setCodeFocus(true)}
                 onBlur={() => setCodeFocus(false)}
-                onInput={(e) => setCode(e.currentTarget.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4))}
+                onInput={(e) => setCode(cleanLabCode(e.currentTarget.value))}
                 required
               />
               {[0, 1, 2, 3].map((i) => (
@@ -186,7 +189,7 @@ function JoinPage() {
           </label>
           <label>
             <span>Teamname</span>
-            <input value={name} maxLength={30} placeholder="z. B. Die Kurvenkratzer" onInput={(e) => setName(e.currentTarget.value)} required />
+            <input value={name} maxLength={30} placeholder="z. B. Die Kurvenkratzer" autoFocus={linked.length === 4} onInput={(e) => setName(e.currentTarget.value)} required />
           </label>
           {error && (
             <p class="form-error" role="alert">

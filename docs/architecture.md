@@ -543,11 +543,14 @@ embed compiling without a build. No CDN assets. Rarely used views are lazy-loade
     Drafts and snapshots are stored per (team, task) (`mbot-lab:v2:<team>:<task>:…`); keys from
     before tasks are dropped on load, preferences stay.
 - **Join page** (`/join`): lab code and team name; or "Zu einem Team dazukommen" with a join
-  code. The browser remembers joined teams. Join codes (`lab.JoinCode`): six characters without
+  code. A join link `/join?code=<lab code>` fills in the lab code (`web/src/join/link.ts`).
+  The browser remembers joined teams. Join codes (`lab.JoinCode`): six characters without
   look-alikes, valid ten minutes, kept in memory; `POST /t/{token}/join-code` shows one (the same
   one while it has more than three minutes left), on the welcome page and behind the band's link
   button ("Weiteren Rechner dazuholen", which also copies the link).
-- **Control room** (`/admin`): lab code for the projector, all robots live, every team with its
+- **Control room** (`/admin`): lab code for the projector with a QR code of the join link (built
+  in the browser from the address the control room was opened with; a click shows it large,
+  `web/src/admin/JoinQR.tsx`), all robots live, every team with its
   robots and open browsers, robot assignment by drag and drop or from a list, team rename and
   delete, released models, conversations switch, usage per team, stop all.
   - **Task panel** ("Aufgaben"): tasks grouped by state (Entwürfe, Offen, Geschlossen),
