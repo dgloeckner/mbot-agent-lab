@@ -1,5 +1,5 @@
 {
-  "description": "Assumed mBot2 geometry for the simulator. Replace with measured values (field handoff G0).",
+  "description": "Assumed mBot2 geometry for the simulator. Replace with measured values (field handoff G0). The power_* values are measured: docs/measurements.md, Blocked.",
   "wheel_diameter_cm": 6.5,
   "track_cm": 12.0,
   "robot_radius_cm": 8.0,
@@ -8,5 +8,10 @@
   "probe_front_cm": 5.0,
   "probe_lateral_cm": {"L2": -1.8, "L1": -0.45, "R1": 0.45, "R2": 1.8},
   "probe_spot_cm": 0.3,
-  "motor_lag_s": 0.1
+  "motor_lag_s": 0.1,
+  "power_base": 3.2,
+  "power_per_rpm": 0.41,
+  "power_speedup_per_rpm": 0.1,
+  "power_held": 8,
+  "power_held_per_rpm": 0.1
 }

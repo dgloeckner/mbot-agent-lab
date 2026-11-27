@@ -76,14 +76,17 @@ takes a color only, no pattern.
 - **Obstacles:** every forward motion stops by itself before an obstacle the ultrasonic sensor
   sees (reason `obstacle`). The sensor looks forward only: `drive` backwards is blind, and the
   tool description tells the agent so. Details and limits in `docs/protocol.md`, "Rules".
-- **Blocked:** an obstacle the sensor does not see (too low, behind or beside the robot) the robot
-  only feels: the wheels stand, or the nose lifts while it drives forward. The motion then ends
-  within a second with `ok: false` and reason `blocked`, for every motion tool, also `turn` and
-  `drive` backwards. The description of `drive` tells the agent what it means and what to do
-  (back off the way it came, turn away, take another way); the other motion tools refer to it.
-  It is never a normal end: a team tool goes on only if an `if` on the reason handles it
-  ("Grund ist steckt fest"). Wheels that slip on the spot are not noticed. Details in
-  `docs/protocol.md`, "Rules".
+- **Blocked:** an obstacle the sensor does not see (too low, nearer than 5 cm, behind or beside
+  the robot) the robot only feels: the motors need clearly more power than their speed asks for,
+  or the nose lifts while it drives forward. The motion then ends within a second with
+  `ok: false` and reason `blocked`, for every motion tool, also `turn` and `drive` backwards. The
+  result says what told the robot in `blocked_by`: `motor_power` (it pushes against something
+  that does not give way, the wheels slip) or `nose_up` (it climbs onto something). The
+  description of `drive` tells the agent what both mean, that `driven_cm` is too large then, and
+  what to do (back off the way it came, turn away, take another way); it also explains `tilted`.
+  The other motion tools refer to it. It is never a normal end: a team tool goes on only if an
+  `if` on the reason handles it ("Grund ist steckt fest"). The team page words the cause with the
+  reason ("steckt fest (Motoren brauchen zu viel Kraft)"). Details in `docs/protocol.md`, "Rules".
 - **`retrace_path` turns around:** it drives the way back forward, also a stretch the team drove
   backwards, so the obstacle reflex stays on, and ends at the start facing the way it came. The way counts from the start of the
   run: the server clears the trip log of the team's robots when a run starts. After an abort the

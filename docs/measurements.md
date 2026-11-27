@@ -4,6 +4,80 @@ Values the code needs but no documentation gives. Each section says how to measu
 result decides, and has a table to fill in. Until a value is filled in, the code uses a start value
 marked VERIFY.
 
+## Measurement script
+
+`robot/tools/measure.py` takes most of the measurements below in one go. Upload it alone instead
+of `main.py` (upload mode, or `cd server && go run ./cmd/robotupload ../robot/tools/measure.py`),
+then follow the display. Three seconds after the start the robot wiggles 2 cm forward and back,
+twice (`M wiggle ...`: do the wheels turn at all?). Then every station waits for button A (B skips
+it), waits two seconds and measures; a line `M health ...` after each station says whether the
+mBot2 shield still answers. Results are lines starting with `M ` on the serial log; keep the whole
+log. Afterwards upload the normal bundle again.
+
+Without anyone at the robot: list the stations in `STATIONS` and `AUTO` at the top of the script
+(a station in `AUTO` starts three seconds after its prompt, without a button), and let the
+uploader read the console: `robotupload --monitor 100s measure.py` prints the robot's lines for
+that long after the upload. mBlock must not hold the serial port.
+
+The shield's battery must be charged and its power switch on. On USB power alone the CyberPi
+runs and `get_battery` still reads 50, but motors, encoders, ultrasonic and the quad RGB sensor
+read 0 and the wheels stand.
+
+The robot drives in `wheels`, `slow`, `drive`, `dist`, `turn`, `block`, `power` and `ram`, with no
+obstacle reflex.
+
+| Station | What to do | What it tells |
+| --- | --- | --- |
+| `info` | nothing | time per vendor call and per loop iteration's sensor reads; free memory |
+| `rest` | robot stands on the floor | pitch level and noise, yaw drift, ultrasonic and loudness at rest |
+| `nose` | lift the front 2 cm, then the left side | `PITCH_NOSE_UP_SIGN`; pitch per cm of lift |
+| `sonic` | open space; wall at 20 cm and 5 cm before the sensor; wall at 50 cm turned 30° away; the low obstacle touching | what open space reads (`SN_DIST_BLIND`), accuracy, dropouts, whether the low obstacle is invisible |
+| `wheels` | 10 cm free | whether the wheels turn at all; if not, the driving stations are skipped (shield without power: everything behind it reads 0) |
+| `slow` | 15 cm free | whether the wheels turn at 2, 3, 5 and 8 RPM: `SK_MIN_SPEED` |
+| `drive` | 60 cm free | speeding up and run-on at 20, 40 and 80 RPM forwards, backwards and on the spot: `SK_RUNON_S`, the simulator's `motor_lag_s`; pitch while driving free: `SN_NOSE_ON_DEG`, `SN_NOSE_MS` |
+| `dist` | mark the wheel position, 1.2 m free, measure the cm driven | `CM_PER_WHEEL_DEG` (wheel diameter); how straight it drives |
+| `turn` | mark where the nose points, note the error after a full turn right and left | `TRACK_CM`; encoder turn against the gyro |
+| `block` | put the robot 5 cm before an obstacle, up to nine runs (40, 80, 20 RPM in turn) | wheel speed and pitch while it pushes from a standing start |
+| `power` | 50 cm free behind, 20 cm to each side | motor power in free driving at 10 to 100 RPM, forwards, backwards, on the spot and in arcs: `SN_PWR_BASE`, `SN_PWR_PER_RPM`, `SN_PWR_OVER`; time per power reading |
+| `ram` | facing a wall or obstacle the ultrasonic sensor sees, up to 1.5 m away | closes in to 30 cm by itself, drives into it at each speed in `RAM_SPEEDS`, pushes for 2 s and backs off: wheel speed, pitch, motor power and acceleration over time (`M ramtrace`): `SN_PWR_OVER`, `SN_HELD_MS`, `SN_NOSE_ON_DEG` |
+| `floor` | sensor over white, black, each tape color, then the line under the left edge, the right edge and the middle | RGB per probe and color (field handoff G0), sign and range of `get_offset_track` |
+| `sound` | quiet; three claps; motors running with the wheels in the air | `EV_CLAP_LEVEL`, `EV_CLAP_JUMP`, the hush while the motors run |
+
+With a ruler, not with the script (`sim/mbot2.json`, `docs/field.md` "Roboter, zu messen"): sensor
+bar to wheel axle, L2 to R2, L1 to R1, ultrasonic sensor to wheel axle, wheel diameter, track
+width, and the widest point of the body.
+
+### Results of the run of 2026-11-27
+
+One robot (firmware 44.01.011), shield battery at 90 to 100 %, smooth floor. `floor`, `sound` and
+the quarter turns of `turn` have not run. Nothing was measured with a ruler, so the geometry
+constants (`CM_PER_WHEEL_DEG`, `TRACK_CM`) stay as they are.
+
+| What | Measured |
+| --- | --- |
+| Time per call: both wheel encoders | 55 ms |
+| Time per call: RGB of one probe (3 calls) | 110 ms |
+| Time per call: `get_battery` | 33 ms |
+| Time per call: `EM_get_power`, one motor | 32 ms |
+| Time per call: `EM_get_speed`, one motor | 25 ms |
+| Time per call: `get_color_sta` 2.0, ultrasonic 1.1, `get_offset_track` 1.1, yaw, pitch or roll 0.25, button 0.2, loudness 0.16 | ms |
+| Sensor reads of one loop iteration, built-in color names | about 45 ms, 33 of it the battery |
+| Sensor reads of one loop iteration, calibrated RGB | about 475 ms |
+| Pitch and roll at rest | whole degrees, no flicker |
+| Ultrasonic at rest | standard deviation 0.18 cm, no dropouts; open space reads 188 to 300 |
+| Ultrasonic, wall 5 cm before the sensor | 300: too near reads as free |
+| Ultrasonic, wall at 50 cm turned 30° away | 38.5 |
+| Slowest speed at which the wheels turn | 2 RPM, starting after about 300 ms |
+| Commanded wheel travel reached after a start | within 100 ms at 20, 40 and 80 RPM |
+| Run-on after a stop | about 5° of wheel at 40 RPM, 20° at 80 RPM (`SK_RUNON_S` 0.02 to 0.04 s); standstill after about 100 ms |
+| 1440° of wheel straight ahead | 1437° and 1439°; the gyro turned 8° on the way |
+| Full turn right by the encoders (359.4°) | gyro 363° |
+| Full turn left by the encoders (359.4°) | gyro 372° |
+| Free memory at the start of the measuring script | 1 270 896 bytes |
+
+An upload only restarts the interpreter ("fast reboot"): modules in `sys.modules` and threads of
+the script that ran before survive.
+
 ## Memory: how big may the robot script get?
 
 The bundle test (`sim/tests/test_world_and_bundle.py`) caps `robot/dist/main.py` at a byte
@@ -132,56 +206,88 @@ RAM is not the limit: 80 KB of source leave about 1166 KB free. The limit is the
 still starts, somewhere between 80 and 120 KB. The budget is 60 000 bytes: 25 % below the largest
 bundle known to start, and about 20 KB more than the bundle had then (40 134 B).
 
-## Blocked: stalled wheels and a lifted nose
+## Blocked: motor power and a lifted nose
 
 A motion that is held up by something the ultrasonic sensor does not see ends with `blocked`
-(`docs/protocol.md`, "Rules"). Every threshold behind it is a start value chosen without a robot;
-the simulator only shows that the logic works, not that the numbers fit. Measure them before
-relying on `blocked`, and above all check that free driving never reports it.
+(`docs/protocol.md`, "Rules"). The thresholds behind it come from one robot, measured on
+2026-11-27 with `measure.py` (stations `nose`, `slow`, `drive`, `block`, `power`, `ram`): 9 runs
+against a wall from 5 cm, 5 against a wall with a run-up of 30 cm, 4 against a light, low obstacle
+that the robot pushed.
 
-### Steps
+### What a held robot shows
 
-1. **Pitch sign and level.** With `robot/tools/hwcheck.py` (line `pitch_roll`) or the control
-   room: note the pitch standing on the floor, then with the front lifted about 2 cm. If the
-   lifted pitch is lower than the level one, set `PITCH_NOSE_UP_SIGN = -1` in `robot/src/hw.py`.
-   The level value itself does not matter (the robot measures against its pitch at rest), only
-   that it is steady.
-2. **Pitch while driving free.** Log the pitch during `drive` at 20, 40 and 80 RPM and during
-   `follow_line_until`: the highest rise above the level and how long it lasts, especially while
-   speeding up and stopping. `SN_NOSE_ON_DEG` must lie clearly above it, or `SN_NOSE_STABLE`
-   (readings at 25 ms) must outlast it.
-3. **Pitch on the obstacle.** Drive against the obstacle of the stuck run and against the lowest
-   one the field may hold. Note the pitch the robot reaches and whether the wheels stand or slip.
-   `SN_NOSE_ON_DEG` must lie below that pitch; `SN_NOSE_OFF_DEG` about half of it.
-4. **Wheels held.** Hold a wheel (or drive against a heavy box) at 20, 40 and 80 RPM and read the
-   encoder angles: does a held wheel stand, creep or jump? `SN_STALL_RATIO` must lie above what a
-   held wheel still does and well below what a free wheel does on a weak battery.
-5. **Speeding up.** From the encoder log of a free `drive` at 80 RPM: the time until the wheels
-   reach a quarter of the commanded travel. `SN_STALL_MS` must be clearly longer.
-6. **Slowest speed.** The lowest RPM at which a wheel still turns steadily on the floor
-   (`drive` with `speed` 5, `drive_arc` with radius 10 and speed 5, whose inner wheel is told
-   2 RPM). `SN_STALL_MIN_RPM` must not lie below it, or slow motions end with `blocked`.
-7. **Loop time.** The stall check reads both encoders once more per loop iteration while the
-   motors run. Check that the loop stays within its 20 to 50 ms.
-8. **False alarms.** A full lap of the field with drives, turns, arcs, scans and line following,
-   on a full and on a nearly empty battery: no result and no `skill_aborted` event with `blocked`.
+- **The wheels never stand.** In all 18 runs the speed control kept both wheels at the commanded
+  speed, at 10, 20, 40 and 80 RPM: they slip on the floor or push the obstacle. The encoders
+  cannot tell a held robot from a free one, and `driven_cm` counts the slipping.
+- **The motors need more power.** `mbot2.EM_get_power` reads what the speed control gives a motor,
+  in percent. Free driving needs 3.2 + 0.41 × RPM; against a wall it is at least 6 more, from the
+  moment of contact (tables below).
+- **The nose lifts only when the robot climbs.** That happened at the wall at 80 RPM, at 40 RPM
+  with a run-up, and once on the low obstacle. Pushing leaves the pitch flat.
+- **A light obstacle that gives way is not a held robot.** Pushing it at 40 RPM cost 2 percent
+  more; nothing reports that, and nothing should.
 
-### Results
+Motor power in free driving, mean of the steady part (left / right motor):
 
-| Constant | Start value | Measured | Date |
+| Commanded | Formula | Forwards | Backwards |
 | --- | --- | --- | --- |
-| `PITCH_NOSE_UP_SIGN` (`hw.py`): sign that makes a lifted nose positive | 1 | | |
-| Pitch at rest on the floor (degrees) | not used | | |
-| Highest pitch rise while driving free, and its duration | unknown | | |
-| Pitch reached on the obstacle; wheels stand or slip | unknown | | |
-| `SN_NOSE_ON_DEG` (`sense.py`): rise above the level that counts as nose up | 8° | | |
-| `SN_NOSE_OFF_DEG`: nose down again below this | 4° | | |
-| `SN_NOSE_STABLE`: readings in a row before the state flips | 8 (about 0.2 s) | | |
-| `SN_LEVEL_SMOOTH`: readings over which the level at rest follows the pitch | 32 (about 0.8 s) | | |
-| `SN_STALL_RATIO`: share of the commanded travel below which a wheel counts as held | 0.25 | | |
-| `SN_STALL_MS`: how long a wheel must stay behind | 400 ms | | |
-| `SN_STALL_MIN_RPM`: a wheel commanded slower is not judged | 5 RPM | | |
-| Loop time with the stall check, motors running | unknown | | |
+| 10 RPM | 7.3 | 6.9 / 7.8 | 6.5 / 7.9 |
+| 20 RPM | 11.4 | 11.1 / 12.4 | 10.4 / 12.1 |
+| 40 RPM | 19.6 | 19.5 / 20.5 | 18.8 / 21.2 |
+| 60 RPM | 27.8 | 27.9 / 28.3 | 26.7 / 29.9 |
+| 80 RPM | 36.0 | 35.9 / 36.5 | 34.6 / 38.2 |
+| 100 RPM | 44.2 | 44.2 / 44.7 | 42.6 / 46.5 |
+
+Turning on the spot at 20 and 40 RPM and arcs (40/20, 8/2 RPM) fit the same formula per wheel.
+Single readings in steady free driving lie within 1 of the mean; the largest reading above the
+formula was 4.4 (one motor, turning at 40 RPM), the largest mean of both motors 3.0. In the first
+200 ms after a start a motor needs up to 11 more.
+
+Motor power and pitch while held (pitch against the level at rest):
+
+| Run | Motor power, left / right | Above the formula, mean of both | Pitch |
+| --- | --- | --- | --- |
+| Wall, 10 RPM | 14 to 17 / 15 to 22 | 6 to 11 | flat |
+| Wall, 20 RPM | 20 to 22 / 23 to 27 | 9 to 13 | flat |
+| Wall, 40 RPM, run-up | 31 to 35 / 30 to 41 | 11 to 17 | flat for 0.9 s, then 21 to 31° and it stays up |
+| Wall, 40 RPM, from 5 cm | not recorded | | 0 to −3°, never climbs |
+| Wall, 80 RPM, run-up | 43 to 52 | 7 to 16 | 27° within 150 ms |
+| Wall, 80 RPM, from 5 cm | not recorded | | 24 to 37° after about 1.5 s |
+| Low obstacle pushed, 20 RPM | 19 to 24 (left only) | 8 to 12 | flat |
+| Low obstacle pushed, 40 RPM | 21 to 23 (left only) | 2 | flat |
+| Low obstacle climbed, 40 RPM | 27 to 32 (left only) | 8 to 12 | 28 to 34° and it stays up |
+
+Pitch in free driving: +4° when starting at 40 RPM and +9° at 80 RPM, for less than 200 ms; −19°
+when braking from 80 RPM; +14° when braking from 80 RPM backwards (the nose check runs in
+forward motions only). Lifting the front by 2 cm reads +8°.
+
+### Constants
+
+| Constant (`sense.py`) | Value | Why |
+| --- | --- | --- |
+| `SN_PWR_BASE`, `SN_PWR_PER_RPM` | 3.2, 0.41 | free driving, table above |
+| `SN_PWR_OVER`, `SN_PWR_OVER_PART` | 4, 0.1 | held when the mean of both motors exceeds the formula by 4 plus a tenth of it: 4.7 at 10 RPM (held: 6 or more, free: 3 or less), 6 at 40 RPM (held: 11 or more), 8.4 at 100 RPM. The share leaves room for a battery that needs more power for the same speed |
+| `SN_HELD_MS` | 400 ms | twice as long as the extra power of speeding up lasts |
+| `SN_NOSE_ON_DEG`, `SN_NOSE_OFF_DEG` | 8°, 4° | a climbing robot reaches 21° and more; free forward driving stays below 8° except for the first 200 ms at 80 RPM |
+| `SN_NOSE_MS` | 300 ms | longer than that start lasts |
+| `SN_LEVEL_SMOOTH` | 32 readings | not measured; the level at rest did not move |
+| `PITCH_NOSE_UP_SIGN` (`hw.py`) | 1 | front lifted 2 cm reads +8° |
+
+A power reading takes 32 ms, so the robot reads one motor per loop iteration, in turns, and only
+while the motors run.
+
+### Still to measure
+
+1. **Other robots.** The `power` station on at least two more: does 3.2 + 0.41 × RPM hold within 3?
+   The simulator assumes motors within 10 %.
+2. **A low battery.** The same station with the shield battery nearly empty: how much more power
+   does the same speed need? `SN_PWR_OVER_PART` assumes at most about 15 %.
+3. **The field's surface.** Free power and the power at a wall on the field itself: tape and foil
+   may roll and slip differently from the floor measured here.
+4. **Backwards into a wall** and a **wall met at a slant**, where one wheel carries most of the
+   load. The check judges the mean of both motors; backwards is assumed to be like forwards.
+5. **False alarms.** A full lap of the field with drives, turns, arcs, scans and line following
+   with the real robot script: no result and no `skill_aborted` event with `blocked`.
 
 ## Display labels
 

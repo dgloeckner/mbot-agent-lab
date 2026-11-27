@@ -1,7 +1,10 @@
 // Command robotupload uploads a MicroPython program (normally robot/dist/main.py) to a CyberPi
 // (mBot2) over USB serial, without mBlock. macOS only.
 //
-//	robotupload [--port /dev/cu.usbserial-XXXX] FILE
+//	robotupload [--port /dev/cu.usbserial-XXXX] [--monitor 60s] FILE
+//
+// With --monitor it keeps the port open after the restart and prints what the program prints,
+// for that long.
 //
 // Run it through Nx, which bundles first: npx nx run robot:upload --config=robot/config.py
 package main
@@ -10,6 +13,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -29,8 +33,9 @@ const hints = `Check:
 
 func main() {
 	port := flag.String("port", "", "serial device, e.g. /dev/cu.usbserial-110 (default: the only CyberPi found)")
+	monitor := flag.Duration("monitor", 0, "after the upload, print the program's output for this long, e.g. 60s")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: robotupload [--port /dev/cu.usbserial-XXXX] FILE")
+		fmt.Fprintln(os.Stderr, "usage: robotupload [--port /dev/cu.usbserial-XXXX] [--monitor 60s] FILE")
 		fmt.Fprintln(os.Stderr, "Uploads FILE as main.py to a CyberPi (mBot2) on USB and restarts it.")
 		flag.PrintDefaults()
 	}
@@ -39,13 +44,13 @@ func main() {
 		flag.Usage()
 		os.Exit(2)
 	}
-	if err := run(flag.Arg(0), *port); err != nil {
+	if err := run(flag.Arg(0), *port, *monitor); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
 
-func run(file, port string) error {
+func run(file, port string, monitor time.Duration) error {
 	src, err := os.ReadFile(file)
 	if err != nil {
 		return err
@@ -91,9 +96,29 @@ func run(file, port string) error {
 	if err != nil {
 		return fmt.Errorf("restart: %w", err)
 	}
-	time.Sleep(500 * time.Millisecond)
-	p.Close()
 	fmt.Fprintf(os.Stderr, "Done: %d bytes uploaded, the CyberPi runs the new program.\n", res.Bytes)
+	if monitor <= 0 {
+		time.Sleep(500 * time.Millisecond)
+		return p.Close()
+	}
+	fmt.Fprintf(os.Stderr, "Program output for %s:\n", monitor)
+	err = watch(p, os.Stdout, monitor)
+	p.Close()
+	return err
+}
+
+// watch copies what the program prints to out until the time is up. Protocol frames the
+// firmware sends in between are left out.
+func watch(p io.Reader, out io.Writer, d time.Duration) error {
+	r := cyberpi.Reader{Text: func(b []byte) { out.Write(b) }}
+	buf := make([]byte, 4096)
+	for end := time.Now().Add(d); time.Now().Before(end); {
+		n, err := p.Read(buf)
+		if err != nil {
+			return err
+		}
+		r.Push(buf[:n])
+	}
 	return nil
 }
 

@@ -10,11 +10,11 @@ RF_WATCHDOG_MS = 3000   # no heartbeat for this long stops the motors
 # The sensor looks forward only: backing up is blind, and walls grazed at a
 # flatter angle stay unseen.
 
-# What the sensor does not see (too low, behind, beside) the robot only feels:
-# the wheels stand, or it pushes its nose up while driving forward. Both end
-# the motion with "blocked". Wheels that slip on the spot stay unnoticed.
+# What the sensor does not see (too low, too near, behind, beside) the robot only
+# feels: the motors need more power than their speed asks for, or it climbs with
+# its nose up while driving forward. Both end the motion with "blocked".
 
-# Distances, tilt, nose and stall come filtered from sense.py (median,
+# Distances, tilt, nose and motor power come filtered from sense.py (median,
 # hysteresis, minimum durations), so a single ghost echo, a bump or the first
 # moment of speeding up does not trigger a reflex.
 
@@ -33,6 +33,11 @@ def reflex_abort_reason(skill, s):
         return "tilted"
     if skill.forward and s["distance_cm"] < stop_distance(skill):
         return "obstacle"
-    if s["stalled"] or skill.forward and s["nose_up"]:
+    if s["held"] or skill.forward and s["nose_up"]:
         return "blocked"
     return None
+
+
+def blocked_by(s):
+    """What told the robot it is blocked, for the result."""
+    return "motor_power" if s["held"] else "nose_up"

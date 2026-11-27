@@ -25,12 +25,12 @@ TRACK_CM = 12.0
 # Motor direction: the right motor is mounted mirrored. VERIFY sign.
 RIGHT_MOTOR_SIGN = -1
 
-# Pitch direction: hw_tilt reports nose up as positive. VERIFY sign: lift the
-# front and read the pitch (docs/measurements.md, "Blocked").
+# Pitch direction: hw_tilt reports nose up as positive. Checked on the robot on
+# 2026-11-27: the front lifted by 2 cm reads +8 (docs/measurements.md, "Blocked").
 PITCH_NOSE_UP_SIGN = 1
 
 # What the motors were last told: left RPM, right RPM, and how often they were
-# stopped. sense.py compares it with what the wheel encoders did.
+# stopped. sense.py compares it with the power the motors need for it.
 hw_cmd = [0, 0, 0]
 
 COLOR_RGB = {
@@ -91,6 +91,14 @@ def hw_wheels_deg():
     return left, RIGHT_MOTOR_SIGN * right
 
 
+def hw_power(i):
+    """Power of the left (0) or right (1) motor in percent, forward positive: what
+    its speed control gives it to hold the speed. One call takes about 32 ms."""
+    if i:
+        return RIGHT_MOTOR_SIGN * mbot2.EM_get_power("EM2")
+    return mbot2.EM_get_power("EM1")
+
+
 def hw_yaw():
     """Gyro heading in degrees, positive = right (clockwise seen from above).
 
@@ -105,7 +113,7 @@ def hw_yaw():
 
 def hw_tilt():
     """(pitch, roll) in degrees; a lifted nose is a positive pitch."""
-    return PITCH_NOSE_UP_SIGN * cyberpi.get_pitch(), cyberpi.get_roll()  # VERIFY
+    return PITCH_NOSE_UP_SIGN * cyberpi.get_pitch(), cyberpi.get_roll()
 
 
 def hw_distance_cm():

@@ -141,7 +141,7 @@ QoS 0 messages get lost. A free robot shows "frei" and stands still.
   distance as the median of the last 7 valid readings (dropouts below 2 cm ignored; 10 dropouts
   in a row mean the sensor is blind, and the distance reads 0), the floor
   pattern only after 3 equal readings in a row, tilt with hysteresis (on above 45°, off below 30°)
-  and a minimum duration, the nose-up and stall states as described under "Blocked". Stop
+  and a minimum duration, the nose-up and motor power states as described under "Blocked". Stop
   conditions must hold for several loop iterations. `state` and
   `event` carry the same filtered values. The emergency stop distance grows with speed
   (8 cm + 0.05 cm per RPM).
@@ -153,22 +153,26 @@ QoS 0 messages get lost. A free robot shows "frei" and stands still.
   beside itself: `drive` with negative `cm` is blind, which the agent has to know; turns on the
   spot do not check; a wall grazed at a flatter angle can be touched. `retrace_path` decides its
   moves itself and therefore never drives backwards.
-- **Blocked:** what the ultrasonic sensor does not see (too low, behind or beside the robot) the
-  robot can only feel. A motion that is held up ends with `ok:false` and `reason:"blocked"`, with
-  the same `data` as any other abort, in one of two cases:
-  - **Stalled wheels**, in every motion skill, also backwards and when turning: a wheel turns less
-    than a quarter of what its commanded speed asks for, for 0.4 s. The robot compares the wheel
-    encoders with the commanded speeds since the wheels last kept up; a wheel told to turn slower
-    than 5 RPM is not judged, and every motor stop starts the check anew.
-  - **Nose up**, in forward motions only (the ones that end with `obstacle`): the pitch rises more
-    than 8° above its level at rest for 0.2 s (off again below 4°). The level follows the pitch
-    while the motors are off, so the CyberPi's mounting angle and a sloped floor do not count;
-    driving up a ramp does.
+- **Blocked:** what the ultrasonic sensor does not see (too low, nearer than 5 cm, behind or
+  beside the robot) the robot can only feel. A motion that is held up ends with `ok:false` and
+  `reason:"blocked"`, with the same `data` as any other abort plus `blocked_by`, which names the
+  case:
+  - **`motor_power`**, in every motion skill, also backwards and when turning: the motors need
+    more power than their speed asks for. A held robot's wheels do not stand, the speed control
+    keeps them turning and they slip; what rises is the power. Free driving needs
+    3.2 + 0.41 × RPM percent. The robot reads one motor per loop iteration, in turns, and ends
+    the motion when the mean of both lies above that by more than 4 plus a tenth of it, for
+    0.4 s. Every motor stop starts the check anew.
+  - **`nose_up`**, in forward motions only (the ones that end with `obstacle`): the pitch (median of
+    the last three readings) rises more than 8° above its level at rest for 0.3 s (off again
+    below 4°): the robot climbs what
+    it ran into. The level follows the pitch while the motors are off, so the CyberPi's mounting
+    angle and a sloped floor do not count; driving up a ramp does.
 
-  Wheels that slip on the spot without lifting the nose are not noticed: the motion goes on as
-  if the robot moved, and `driven_cm` counts the slipping. All thresholds are start values to be
-  measured on the robot (`docs/measurements.md`, "Blocked"). No event of its own: the result
-  carries the reason, and `skill_aborted` repeats it.
+  The wheels slip until the motion ends, so `driven_cm` and the trip log count more than the
+  robot moved. A light obstacle that gives way is pushed along and not reported. The thresholds
+  were measured on one robot (`docs/measurements.md`, "Blocked"). No event of its own: the
+  result carries the reason, and `skill_aborted` repeats it.
 - **`calibrate_colors`** is maintenance for the control room, not an agent tool. The robot stands
   right before the reference strip and drives across it; it finds the black field itself, so the
   start position needs no precision. The references apply at once and are lost on restart until

@@ -19,3 +19,8 @@ def EM_reset_angle(port="all"):
 def EM_get_angle(port):
     left, right = simstate.world.wheel_deg()
     return left if port == "EM1" else -right
+
+
+def EM_get_power(port):
+    left, right = simstate.world.motor_power()
+    return left if port == "EM1" else -right

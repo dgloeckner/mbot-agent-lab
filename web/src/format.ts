@@ -23,6 +23,12 @@ const REASONS: Record<string, string> = {
 export const colorName = (c: string) => COLORS[c] ?? c
 export const reasonName = (r: string) => REASONS[r] ?? r
 
+/** What told the robot it is blocked (`blocked_by` in a motion result). */
+const BLOCKED_BY: Record<string, string> = {
+  motor_power: 'Motoren brauchen zu viel Kraft',
+  nose_up: 'Nase hebt sich',
+}
+
 export function skillName(skill: string): string {
   return skill === 'idle' || !skill ? 'steht' : skill
 }
@@ -76,7 +82,10 @@ function compactArgs(args: unknown): string {
 function compactResult(result: unknown): string {
   if (!result || typeof result !== 'object') return ''
   const r = result as Record<string, any>
-  if (r.ok === false) return r.error ?? (r.reason ? reasonName(String(r.reason)) : 'fehlgeschlagen')
+  if (r.ok === false) {
+    const by = BLOCKED_BY[String(r.blocked_by)]
+    return r.error ?? (r.reason ? reasonName(String(r.reason)) + (by ? ` (${by})` : '') : 'fehlgeschlagen')
+  }
   const parts: string[] = []
   if (r.reason) parts.push(reasonName(String(r.reason)))
   if (typeof r.driven_cm === 'number') parts.push(`${Math.round(r.driven_cm)} cm gefahren`)
