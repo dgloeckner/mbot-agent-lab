@@ -102,14 +102,7 @@
       "continuous": true,
       "options": {
         "cwd": "server",
-        "command": "go run ./cmd/labserver -config ../deploy/local/lab.yaml",
-        "env": {
-          "LAB_ADMIN_PASSWORD": "dev",
-          "LAB_CODE": "DEV1",
-          "MBOT1_PASSWORD": "dev",
-          "MBOT2_PASSWORD": "dev",
-          "MBOT3_PASSWORD": "dev"
-        }
+        "command": "go run ./cmd/labserver -config ../deploy/local/lab.yaml"
       },
       "dependsOn": [
         {

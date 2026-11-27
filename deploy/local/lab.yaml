@@ -1,5 +1,6 @@
 # Local development: plain MQTT on :1883, HTTP on :8080, no TLS.
-# `npx nx run server:dev` sets the environment variables below to development values.
+# `npx nx run server:dev` loads the environment variables named below from server/.env
+# (development values) and server/.env.local (git-ignored: API keys, personal overrides).
 
 server:
   http_addr: "127.0.0.1:8080"

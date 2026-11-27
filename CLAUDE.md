@@ -76,8 +76,9 @@ the user chose Nx over Make). Run `npm install` once.
 - `npm run dev`: `server:dev` + `web:dev`. Control room http://localhost:5173/admin (password
   `dev`), join http://localhost:5173/join (lab code `DEV1`).
 - `npx nx run server:dev`: server with `deploy/local/lab.yaml` (HTTP 127.0.0.1:8080, MQTT :1883,
-  dev secrets set in `server/project.json`). Real API keys (`ANTHROPIC_API_KEY`, ...) live in
-  git-ignored `server/.env.local`, which Nx loads; never read or print its values.
+  development values from the checked-in `server/.env`). Real API keys (`ANTHROPIC_API_KEY`, ...)
+  and personal overrides live in git-ignored `server/.env.local`, which wins over `.env`; Nx
+  loads both. Never read or print the values in `.env.local`.
 - `npx nx run sim:run --robots=2 --world=sim/worlds/labyrinth.json`: simulated robots; `--delay-ms=150`
   delays every packet like the guest Wi-Fi. Challenge worlds: `labyrinth_rechts`, `labyrinth_gestoert`.
 - `npx nx run sim:e2e`: end-to-end smoke test (`sim/e2e/`): builds and starts `labserver` with the
