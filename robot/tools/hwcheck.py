@@ -152,25 +152,54 @@ check("turn 180", lambda: turn_check(180))
 out("HW check done")
 
 
-# Display labels, like robot/src/hw.py hw_screen and ui.py. Look at the screen:
+# Display labels, like robot/src/hw.py hw_screen and ui.py. Every label gets
+# its own number (`index=`); without one, only the last label of a screen stays
+# visible (seen on the robot on 2026-11-27). Three screens, 10 s each. Note what
+# you see in docs/measurements.md, "Display labels".
+#
+# Screen 1, five rows. All five must be visible at the same time:
 # - the row of 16 digits at size 16 fills the width exactly (8 px per glyph),
 #   the 10 letters at size 24 (12 px) and the 8 at size 32 (16 px) too;
 # - the digits start in the top left corner (x = 0, y = 0), nothing is cut off;
 # - "Grün Weiß" shows its umlauts; red, green, orange and gray are colored.
 # If a row is shorter, longer or wraps, fix UI_CHAR_W in robot/src/ui.py.
-def display_check():
-    d = cyberpi.display
-    d.clear()
-    for text, size, y, rgb in (("1234567890123456", 16, 0, (255, 255, 255)),
-                               ("ABCDEFGHIJ", 24, 20, (255, 0, 0)),
-                               ("Scout123", 32, 48, (0, 255, 0)),
-                               ("Grün Weiß", 16, 88, (255, 100, 0)),
-                               ("mbot-1  81%", 16, 110, (120, 120, 120))):
-        d.set_brush(*rgb)
-        d.show_label(text, size, 0, y)
+# "HW ERR display labels: TypeError ..." on the display means the firmware does
+# not take `index=`.
+#
+# Screen 2, after clear(), two rows ("Zeile A", "Zeile B") at the top with the
+# numbers 0 and 1. Nothing else may be on the screen. If rows 3 to 5 of screen 1
+# ("Scout123" and below) are still there, clear() does not remove labels, and
+# hw_screen must go on emptying the labels a smaller screen does not use.
+#
+# Screen 3, twelve labels "L0" to "L11" in three columns. The numbers that are
+# visible are the labels the firmware has; the robot script needs L0 to L7.
+ROWS = (("1234567890123456", 16, 0, (255, 255, 255)),
+        ("ABCDEFGHIJ", 24, 20, (255, 0, 0)),
+        ("Scout123", 32, 48, (0, 255, 0)),
+        ("Grün Weiß", 16, 88, (255, 100, 0)),
+        ("mbot-1  81%", 16, 110, (120, 120, 120)))
 
 
+def display_check(name, rows):
+    # Like check(), but success goes to the serial log only: a console line
+    # on the display would draw over the labels to look at.
+    try:
+        d = cyberpi.display
+        d.clear()
+        for i, (text, size, x, y, rgb) in enumerate(rows):
+            d.set_brush(*rgb)
+            d.show_label(text, size, x, y, index=i)
+        print("HW OK %s = %d" % (name, len(rows)))
+    except Exception as e:
+        out("HW ERR %s: %s %s" % (name, type(e).__name__, e))
+
+
+WHITE = (255, 255, 255)
 out("HW display in 3 s")
 time.sleep(3)
-check("display labels", display_check)
+display_check("display labels", [(t, size, 0, y, rgb) for t, size, y, rgb in ROWS])
+time.sleep(10)
+display_check("display fewer labels", [("Zeile A", 16, 0, 0, WHITE), ("Zeile B", 16, 0, 20, WHITE)])
+time.sleep(10)
+display_check("display 12 labels", [("L%d" % i, 16, 44 * (i % 3), 30 * (i // 3), WHITE) for i in range(12)])
 time.sleep(10)

@@ -34,20 +34,41 @@ class _Led:
         _set_leds((0, 0, 0))
 
 
+LABELS = 8  # assumed number of labels: no screen of the robot script may need more
+
+
 class _Display:
+    """Labels live in numbered slots: a label drawn with an index that is already
+    on screen replaces the earlier one, and a call without index always writes
+    label 0 (seen on the robot: only the last such label stays visible).
+
+    Not known from the real CyberPi: how many labels there are (here LABELS, a
+    label with a higher index is not shown) and whether clear() removes all of
+    them. clear_keeps_labels models the bad case, where a label stays until its
+    index is drawn again.
+    """
+
     def __init__(self):
         self._rgb = (255, 255, 255)
+        self._labels = {}
+        self.clear_keeps_labels = False
 
     def clear(self):
-        simstate.display = []
-        simstate.screen = []
+        if not self.clear_keeps_labels:
+            self._labels = {}
+        self._show()
 
     def set_brush(self, r, g, b):
         self._rgb = (r, g, b)
 
-    def show_label(self, text, size, x, y):
-        simstate.display.append(str(text))
-        simstate.screen.append((str(text), size, x, y, self._rgb))
+    def show_label(self, text, size, x, y, index=0):
+        if 0 <= index < LABELS:
+            self._labels[index] = (str(text), size, x, y, self._rgb)
+        self._show()
+
+    def _show(self):
+        simstate.screen = [self._labels[i] for i in sorted(self._labels) if self._labels[i][0]]
+        simstate.display = [label[0] for label in simstate.screen]
 
 
 class _Audio:
