@@ -32,6 +32,12 @@ llm:
       effort: low
       price_in: 0.10    # USD list price per million tokens (Sonnet 5.5: 2 / 10, Opus 5.5: 4 / 20)
       price_out: 0.50
+    sonnet:
+      kind: anthropic
+      api_key_env: ANTHROPIC_API_KEY
+      model: claude-sonnet-5-5
+      effort: low        # low | medium | high | xhigh | max, leer = Modell-Standard
+      price_in: 2        # USD pro Million Tokens (Wert aus dem Config-Kommentar, 
     ollama:
       base_url: http://localhost:11434/v1
       model: qwen3
