@@ -1,16 +1,22 @@
 # Sensor filtering. Every decision on the robot (skills, reflexes, events,
 # state reports) uses these filtered values, never a single raw reading:
 # ultrasonic sensors produce dropouts and ghost echoes, the color probes
-# jitter at tape edges, and the gyro twitches on a bump.
+# jitter at tape edges, the gyro twitches on a bump, and a wheel encoder
+# stands for a moment whenever a motor speeds up.
 #
 # The floor: each of the four probes (L2, L1, R1, R2) is classified into a
 # letter, w white, k black, r red, y yellow, g green, b blue, ? unclear. The
 # four letters from left to right are the floor pattern, e.g. "rkkr". A new
 # pattern counts only after it held for SN_FLOOR_STEADY readings in a row.
 # The robot never interprets patterns; it reports them.
+#
+# Held up: an obstacle below the ultrasonic cone shows in two ways. The wheels
+# stand although the motors are told to run ("stalled"), or the robot pushes
+# its nose up on it ("nose_up"). Wheels that slip on the spot show in neither.
 
+from compat import ticks_ms, ticks_diff
 from hw import (hw_distance_cm, hw_probe_rgb, hw_probe_name, hw_line_offset, hw_yaw,
-                hw_tilt, hw_battery, hw_button, hw_loudness, PROBES)
+                hw_tilt, hw_battery, hw_button, hw_loudness, hw_wheels_deg, hw_cmd, PROBES)
 
 SN_DIST_WINDOW = 7      # median over the last valid distance readings: 4 ghost echoes to fool it
 SN_DIST_MIN = 2         # readings below are dropouts (the sensor reports 0 on errors)
@@ -20,6 +26,15 @@ SN_FLOOR_STEADY = 3     # equal floor patterns in a row before the pattern chang
 SN_TILT_ON_DEG = 45     # tilted when pitch or roll goes beyond this ...
 SN_TILT_OFF_DEG = 30    # ... and level again only when both are below this
 SN_TILT_STABLE = 4      # readings in a row before the tilt state flips (~100 ms)
+# Start values, nothing measured yet: docs/measurements.md, "Blocked".
+SN_NOSE_ON_DEG = 8      # nose up when the pitch rises this far above its level at rest ... VERIFY
+SN_NOSE_OFF_DEG = 4     # ... and down again below this. VERIFY
+SN_NOSE_STABLE = 8      # readings in a row before the nose state flips (~200 ms): longer than
+                        # the pitch of speeding up lasts. VERIFY
+SN_LEVEL_SMOOTH = 32    # at rest the level follows the pitch over about this many readings
+SN_STALL_MS = 400       # stalled when a wheel stays behind for this long ... VERIFY
+SN_STALL_RATIO = 0.25   # ... turning less than this share of what its speed asks for. VERIFY
+SN_STALL_MIN_RPM = 5    # a wheel told to turn slower is not judged. VERIFY: slowest speed that turns
 
 # Color classification against reference values per probe (calibrate_colors).
 SN_LETTERS = "wkrygb"   # order of the reference values
@@ -116,6 +131,25 @@ class Steady:
         return False
 
 
+class Flip:
+    """An on/off state that flips only after n readings in a row ask for it."""
+
+    def __init__(self, n):
+        self.n = n
+        self.on = False
+        self.count = 0
+
+    def update(self, want):
+        if want == self.on:
+            self.count = 0
+        else:
+            self.count += 1
+            if self.count >= self.n:
+                self.on = want
+                self.count = 0
+        return self.on
+
+
 class Sense:
     def __init__(self):
         self.dist_window = []
@@ -124,8 +158,14 @@ class Sense:
         self.refs = None          # per probe: [(letter, feature, rgb)], None = built-in names
         self.floor = Steady(SN_FLOOR_STEADY)
         self.color = "white"
-        self.tilted = False
-        self.tilt_count = 0
+        self.tilted = Flip(SN_TILT_STABLE)
+        self.nose_up = Flip(SN_NOSE_STABLE)
+        self.level = None         # pitch at rest
+        self.stops = 0            # hw_cmd[2] when the stall check last looked
+        self.st_pos = None        # wheel angles when the wheels last kept up, None = motors off
+        self.st_exp = [0, 0]      # wheel degrees the commanded speeds ask for since then
+        self.st_since = 0
+        self.st_t = 0
 
     def set_refs(self, refs):
         """Reference RGB per probe: {"L2": [[r,g,b] x 6 in SN_LETTERS order], ...}, or None."""
@@ -172,18 +212,60 @@ class Sense:
 
     def tilt(self, pitch, roll):
         """Tilt state with hysteresis and a minimum duration."""
-        if self.tilted:
-            want = abs(pitch) > SN_TILT_OFF_DEG or abs(roll) > SN_TILT_OFF_DEG
-        else:
-            want = abs(pitch) > SN_TILT_ON_DEG or abs(roll) > SN_TILT_ON_DEG
-        if want == self.tilted:
-            self.tilt_count = 0
-        else:
-            self.tilt_count += 1
-            if self.tilt_count >= SN_TILT_STABLE:
-                self.tilted = want
-                self.tilt_count = 0
-        return self.tilted
+        t = self.tilted
+        lim = SN_TILT_OFF_DEG if t.on else SN_TILT_ON_DEG
+        return t.update(abs(pitch) > lim or abs(roll) > lim)
+
+    def nose(self, pitch, moving):
+        """Nose-up state while the motors run, with hysteresis and a minimum duration.
+
+        The pitch counts against its level at rest, so the CyberPi's mounting
+        angle and a sloped floor do not matter. At rest the level follows the
+        pitch and the state is off; while the motors run the level holds.
+        """
+        if self.level is None:
+            self.level = pitch
+        up = pitch - self.level
+        n = self.nose_up
+        if not moving:
+            self.level += up / SN_LEVEL_SMOOTH
+            n.on, n.count = False, 0
+            return False
+        return n.update(up > (SN_NOSE_OFF_DEG if n.on else SN_NOSE_ON_DEG))
+
+    def stall(self, now):
+        """Are the wheels held up although the motors are told to run?
+
+        Counts the wheel degrees the commanded speeds ask for since the wheels
+        last kept up. A wheel that did less than SN_STALL_RATIO of that starts
+        a streak; SN_STALL_MS of it is a stall. Speeding up ends its streak
+        within the motor lag, and slowing down turns the wheels more than
+        asked, never less. Every motor stop starts the check anew: the skills
+        reset the encoders only while the motors are off.
+        """
+        cmd = hw_cmd
+        if cmd[2] != self.stops or not (cmd[0] or cmd[1]):
+            self.stops = cmd[2]
+            self.st_pos = None
+            return False
+        pos = hw_wheels_deg()
+        exp = self.st_exp
+        ok = self.st_pos is None
+        if not ok:
+            dt = ticks_diff(now, self.st_t)
+            ok = True
+            for i in (0, 1):
+                v = abs(cmd[i])
+                if v >= SN_STALL_MIN_RPM:
+                    exp[i] += v * dt * 0.006  # RPM to degrees per ms
+                if abs(pos[i] - self.st_pos[i]) < SN_STALL_RATIO * exp[i]:
+                    ok = False
+        self.st_t = now
+        if ok:
+            self.st_pos, self.st_since = pos, now
+            exp[0] = exp[1] = 0
+            return False
+        return ticks_diff(now, self.st_since) >= SN_STALL_MS
 
     def read(self):
         pitch, roll = hw_tilt()
@@ -205,6 +287,8 @@ class Sense:
             "yaw": int(hw_yaw()),
             "battery": int(hw_battery()),
             "tilted": self.tilt(pitch, roll),
+            "nose_up": self.nose(pitch, hw_cmd[0] != 0 or hw_cmd[1] != 0),
+            "stalled": self.stall(ticks_ms()),
             "button_a": hw_button("a"),
             "button_b": hw_button("b"),
             "loudness": hw_loudness(),

@@ -7,6 +7,9 @@ group('describe', () => {
     expect(describe({ id: 1, at: '', source: 'robot', kind: 'skill_aborted', data: { skill: 'drive', reason: 'obstacle' } })).toBe(
       'drive abgebrochen: Hindernis im Weg',
     )
+    expect(describe({ id: 1, at: '', source: 'robot', kind: 'skill_aborted', data: { skill: 'drive', reason: 'blocked' } })).toBe(
+      'drive abgebrochen: steckt fest',
+    )
     expect(describe({ id: 1, at: '', source: 'robot', kind: 'color_changed', data: { color: 'blue' } })).toBe('Boden ist jetzt blau')
   })
   it('falls back to free text', () => {

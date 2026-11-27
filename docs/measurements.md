@@ -131,3 +131,54 @@ be raised as in "What follows". If it still hangs, the limit is the size and the
 RAM is not the limit: 80 KB of source leave about 1166 KB free. The limit is the size the CyberPi
 still starts, somewhere between 80 and 120 KB. The budget is 60 000 bytes: 25 % below the largest
 bundle known to start, and about 20 KB more than the bundle had then (40 134 B).
+
+## Blocked: stalled wheels and a lifted nose
+
+A motion that is held up by something the ultrasonic sensor does not see ends with `blocked`
+(`docs/protocol.md`, "Rules"). Every threshold behind it is a start value chosen without a robot;
+the simulator only shows that the logic works, not that the numbers fit. Measure them before
+relying on `blocked`, and above all check that free driving never reports it.
+
+### Steps
+
+1. **Pitch sign and level.** With `robot/tools/hwcheck.py` (line `pitch_roll`) or the control
+   room: note the pitch standing on the floor, then with the front lifted about 2 cm. If the
+   lifted pitch is lower than the level one, set `PITCH_NOSE_UP_SIGN = -1` in `robot/src/hw.py`.
+   The level value itself does not matter (the robot measures against its pitch at rest), only
+   that it is steady.
+2. **Pitch while driving free.** Log the pitch during `drive` at 20, 40 and 80 RPM and during
+   `follow_line_until`: the highest rise above the level and how long it lasts, especially while
+   speeding up and stopping. `SN_NOSE_ON_DEG` must lie clearly above it, or `SN_NOSE_STABLE`
+   (readings at 25 ms) must outlast it.
+3. **Pitch on the obstacle.** Drive against the obstacle of the stuck run and against the lowest
+   one the field may hold. Note the pitch the robot reaches and whether the wheels stand or slip.
+   `SN_NOSE_ON_DEG` must lie below that pitch; `SN_NOSE_OFF_DEG` about half of it.
+4. **Wheels held.** Hold a wheel (or drive against a heavy box) at 20, 40 and 80 RPM and read the
+   encoder angles: does a held wheel stand, creep or jump? `SN_STALL_RATIO` must lie above what a
+   held wheel still does and well below what a free wheel does on a weak battery.
+5. **Speeding up.** From the encoder log of a free `drive` at 80 RPM: the time until the wheels
+   reach a quarter of the commanded travel. `SN_STALL_MS` must be clearly longer.
+6. **Slowest speed.** The lowest RPM at which a wheel still turns steadily on the floor
+   (`drive` with `speed` 5, `drive_arc` with radius 10 and speed 5, whose inner wheel is told
+   2 RPM). `SN_STALL_MIN_RPM` must not lie below it, or slow motions end with `blocked`.
+7. **Loop time.** The stall check reads both encoders once more per loop iteration while the
+   motors run. Check that the loop stays within its 20 to 50 ms.
+8. **False alarms.** A full lap of the field with drives, turns, arcs, scans and line following,
+   on a full and on a nearly empty battery: no result and no `skill_aborted` event with `blocked`.
+
+### Results
+
+| Constant | Start value | Measured | Date |
+| --- | --- | --- | --- |
+| `PITCH_NOSE_UP_SIGN` (`hw.py`): sign that makes a lifted nose positive | 1 | | |
+| Pitch at rest on the floor (degrees) | not used | | |
+| Highest pitch rise while driving free, and its duration | unknown | | |
+| Pitch reached on the obstacle; wheels stand or slip | unknown | | |
+| `SN_NOSE_ON_DEG` (`sense.py`): rise above the level that counts as nose up | 8° | | |
+| `SN_NOSE_OFF_DEG`: nose down again below this | 4° | | |
+| `SN_NOSE_STABLE`: readings in a row before the state flips | 8 (about 0.2 s) | | |
+| `SN_LEVEL_SMOOTH`: readings over which the level at rest follows the pitch | 32 (about 0.8 s) | | |
+| `SN_STALL_RATIO`: share of the commanded travel below which a wheel counts as held | 0.25 | | |
+| `SN_STALL_MS`: how long a wheel must stay behind | 400 ms | | |
+| `SN_STALL_MIN_RPM`: a wheel commanded slower is not judged | 5 RPM | | |
+| Loop time with the stall check, motors running | unknown | | |

@@ -559,6 +559,9 @@ const motionTimeout = 22 * time.Second
 
 var floorColors = []string{"white", "black", "red", "yellow", "green", "blue", "any"}
 
+// blockedHelp explains reason blocked once, in the drive tool; the others refer to it.
+const blockedHelp = "reason blocked heißt: Der Roboter steckt fest. Er ist gegen etwas gestoßen, das der Abstandssensor nicht sieht (zu niedrig, seitlich oder hinter ihm): Die Räder kommen nicht weiter oder die Nase hebt sich. Fahr dann nicht noch einmal in dieselbe Richtung, sondern erst ein Stück in die Gegenrichtung (nach einer Vorwärtsfahrt zum Beispiel drive mit cm -10), dreh dich weg und nimm einen anderen Weg."
+
 // floorHelp explains the floor trace once, in the drive tool; the others refer to it.
 const floorHelp = "floor ist die Bodenspur: eine Liste aus [Position, Muster]. Die Position zählt ab Beginn der Bewegung, in cm beim Fahren (auch auf einer Kurve, entlang des Wegs), in Grad beim Drehen auf der Stelle. Das Muster sind vier Buchstaben für die vier Bodensonden von links nach rechts: w weiß, k schwarz, r rot, y gelb, g grün, b blau, ? unklar. Ein Eintrag gilt bis zum nächsten. Höchstens 20 Einträge; steht floor_truncated true dabei, fahre kürzere Strecken."
 
@@ -582,7 +585,7 @@ func builtins() []*tool {
 		{
 			name:   "drive",
 			manual: true, ends: []string{"done"},
-			desc:     "Fährt geradeaus um cm Zentimeter, negative Werte fahren rückwärts. Vorwärts hält er von selbst vor einem Hindernis an (reason obstacle). Hinten hat er keinen Sensor: rückwärts fährt er blind, auch gegen eine Wand, also nur dorthin, wo sicher frei ist, etwa ein Stück auf dem Weg zurück, den er gerade gekommen ist. Ergebnis: driven_cm, reason (done, obstacle, stopped, tilted, timeout), floor und min_distance_cm. " + floorHelp,
+			desc:     "Fährt geradeaus um cm Zentimeter, negative Werte fahren rückwärts. Vorwärts hält er von selbst vor einem Hindernis an (reason obstacle). Hinten hat er keinen Sensor: rückwärts fährt er blind, auch gegen eine Wand, also nur dorthin, wo sicher frei ist, etwa ein Stück auf dem Weg zurück, den er gerade gekommen ist. Ergebnis: driven_cm, reason (done, obstacle, blocked, stopped, tilted, timeout), floor und min_distance_cm. " + blockedHelp + " " + floorHelp,
 			props:    static(map[string]any{"cm": map[string]any{"type": "number", "minimum": -300, "maximum": 300}, "speed": map[string]any{"type": "number", "minimum": 5, "maximum": 80, "description": "Umdrehungen pro Minute, Standard 40."}}),
 			required: []string{"cm"}, robot: robotOne,
 			run: func(ctx context.Context, c *call) any {
@@ -596,7 +599,7 @@ func builtins() []*tool {
 		{
 			name:   "turn",
 			manual: true, ends: []string{"done"},
-			desc:     "Dreht auf der Stelle um degrees Grad. Positiv dreht nach rechts, negativ nach links. Beim Drehen prüft er keine Hindernisse; dicht an einer Wand kann er sie mit einer Ecke streifen. Ergebnis: turned_deg, reason und floor (wie bei drive, Position in Grad).",
+			desc:     "Dreht auf der Stelle um degrees Grad. Positiv dreht nach rechts, negativ nach links. Beim Drehen prüft er keine Hindernisse; dicht an einer Wand kann er sie mit einer Ecke streifen. Bleibt er dabei hängen, endet er mit reason blocked (wie bei drive). Ergebnis: turned_deg, reason und floor (wie bei drive, Position in Grad).",
 			props:    static(map[string]any{"degrees": map[string]any{"type": "number", "minimum": -720, "maximum": 720}}),
 			required: []string{"degrees"}, robot: robotOne,
 			run: func(ctx context.Context, c *call) any {
@@ -606,7 +609,7 @@ func builtins() []*tool {
 		{
 			name:   "drive_arc",
 			manual: true, ends: []string{"done", "color"},
-			desc: "Fährt vorwärts eine Kurve auf einem Kreis mit dem Radius radius_cm (gemessen bis zur Kreismitte). degrees sagt, wie weit sich die Fahrtrichtung dabei dreht: 360 ist ein ganzer Kreis, 180 ein Halbkreis, 90 eine Viertelkurve. Positiv ist eine Rechtskurve, negativ eine Linkskurve. Mit stop_on_color hält er vorher an, sobald die Bodenfarbe erscheint (reason color), wie bei drive_until. Hält von selbst bei einem Hindernis an. Nach 20 Sekunden ist Schluss (reason timeout); mit Standardtempo schafft er darin etwa 2,5 m, größere Kreise also in Teilen oder schneller fahren. Ergebnis: turned_deg, driven_cm, reason (done, color, obstacle, stopped, tilted, timeout), color, floor (wie bei drive, Position in cm entlang der Kurve) und min_distance_cm.",
+			desc: "Fährt vorwärts eine Kurve auf einem Kreis mit dem Radius radius_cm (gemessen bis zur Kreismitte). degrees sagt, wie weit sich die Fahrtrichtung dabei dreht: 360 ist ein ganzer Kreis, 180 ein Halbkreis, 90 eine Viertelkurve. Positiv ist eine Rechtskurve, negativ eine Linkskurve. Mit stop_on_color hält er vorher an, sobald die Bodenfarbe erscheint (reason color), wie bei drive_until. Hält von selbst bei einem Hindernis an; steckt er fest, endet er mit reason blocked (wie bei drive). Nach 20 Sekunden ist Schluss (reason timeout); mit Standardtempo schafft er darin etwa 2,5 m, größere Kreise also in Teilen oder schneller fahren. Ergebnis: turned_deg, driven_cm, reason (done, color, obstacle, blocked, stopped, tilted, timeout), color, floor (wie bei drive, Position in cm entlang der Kurve) und min_distance_cm.",
 			props: static(map[string]any{
 				"radius_cm":     map[string]any{"type": "number", "minimum": 10, "maximum": 200},
 				"degrees":       map[string]any{"type": "number", "minimum": -720, "maximum": 720},
@@ -623,7 +626,7 @@ func builtins() []*tool {
 		{
 			name:   "drive_until",
 			manual: true, ends: []string{"wall", "color", "obstacle", "max_cm"},
-			desc: "Fährt geradeaus, bis eine Wand näher als stop_below_cm ist (reason wall), die Bodenfarbe stop_on_color erscheint (reason color) oder max_cm gefahren sind (reason max_cm). Vor einem Hindernis hält er immer von selbst an (reason obstacle), auch ohne stop_below_cm. Die Farbe zählt, sobald eine der vier Bodensonden sie sieht; any ist jede Farbe außer Weiß. Steht der Roboter beim Start schon auf der Farbe, zählt sie erst, wenn er sie verlassen hat und wieder erreicht. Der Roboter prüft das selbst mit geglätteten Messwerten. Ergebnis: driven_cm, reason, distance_cm, color, floor (wie bei drive) und min_distance_cm.",
+			desc: "Fährt geradeaus, bis eine Wand näher als stop_below_cm ist (reason wall), die Bodenfarbe stop_on_color erscheint (reason color) oder max_cm gefahren sind (reason max_cm). Vor einem Hindernis hält er immer von selbst an (reason obstacle), auch ohne stop_below_cm. Steckt er fest, endet er mit reason blocked (wie bei drive). Die Farbe zählt, sobald eine der vier Bodensonden sie sieht; any ist jede Farbe außer Weiß. Steht der Roboter beim Start schon auf der Farbe, zählt sie erst, wenn er sie verlassen hat und wieder erreicht. Der Roboter prüft das selbst mit geglätteten Messwerten. Ergebnis: driven_cm, reason, distance_cm, color, floor (wie bei drive) und min_distance_cm.",
 			props: static(map[string]any{
 				"max_cm":        map[string]any{"type": "number", "minimum": 1, "maximum": 300},
 				"stop_below_cm": map[string]any{"type": "number", "minimum": 3, "maximum": 100},
@@ -674,7 +677,7 @@ func builtins() []*tool {
 		{
 			name:   "follow_line_until",
 			manual: true, ends: []string{"color", "crossing", "max_cm"},
-			desc: "Folgt einer Linie auf dem Boden und lenkt dabei selbst. Endet an der Farbe stop_on_color (reason color, zählt wie bei drive_until), an einer Kreuzung (reason crossing, abschaltbar mit stop_at_crossing false), wenn die Linie aufhört (reason line_lost) oder nach max_cm (reason max_cm). Vor einem Hindernis hält er von selbst an (reason obstacle). Ergebnis: driven_cm, reason, color und floor (wie bei drive).",
+			desc: "Folgt einer Linie auf dem Boden und lenkt dabei selbst. Endet an der Farbe stop_on_color (reason color, zählt wie bei drive_until), an einer Kreuzung (reason crossing, abschaltbar mit stop_at_crossing false), wenn die Linie aufhört (reason line_lost) oder nach max_cm (reason max_cm). Vor einem Hindernis hält er von selbst an (reason obstacle); steckt er fest, endet er mit reason blocked (wie bei drive). Ergebnis: driven_cm, reason, color und floor (wie bei drive).",
 			props: static(map[string]any{
 				"max_cm":           map[string]any{"type": "number", "minimum": 1, "maximum": 300},
 				"stop_on_color":    map[string]any{"type": "string", "enum": floorColors},
@@ -689,7 +692,7 @@ func builtins() []*tool {
 		{
 			name:   "retrace_path",
 			manual: true, ends: []string{"done", "empty"},
-			desc:  "Fährt den ganzen gespeicherten Weg zurück bis zu seinem Anfang, nicht nur das letzte Stück: dreht sich um und fährt die gespeicherten Strecken und Drehungen in umgekehrter Reihenfolge ab, vorwärts, damit er Hindernisse sieht. Der Weg zählt seit Beginn dieses Laufs (oder seit dem letzten retrace_path), frühere Läufe gehören nicht dazu. Der Roboter fährt dabei gerade Strecken und folgt keiner Linie. Am Ende steht er am Anfang und schaut in die Richtung, aus der er gekommen ist. Ergebnis: segments (abgefahrene Wegstücke), driven_cm (bei diesem Aufruf gefahrene Strecke ohne Drehungen), distance_cm (Abstand nach vorn am Ende, keine Strecke) und reason: done, empty (kein Weg gespeichert), obstacle, stopped, tilted oder timeout (nach 20 Sekunden). Bei einem Abbruch bleibt der Rest gespeichert, ein neuer Aufruf fährt von dort weiter.",
+			desc:  "Fährt den ganzen gespeicherten Weg zurück bis zu seinem Anfang, nicht nur das letzte Stück: dreht sich um und fährt die gespeicherten Strecken und Drehungen in umgekehrter Reihenfolge ab, vorwärts, damit er Hindernisse sieht. Der Weg zählt seit Beginn dieses Laufs (oder seit dem letzten retrace_path), frühere Läufe gehören nicht dazu. Der Roboter fährt dabei gerade Strecken und folgt keiner Linie. Am Ende steht er am Anfang und schaut in die Richtung, aus der er gekommen ist. Ergebnis: segments (abgefahrene Wegstücke), driven_cm (bei diesem Aufruf gefahrene Strecke ohne Drehungen), distance_cm (Abstand nach vorn am Ende, keine Strecke) und reason: done, empty (kein Weg gespeichert), obstacle, blocked (steckt fest, wie bei drive), stopped, tilted oder timeout (nach 20 Sekunden). Bei einem Abbruch bleibt der Rest gespeichert, ein neuer Aufruf fährt von dort weiter.",
 			robot: robotOne,
 			run: func(ctx context.Context, c *call) any {
 				return c.command(ctx, c.robots[0], "retrace_path", nil, motionTimeout)

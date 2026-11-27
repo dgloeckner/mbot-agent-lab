@@ -669,6 +669,10 @@
               "obstacle"
             ],
             [
+              "steckt fest",
+              "blocked"
+            ],
+            [
               "Strecke erreicht",
               "max_cm"
             ],

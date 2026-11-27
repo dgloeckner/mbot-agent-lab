@@ -83,8 +83,10 @@ connects to the broker and never blocks.
 - **Nothing blocks:** the vendor's fixed-distance drive calls are not used; motors start with a
   speed and the loop stops them from encoder readings. Sounds play without blocking.
 - **Filtered sensors:** `sense.py` turns raw readings into the filtered snapshot every decision
-  uses (median distance, floor pattern after three equal readings, tilt with hysteresis).
-- **Reflexes** on the robot, independent of the server: emergency stop before obstacles, limits
+  uses (median distance, floor pattern after three equal readings, tilt with hysteresis, stalled
+  wheels and a lifted nose after a minimum duration).
+- **Reflexes** on the robot, independent of the server: emergency stop before obstacles, stop when
+  held up by something the sensor does not see (`blocked`: stalled wheels or a lifted nose), limits
   per command, watchdog (3 s without heartbeat: stop, show "getrennt"), stop and reconnect with
   backoff on Wi-Fi or broker loss, stop and event when tilted or lifted.
 - **Trip log:** finished motion segments, the basis of `retrace_path`; cleared on owner change,

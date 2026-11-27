@@ -10,8 +10,13 @@ RF_WATCHDOG_MS = 3000   # no heartbeat for this long stops the motors
 # The sensor looks forward only: backing up is blind, and walls grazed at a
 # flatter angle stay unseen.
 
-# Distances and tilt come filtered from sense.py (median, hysteresis), so a
-# single ghost echo or a bump does not trigger a reflex.
+# What the sensor does not see (too low, behind, beside) the robot only feels:
+# the wheels stand, or it pushes its nose up while driving forward. Both end
+# the motion with "blocked". Wheels that slip on the spot stay unnoticed.
+
+# Distances, tilt, nose and stall come filtered from sense.py (median,
+# hysteresis, minimum durations), so a single ghost echo, a bump or the first
+# moment of speeding up does not trigger a reflex.
 
 
 def stop_distance(skill):
@@ -28,4 +33,6 @@ def reflex_abort_reason(skill, s):
         return "tilted"
     if skill.forward and s["distance_cm"] < stop_distance(skill):
         return "obstacle"
+    if s["stalled"] or skill.forward and s["nose_up"]:
+        return "blocked"
     return None

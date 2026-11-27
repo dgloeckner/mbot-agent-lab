@@ -18,6 +18,12 @@ command with a lag (motor_lag_s in mbot2.json; with noise it differs per
 robot), so after a stop the wheels run on. With "stand": true the robot sits
 on a stand: the wheels and encoders turn, the body does not move.
 
+"low_obstacles" lie below the ultrasonic cone: the sensor does not see them,
+but they stop the robot like a wall. Each is {"from": [x, y], "to": [x, y]}
+plus what the robot feels while it pushes against it: "wheels": "stall" (the
+default: the wheels and encoders stand) or "slip" (they turn on the spot, as
+at a wall), and "nose_up_deg" (default 0): how far the nose lifts.
+
 Units are centimetres and degrees. Heading 0 points along +y, positive headings
 turn clockwise (to the right), matching the robot's yaw convention.
 Time advances lazily: every sensor read or motor change integrates the motion
@@ -48,6 +54,7 @@ LINE_OFFSETS_CM = PROBE_LATERAL_CM
 PROBE_SPOT_CM = GEOMETRY["probe_spot_cm"]
 MOTOR_LAG_S = GEOMETRY["motor_lag_s"]  # time constant of the wheel speed
 MOTOR_SNAP_RPM = 2       # below this a stopped motor stands still
+NOSE_LAG_S = 0.1         # time constant of the nose lifting on a low obstacle and coming down
 PROBE_JITTER_CM = 0.2    # the bar is fixed; only the edge blur wobbles
 PROBE_SAMPLE_S = 0.004   # one RGB measurement serves the three channel reads
 MAX_RANGE_CM = 300
@@ -69,6 +76,8 @@ class World:
             noise = random.Random()
         self.rng = noise
         self.walls = [tuple(w) for w in spec.get("walls", [])]
+        self.low = [(tuple(o["from"]) + tuple(o["to"]), o.get("wheels", "stall") == "stall",
+                     float(o.get("nose_up_deg", 0))) for o in spec.get("low_obstacles", [])]
         self.fields = spec.get("fields", [])
         self.lines = spec.get("lines", [])
         self.floor = spec.get("floor", "white")
@@ -87,6 +96,8 @@ class World:
         self.x, self.y, self.heading = float(start["x"]), float(start["y"]), float(start.get("heading", 0))
         self.pitch = 0.0
         self.roll = 0.0
+        self.nose_up = 0.0       # degrees the nose is lifted on a low obstacle, on top of pitch
+        self.low_hit_at = None   # clock time of the first push against a low obstacle
         self.left_rpm = 0.0      # commanded
         self.right_rpm = 0.0
         self.wheel_rpm = [0.0, 0.0]  # what the wheels actually do
@@ -129,21 +140,41 @@ class World:
                 w[i] = 0.0
         dl_deg = w[0] * 6 * dt     # rpm * 360 / 60
         dr_deg = w[1] * 6 * dt
-        self.left_deg += dl_deg
-        self.right_deg += dr_deg
         if self.stand:
+            self.left_deg += dl_deg
+            self.right_deg += dr_deg
             return
         dl, dr = dl_deg * CM_PER_WHEEL_DEG, dr_deg * CM_PER_WHEEL_DEG
         d = (dl + dr) / 2
         dtheta = math.degrees((dl - dr) / TRACK_CM)
         mid = math.radians(self.heading + dtheta / 2)
         nx, ny = self.x + d * math.sin(mid), self.y + d * math.cos(mid)
-        if self._collides(nx, ny):
-            # Blocked: wheels slip, the pose only rotates.
+        low = self._low_hit(nx, ny)
+        lift = 0.0
+        if low:
+            if self.low_hit_at is None:
+                self.low_hit_at = self.t
+            lift = low[2]
+            if low[1]:
+                # Held: the wheels stand, and so do the encoders and the heading.
+                w[0] = w[1] = 0.0
+                dl_deg = dr_deg = dtheta = 0.0
+        self.nose_up += (lift - self.nose_up) * min(1.0, dt / NOSE_LAG_S)
+        self.left_deg += dl_deg
+        self.right_deg += dr_deg
+        if low or self._collides(nx, ny):
+            # Blocked: the pose only rotates (at a wall the wheels slip).
             self.bumped = True
             nx, ny = self.x, self.y
         self.x, self.y = nx, ny
         self.heading = (self.heading + dtheta) % 360
+
+    def _low_hit(self, x, y):
+        """The low obstacle the body would run into at (x, y), or None."""
+        for o in self.low:
+            if _point_segment_dist(x, y, o[0]) < ROBOT_RADIUS_CM:
+                return o
+        return None
 
     def _collides(self, x, y):
         return any(_point_segment_dist(x, y, w) < ROBOT_RADIUS_CM for w in self.walls)
@@ -167,7 +198,7 @@ class World:
 
     def tilt_reading(self):
         """Pitch and roll as the gyro reports them: small jitter, rare spikes."""
-        pitch, roll = self.pitch, self.roll
+        pitch, roll = self.pitch + self.nose_up, self.roll
         if self.rng:
             pitch += self.rng.gauss(0, 1.5)
             roll += self.rng.gauss(0, 1.5)

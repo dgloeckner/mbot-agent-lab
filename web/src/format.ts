@@ -16,7 +16,7 @@ export const COLOR_HEX: Record<string, string> = {
 const REASONS: Record<string, string> = {
   done: 'fertig', wall: 'Wand erreicht', color: 'Farbe erreicht', max_cm: 'Strecke erreicht',
   timeout: 'Zeit abgelaufen', stopped: 'gestoppt', obstacle: 'Hindernis im Weg', busy: 'noch beschäftigt',
-  tilted: 'umgekippt', reassigned: 'neu zugeteilt', error: 'Fehler',
+  tilted: 'umgekippt', blocked: 'steckt fest', reassigned: 'neu zugeteilt', error: 'Fehler',
   clear: 'Weg frei', max_deg: 'kein freier Weg gefunden', line_lost: 'Linie zu Ende', crossing: 'Kreuzung erreicht',
 }
 

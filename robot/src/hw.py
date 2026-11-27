@@ -25,6 +25,14 @@ TRACK_CM = 12.0
 # Motor direction: the right motor is mounted mirrored. VERIFY sign.
 RIGHT_MOTOR_SIGN = -1
 
+# Pitch direction: hw_tilt reports nose up as positive. VERIFY sign: lift the
+# front and read the pitch (docs/measurements.md, "Blocked").
+PITCH_NOSE_UP_SIGN = 1
+
+# What the motors were last told: left RPM, right RPM, and how often they were
+# stopped. sense.py compares it with what the wheel encoders did.
+hw_cmd = [0, 0, 0]
+
 COLOR_RGB = {
     "red": (255, 0, 0), "green": (0, 255, 0), "blue": (0, 0, 255),
     "yellow": (255, 200, 0), "purple": (160, 0, 255), "cyan": (0, 255, 255),
@@ -62,10 +70,13 @@ def hw_mac():
 
 def hw_motors(left, right):
     """Run both motors at the given speed (RPM, forward positive). Non-blocking."""
+    hw_cmd[0], hw_cmd[1] = left, right
     mbot2.drive_speed(left, RIGHT_MOTOR_SIGN * right)  # VERIFY argument order and sign
 
 
 def hw_motors_stop():
+    hw_cmd[0] = hw_cmd[1] = 0
+    hw_cmd[2] += 1
     mbot2.EM_stop("all")  # VERIFY
 
 
@@ -93,7 +104,8 @@ def hw_yaw():
 
 
 def hw_tilt():
-    return cyberpi.get_pitch(), cyberpi.get_roll()  # VERIFY
+    """(pitch, roll) in degrees; a lifted nose is a positive pitch."""
+    return PITCH_NOSE_UP_SIGN * cyberpi.get_pitch(), cyberpi.get_roll()  # VERIFY
 
 
 def hw_distance_cm():
