@@ -131,3 +131,53 @@ be raised as in "What follows". If it still hangs, the limit is the size and the
 RAM is not the limit: 80 KB of source leave about 1166 KB free. The limit is the size the CyberPi
 still starts, somewhere between 80 and 120 KB. The budget is 60 000 bytes: 25 % below the largest
 bundle known to start, and about 20 KB more than the bundle had then (40 134 B).
+
+## Display labels
+
+A screen of the robot script is a list of labels (`robot/src/ui.py`), drawn by `hw_screen` in
+`robot/src/hw.py` with one `cyberpi.display.show_label` call per label. Makeblock's Python API
+page documents `show_label(message, size, x, y)` and `display.clear()` ("Clears CyberPi's
+screen") and nothing about several labels. Seen on the robot on 2026-11-27: with these four
+arguments only the last label of a screen stays visible. Programs written by others for the
+CyberPi pass a label number as fifth argument (`index=0`, `index=1`, ...; also positional) to
+show several texts at once, and `hw_screen` does the same. None of the following is documented,
+so the code assumes it until it is measured:
+
+- `show_label` accepts `index=`, and labels with different numbers are visible together.
+- There are at least 8 labels (numbers 0 to 7). The largest screen, the agent's `show_text`, has
+  8: two in the status bar and six lines of text. `sim/tests/test_display.py` fails if a screen
+  needs more.
+- `clear()` may or may not remove labels with a number above 0. `hw_screen` does not rely on it:
+  it draws an empty text into every label the screen before used and the new one does not.
+
+### Steps
+
+1. Upload `robot/tools/hwcheck.py` alone (see [`development.md`](development.md), "Real robots").
+   After the turns it shows three screens for 10 s each; the comment above `display_check` says
+   what to look for on each.
+2. Upload the normal bundle, assign the robot to a team and let the agent call `show_text` with a
+   text of several lines, for example "Schoen, dass du da bist! Team Gallier gruesst dich :)".
+   The status bar and all four lines must be visible. Then call `show_text` with a short text:
+   nothing of the long one may be left.
+
+### Results
+
+| Measurement | Value | Date |
+| --- | --- | --- |
+| hwcheck screen 1: all five rows visible at once, or `HW ERR display labels` | | |
+| hwcheck screen 2: only "Zeile A" and "Zeile B", or which rows of screen 1 are left | | |
+| hwcheck screen 3: which of L0 to L11 are visible | | |
+| Robot script: status bar and every line of a long `show_text` visible | | |
+| Robot script: short `show_text` after a long one leaves nothing behind | | |
+
+### What follows
+
+- `HW ERR display labels: TypeError`: the firmware does not take `index=`. Try the positional
+  form (`show_label(text, size, x, y, i)`) in `hwcheck.py` and `hw_screen`.
+- Fewer than L0 to L7 visible on screen 3: the screens in `ui.py` must get by with that many
+  labels (fewer lines for `show_text`, or the status bar as one label); set `LABELS` in
+  `sim/fakes/cyberpi.py` to the number found, and the test names the screens that are too big.
+- Screen 2 shows only its two rows: `clear()` removes every label, and `hw_screen` can stop
+  emptying unused labels (`hw_label_count`). Rows of screen 1 left over: keep it.
+- Then replace the `VERIFY` notes at `hw_screen` and the assumptions in `sim/fakes/cyberpi.py`
+  with what was measured.
