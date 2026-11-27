@@ -91,6 +91,62 @@
   border: 1px solid var(--line);
 }
 
+/* The join QR code: a thumbnail in the bar, large in its dialog. */
+.qr {
+  display: block;
+  border-radius: 6px;
+}
+
+.qr-thumb {
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  cursor: zoom-in;
+}
+
+.qr-thumb .qr {
+  width: 54px;
+  height: 54px;
+}
+
+.qr-thumb:hover {
+  border-color: var(--accent);
+}
+
+.task-dialog.qr-dialog {
+  width: min(1100px, calc(100vw - 32px));
+}
+
+.qr-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 24px 40px;
+  padding: 28px;
+  overflow: auto;
+}
+
+.qr-body .qr {
+  width: min(70vh, 560px, 100%);
+  height: auto;
+  border: 1px solid var(--line);
+}
+
+.qr-text {
+  display: grid;
+  gap: 14px;
+  justify-items: start;
+  max-width: 360px;
+  font-size: 22px;
+  line-height: 1.3;
+}
+
+.qr-text .labcode-value {
+  font-size: 64px;
+}
+
 .admin-actions {
   display: flex;
   gap: 8px;
@@ -385,10 +441,28 @@
 
 .teams-empty {
   grid-column: 1 / -1;
-  padding: 40px 24px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 20px 32px;
+  padding: 32px 24px;
   border-radius: 12px;
   border: 1px dashed var(--line);
-  max-width: 640px;
+  max-width: 760px;
+}
+
+.teams-empty > div {
+  flex: 1 1 280px;
+}
+
+.teams-empty .qr {
+  width: 200px;
+  height: 200px;
+  border: 1px solid var(--line);
+}
+
+.teams-empty .btn {
+  margin-top: 14px;
 }
 
 .teams-empty h2 {

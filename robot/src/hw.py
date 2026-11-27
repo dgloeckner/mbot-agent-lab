@@ -155,12 +155,29 @@ def hw_leds(color, brightness=100):
     cyberpi.led.on(int(r * k), int(g * k), int(b * k), "all")  # VERIFY
 
 
+# Display labels. Seen on the robot (2026-11-27): show_label without an index
+# keeps only the last label of a screen on the display. Makeblock documents
+# show_label(message, size, x, y) and nothing more; programs written for the
+# CyberPi pass a label number as fifth argument (`index=0`, `index=1`, ...) to
+# show several texts at once. Not checked on the robot yet (docs/measurements.md,
+# "Display labels"): that `index=` is accepted, how many labels there are (no
+# screen uses more than 8, indices 0..7), and whether clear() also removes the
+# labels above index 0. Until that is known, hw_screen empties the labels the
+# screen before used and this one does not.
+hw_label_count = 0
+
+
 def hw_screen(labels):
     """Clear the display and draw labels (text, size 16/24/32, x, y, color)."""
-    cyberpi.display.clear()  # VERIFY
-    for text, size, x, y, color in labels:
+    global hw_label_count
+    cyberpi.display.clear()  # VERIFY: removes every label?
+    n = len(labels)
+    for i in range(max(n, hw_label_count)):
+        text, size, x, y, color = labels[i] if i < n else ("", 16, 0, 0, "white")
         cyberpi.display.set_brush(*COLOR_RGB.get(color, COLOR_RGB["white"]))  # VERIFY
-        cyberpi.display.show_label(text, size, x, y)  # VERIFY: x, y = top left in pixels
+        # VERIFY: index = label number, one label per number; x, y = top left in pixels
+        cyberpi.display.show_label(text, size, x, y, index=i)
+    hw_label_count = n
 
 
 def hw_play(name):

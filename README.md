@@ -182,7 +182,7 @@ Details: [architecture](docs/architecture.md), [MQTT protocol](docs/protocol.md)
 
 **Control room** (`/admin`)
 
-- Lab code for the projector, every robot live, every team with its robots and open browsers.
+- Lab code and a QR code to join for the projector, every robot live, every team with its robots and open browsers.
 - Robots and tasks are assigned by drag and drop; emergency stop for all robots.
 - Tasks: import from a file, edit with preview, publish, assign, close. A task can limit the agent
   to the team's own tools.

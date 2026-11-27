@@ -5,6 +5,8 @@ import unittest
 
 from helpers import load_robot, simstate
 
+import cyberpi  # noqa: E402  the fake in sim/fakes, on the path after helpers
+
 ARENA = {
     "walls": [[0, 0, 200, 0], [200, 0, 200, 200], [200, 200, 0, 200], [0, 200, 0, 0]],
     "start": {"x": 100, "y": 100, "heading": 0},
@@ -54,6 +56,32 @@ class DisplayTest(unittest.TestCase):
         self.shows("Blau", heartbeat=lambda: self.hb(team="t2", owner="Blau"))
         self.assertNotIn("Norden", simstate.display)
 
+    def test_show_text_keeps_every_line_and_the_status_bar_on_screen(self):
+        # Seen on the robot on 2026-11-27: of this text only "dich :)" was visible,
+        # because every label was drawn into the same slot.
+        self.shows("Scout", heartbeat=self.hb)
+        self.client.deliver("lab/mbot-1/cmd", {"id": "t-1", "name": "show_text", "args": {
+            "text": "Schoen, dass du da bist! Team Gallier gruesst dich :)"}})
+        self.shows("dich :)", heartbeat=self.hb)
+        self.assertEqual(simstate.display, ["Scout", "100%", "Schoen, dass du", "da bist! Team",
+                                            "Gallier gruesst", "dich :)"])
+
+    def test_a_smaller_screen_leaves_nothing_of_a_bigger_one(self):
+        # Even if clear() on the real display should keep the labels it does not redraw.
+        cyberpi.display.clear_keeps_labels = True
+        self.addCleanup(setattr, cyberpi.display, "clear_keeps_labels", False)
+        self.shows("Scout", heartbeat=self.hb)
+        self.client.deliver("lab/mbot-1/cmd", {"id": "t-1", "name": "show_text",
+                                               "args": {"text": "eins zwei drei vier " * 3}})
+        self.shows("Scout", "100%", "eins zwei drei", heartbeat=self.hb)
+        self.assertEqual(len(simstate.display), 6)
+        self.shows("frei", heartbeat=lambda: self.hb(team="", owner="", name=""))
+        self.assertEqual(simstate.display, ["online", "100%", "frei", "mbot-1", "wartet auf Team"])
+
+    def test_error_screen_shows_the_whole_message(self):
+        self.ns["ui_error"]("OSError(113, 'kein Weg zum Broker')")
+        self.assertEqual(simstate.display, ["Fehler", "OSError(113,", "'kein Weg zum", "Broker')"])
+
     def test_lost_connection_says_motors_stopped(self):
         self.shows("Scout", heartbeat=self.hb)
         self.shows("Verbindung weg", "Motoren gestoppt", timeout=5)  # no heartbeats: watchdog
@@ -77,6 +105,7 @@ class DisplayTest(unittest.TestCase):
                         ui.set_text(text)
                         ui.set_agent(agent)
                         ui.set_battery(100)
+                        self.assertLessEqual(len(ui.screen()), cyberpi.LABELS, (conn, owner, text, agent))
                         for label, size, x, y, _ in ui.screen():
                             where = (conn, owner, text, agent, label)
                             self.assertGreaterEqual(x, 0, where)
