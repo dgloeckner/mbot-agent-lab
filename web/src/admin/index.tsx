@@ -4,6 +4,8 @@ import { signal } from '@preact/signals'
 import { COLOR_HEX, colorName, formatPrices, formatUsage, onColor, relativeTime, skillName } from '../format'
 import type { AgentStatus, ModelOption, RobotState, Totals } from '../types'
 import { lazyComponent } from '../lazy'
+import { joinLink } from '../join/link'
+import { JoinQRDialog, QR } from './JoinQR'
 import { ALL_TEAMS, STATUS_LABEL, assignBody, assignedText, groupTasks, teamsWithout, type AdminTask, type AdminTeamTask, type TaskDetail } from './tasks'
 import './admin.css'
 
@@ -127,6 +129,8 @@ const editing = signal<TaskDetail | null>(null)
 /** The task whose "Läufe" are open. */
 const scoring = signal<AdminTask | null>(null)
 const RunsView = lazyComponent(() => import('./RunsView'))
+/** The join QR code is open large, for the projector. */
+const showQR = signal(false)
 
 async function openTask(id: string) {
   try {
@@ -588,6 +592,7 @@ function Board() {
   const s = state.value!
   const free = s.robots.filter((r) => !r.team)
   const joinUrl = `${location.host}/join`
+  const link = joinLink(location.origin, s.lab_code)
   const online = s.robots.filter((r) => r.online).length
   return (
     <div class="admin">
@@ -597,6 +602,9 @@ function Board() {
           <span class={live.value ? 'live on' : 'live'}>{live.value ? 'live' : 'verbinde …'}</span>
         </div>
         <div class="labcode" aria-label="Lab-Code">
+          <button class="qr-thumb" title="QR-Code groß zeigen" aria-label="QR-Code zum Team-Gründen groß zeigen" onClick={() => (showQR.value = true)}>
+            <QR text={link} />
+          </button>
           <span class="labcode-label">
             Teams gründen auf <strong>{joinUrl}</strong> mit dem Code
           </span>
@@ -641,17 +649,24 @@ function Board() {
         <section class="teams" aria-label="Teams">
           {s.teams.length === 0 ? (
             <div class="teams-empty">
-              <h2>Noch keine Teams</h2>
-              <p>
-                Teams öffnen <strong>{joinUrl}</strong>, geben den Lab-Code <strong>{s.lab_code}</strong> und ihren Namen ein. Sie erscheinen
-                dann hier.
-              </p>
+              <div>
+                <h2>Noch keine Teams</h2>
+                <p>
+                  Teams scannen den QR-Code oder öffnen <strong>{joinUrl}</strong> und geben den Lab-Code <strong>{s.lab_code}</strong> ein.
+                  Mit ihrem Namen gründen sie ihr Team und erscheinen dann hier.
+                </p>
+                <button class="btn btn-quiet btn-small" onClick={() => (showQR.value = true)}>
+                  QR-Code groß zeigen
+                </button>
+              </div>
+              <QR text={link} label={`QR-Code: ${link}`} />
             </div>
           ) : (
             s.teams.map((t) => <TeamCard key={t.id} t={t} robots={s.robots} teams={s.teams} />)
           )}
         </section>
       </main>
+      {showQR.value && <JoinQRDialog link={link} joinUrl={joinUrl} code={s.lab_code} onClose={() => (showQR.value = false)} />}
     </div>
   )
 }

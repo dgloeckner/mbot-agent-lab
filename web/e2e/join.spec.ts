@@ -51,6 +51,33 @@ test('a second PC joins with the code the band shows', async ({ page, browser })
   await other.close()
 })
 
+test('the control room shows a QR code whose link fills in the lab code', async ({ page, browser }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await page.goto(lab.base + '/admin')
+  await page.locator('input[type="password"]').fill(lab.adminPassword)
+  await page.getByRole('button', { name: 'Anmelden' }).click()
+  await page.getByRole('button', { name: 'QR-Code zum Team-Gründen groß zeigen' }).click()
+  const dlg = page.locator('.qr-dialog')
+  const link = `${lab.base}/join?code=${lab.labCode}`
+  await expect(dlg.getByRole('img')).toHaveAttribute('aria-label', `QR-Code: ${link}`)
+  await expect(dlg.locator('.labcode-value')).toHaveText(lab.labCode)
+  await page.screenshot({ path: join(SHOTS, 'admin-join-qr.png') })
+  await page.keyboard.press('Escape')
+  await expect(dlg).toHaveCount(0)
+
+  // What a phone does after scanning: the code is filled in, only the name is missing.
+  const other = await browser.newContext({ locale: 'de-DE' })
+  const phone = await other.newPage()
+  await phone.goto(link)
+  await expect(phone.getByRole('textbox', { name: 'Lab-Code' })).toHaveValue(lab.labCode)
+  const name = phone.getByRole('textbox', { name: 'Teamname' })
+  await expect(name).toBeFocused()
+  await name.fill('Gescannt')
+  await phone.getByRole('button', { name: 'Team gründen' }).click()
+  await expect(phone.getByRole('heading', { name: 'Willkommen, Gescannt!' })).toBeVisible()
+  await other.close()
+})
+
 test('small fixes: a rename is logged once, Escape and Tab leave the editor', async ({ page }) => {
   await page.goto(lab.page(team))
   await page.getByRole('tab', { name: 'Protokoll' }).click()
