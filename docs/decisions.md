@@ -61,7 +61,7 @@ and goes here, not into `CLAUDE.md`. How the system works today: `architecture.m
 | Topic | Decision | Why |
 | --- | --- | --- |
 | Teams | join on `/join` with a lab code and get a secret link; not configured in YAML; another PC of the team joins with the link or with a join code (six characters, ten minutes, kept in memory) that only a PC with the link can show | approved deviation: teams form on the lab day; lab PCs share no clipboard, and a short-lived code does not give the link away for good |
-| Secrets | never in YAML or the repo; config names environment variables (`*_env`); `robot/config.py` is git-ignored | no leaked keys |
+| Secrets | never in YAML or the repo; config names environment variables (`*_env`); `robot/config.py` is git-ignored; the checked-in `server/.env` holds only the development placeholders for the local server, real values go into the git-ignored `server/.env.local` | no leaked keys; approved deviation: one env file pair instead of values in `server/project.json` |
 
 ## Data
 

@@ -97,7 +97,7 @@ class LabCase(unittest.TestCase):
                 raise AssertionError("lab.yaml: no match for %r" % pattern)
         cfg.write_text(cfg_text, encoding="utf-8")
 
-        # Dev secrets, as in the server:dev target. Never in the YAML.
+        # Secrets come from the environment, as server/.env does for server:dev. Never in the YAML.
         self.admin_password = secrets.token_hex(8)
         self.lab_code = "E2E1"
         robot_password = secrets.token_hex(8)

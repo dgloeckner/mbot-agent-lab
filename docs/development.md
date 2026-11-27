@@ -48,7 +48,7 @@ changed compared to `main`.
 | Command | What it does |
 | --- | --- |
 | `npm run dev` | `server:dev` and `web:dev` together |
-| `npx nx run server:dev` | server with `deploy/local/lab.yaml` and dev secrets (HTTP 127.0.0.1:8080, MQTT :1883) |
+| `npx nx run server:dev` | server with `deploy/local/lab.yaml` and the development values from `server/.env` (HTTP 127.0.0.1:8080, MQTT :1883) |
 | `npx nx run web:dev` | team page with hot reload on :5173, API calls go to the Go server |
 | `npx nx run sim:run [--robots=2] [--world=…] [--delay-ms=150]` | simulated robots against the local server |
 | `npx nx run-many -t lint test` | gofmt, go vet, TypeScript, Go tests, web tests, robot and simulator tests |
@@ -91,6 +91,9 @@ real tools and needs no API key; `deploy/local/lab.yaml` uses it by default.
 - Locally, put the keys into `server/.env.local` (dotenv format, `export` allowed, git-ignored).
   Nx loads it for every `server` task, and Claude Code copies it into new worktrees
   (`.worktreeinclude`). Config files only name environment variables (`*_env`), never secrets.
+- The other variables `deploy/local/lab.yaml` names (admin password, lab code, robot passwords)
+  get their development values from the checked-in `server/.env`. A variable set in `.env.local`
+  wins over `.env`, and one already set in the shell wins over both.
 - Teams run on `default` unless they choose another provider the control room released; the
   fallback applies to every team.
 - **Claude:** the key comes from a Claude Console organization. Claude Max, Ultra and Team plans
